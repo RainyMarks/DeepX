@@ -557,8 +557,6 @@ function configureMarkdown() {
   window.marked.setOptions({
     gfm: true,
     breaks: false,
-    mangle: false,
-    headerIds: false,
   });
 }
 
@@ -1750,13 +1748,30 @@ function renderMarkdown(container, raw, final) {
     container.textContent = "";
     return;
   }
-  if (!window.marked || !window.DOMPurify) {
+  const markedApi = window.marked?.parse ? window.marked : window.marked?.marked ? window.marked.marked : null;
+  if (!markedApi || !window.DOMPurify) {
     container.textContent = raw;
+    container.dataset.markdownStatus = !markedApi ? "missing-marked" : "missing-dompurify";
     return;
   }
-  const html = window.marked.parse(raw);
-  container.innerHTML = window.DOMPurify.sanitize(html, {
+  delete container.dataset.markdownStatus;
+  let html = "";
+  try {
+    html = parseMarkdown(markedApi, normalizeMarkdown(raw));
+  } catch (error) {
+    console.error("Markdown render failed", error);
+    container.textContent = raw;
+    container.dataset.markdownStatus = "parse-error";
+    return;
+  }
+  if (html && typeof html.then === "function") {
+    container.textContent = raw;
+    container.dataset.markdownStatus = "async-marked-unsupported";
+    return;
+  }
+  container.innerHTML = window.DOMPurify.sanitize(String(html), {
     ADD_ATTR: ["target", "rel", "class"],
+    ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td"],
   });
   container.querySelectorAll("a").forEach((link) => {
     link.target = "_blank";
@@ -1765,6 +1780,18 @@ function renderMarkdown(container, raw, final) {
   if (final !== false && window.hljs) {
     container.querySelectorAll("pre code").forEach((block) => window.hljs.highlightElement(block));
   }
+}
+
+function parseMarkdown(markedApi, raw) {
+  if (markedApi?.parse) return markedApi.parse(raw);
+  if (typeof markedApi === "function") return markedApi(raw);
+  throw new Error("marked parser is unavailable");
+}
+
+function normalizeMarkdown(raw) {
+  return String(raw)
+    .replace(/([:：])\s+\|(?=[^\n]*\|\s+\|\s*:?-{3,})/g, "$1\n\n|")
+    .replace(/\|\s+\|(?=\s*(?:\|?\s*:?-{3,}|`|\*\*|[*_#A-Za-z0-9\u4e00-\u9fff]))/g, "|\n|");
 }
 
 function renderReasoning(item, reasoning) {

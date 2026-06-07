@@ -26,7 +26,7 @@ DeepX 不是 DeepSeek 官方项目，也不是 OpenAI/Codex 官方项目；本�
 当前发布包在仓库的 `releases/` 目录中：
 
 ```text
-releases/DeepX-portable-v0.1.0.zip
+releases/DeepX-portable-v0.1.1.zip
 ```
 
 解压后运行 `DeepX.exe`。首次启动后进入“设置 -> 模型”，填写自己的 API key，点击保存并测试连接。不要把 `data/secrets.local.json` 提交到 GitHub。
