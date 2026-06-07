@@ -21,6 +21,7 @@ const downloadsDirName = ["Down", "loads"].join("");
 const MAX_INLINE_FILE_BYTES = 512 * 1024;
 const UPDATE_REPOSITORY = "RainyMarks/DeepX";
 const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPOSITORY}/releases/latest`;
+const UPDATE_LATEST_URL = `https://github.com/${UPDATE_REPOSITORY}/releases/latest`;
 
 for (const dir of [
   dataRoot,
@@ -134,7 +135,9 @@ function requestJson(url, redirects = 0) {
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
           response.resume();
-          reject(new Error(`request failed: HTTP ${response.statusCode}`));
+          const error = new Error(`request failed: HTTP ${response.statusCode}`);
+          error.statusCode = response.statusCode;
+          reject(error);
           return;
         }
         let body = "";
@@ -152,6 +155,50 @@ function requestJson(url, redirects = 0) {
             reject(error);
           }
         });
+      }
+    );
+    request.on("timeout", () => request.destroy(new Error("request timed out")));
+    request.on("error", reject);
+  });
+}
+
+function requestText(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent": `DeepX/${appVersion}`,
+        },
+        timeout: 20000,
+      },
+      (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          response.resume();
+          if (redirects >= 8) {
+            reject(new Error("too many redirects"));
+            return;
+          }
+          resolve(requestText(new URL(response.headers.location, url).toString(), redirects + 1));
+          return;
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          response.resume();
+          const error = new Error(`request failed: HTTP ${response.statusCode}`);
+          error.statusCode = response.statusCode;
+          reject(error);
+          return;
+        }
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+          if (body.length > 3 * 1024 * 1024) {
+            request.destroy(new Error("response is too large"));
+          }
+        });
+        response.on("end", () => resolve({ body, finalUrl: url }));
       }
     );
     request.on("timeout", () => request.destroy(new Error("request timed out")));
@@ -278,12 +325,61 @@ function findUpdateAsset(release, latestVersion) {
   );
 }
 
+async function latestReleaseFromPublicPage(errorKind = "network") {
+  const result = await requestText(UPDATE_LATEST_URL);
+  const tagFromUrl = result.finalUrl.match(/\/releases\/tag\/([^/?#]+)/i)?.[1];
+  const tagFromBody = result.body.match(/\/releases\/tag\/([^"?#<]+)/i)?.[1];
+  const tag = decodeURIComponent(tagFromUrl || tagFromBody || "").trim();
+  if (!tag) {
+    const error = new Error("latest release tag was not found on the public release page");
+    error.errorKind = "asset-missing";
+    throw error;
+  }
+  const latestVersion = normalizeVersion(tag);
+  const releaseTag = tag || `v${latestVersion}`;
+  const assetHref = result.body.match(/href="([^"]*\/releases\/download\/[^"]*DeepX-portable[^"]*\.zip)"/i)?.[1];
+  const assetDownloadUrl = assetHref
+    ? new URL(assetHref.replace(/&amp;/g, "&"), "https://github.com").toString()
+    : `https://github.com/${UPDATE_REPOSITORY}/releases/download/${releaseTag}/DeepX-portable-v${latestVersion}.zip`;
+  const assetName = path.basename(decodeURIComponent(new URL(assetDownloadUrl).pathname));
+  const assetFound = !!assetHref;
+  return {
+    currentVersion: appVersion,
+    latestVersion,
+    updateAvailable: compareVersions(appVersion, latestVersion) < 0,
+    releaseUrl: `https://github.com/${UPDATE_REPOSITORY}/releases/tag/${releaseTag}`,
+    assetName,
+    assetSize: 0,
+    publishedAt: null,
+    notes: "",
+    canInstall: assetFound && app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1",
+    checkedAt: new Date().toISOString(),
+    assetDownloadUrl,
+    source: "release-page",
+    errorKind: assetFound ? errorKind : "asset-missing",
+  };
+}
+
 async function checkForUpdates() {
-  const release = await requestJson(UPDATE_API_URL);
+  let release;
+  let source = "api";
+  let errorKind = null;
+  try {
+    release = await requestJson(UPDATE_API_URL);
+  } catch (error) {
+    const status = Number(error.statusCode || 0);
+    errorKind = status === 403 || status === 429 ? "rate-limit" : "network";
+    log(`update api check failed (${errorKind}): ${error.message}`);
+    const fallback = await latestReleaseFromPublicPage(errorKind);
+    lastUpdateInfo = fallback;
+    return { ...fallback, assetDownloadUrl: undefined };
+  }
   const latestVersion = normalizeVersion(release.tag_name || release.name);
   const asset = findUpdateAsset(release, latestVersion);
   if (!asset?.browser_download_url) {
-    throw new Error("latest release does not contain a DeepX portable zip");
+    const fallback = await latestReleaseFromPublicPage("asset-missing");
+    lastUpdateInfo = fallback;
+    return { ...fallback, assetDownloadUrl: undefined };
   }
   const updateInfo = {
     currentVersion: appVersion,
@@ -296,6 +392,8 @@ async function checkForUpdates() {
     notes: release.body || "",
     canInstall: app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1",
     checkedAt: new Date().toISOString(),
+    source,
+    errorKind,
   };
   updateInfo.assetDownloadUrl = asset.browser_download_url;
   lastUpdateInfo = updateInfo;

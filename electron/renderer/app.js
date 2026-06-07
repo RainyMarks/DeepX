@@ -191,8 +191,11 @@ const I18N = {
     updateDownloading: "正在下载 {percent}%",
     updateExtracting: "正在解压更新包",
     updateInstalling: "正在安装，应用将自动重启",
-    updateInstallConfirm: "将下载并安装 DeepX {version}。安装过程会保留 data 目录和 API key，应用会自动重启。继续吗？",
     updateFailed: "更新失败",
+    updateApiFallback: "GitHub API 受限，已切换到公开发布页检查。",
+    updateBannerTitle: "发现新版本",
+    updateBannerText: "DeepX {version} 可更新。",
+    dismiss: "忽略",
     updateUnavailableInDev: "开发模式不能直接安装更新。",
     testConnection: "测试连接",
     save: "保存",
@@ -361,8 +364,11 @@ const I18N = {
     updateDownloading: "Downloading {percent}%",
     updateExtracting: "Extracting update package",
     updateInstalling: "Installing. DeepX will restart automatically",
-    updateInstallConfirm: "Download and install DeepX {version}? The data directory and API keys will be preserved, and the app will restart.",
     updateFailed: "Update failed",
+    updateApiFallback: "GitHub API is limited, using the public release page instead.",
+    updateBannerTitle: "Update available",
+    updateBannerText: "DeepX {version} is available.",
+    dismiss: "Dismiss",
     updateUnavailableInDev: "Updates can only be installed from the packaged app.",
     testConnection: "Test connection",
     save: "Save",
@@ -451,6 +457,7 @@ const state = {
   lastMetric: null,
   updateInfo: null,
   updateBusy: false,
+  updateDismissedVersion: null,
   language: "zh-CN",
   thinkingEnabled: true,
   webSearchEnabled: false,
@@ -477,10 +484,12 @@ const el = {
   brandIcon: $("brandIcon"),
   mainSurface: $("mainSurface"),
   providerStatus: $("providerStatus"),
-  coreValue: $("coreValue"),
-  dataRootValue: $("dataRootValue"),
-  statusLine: $("statusLine"),
   updateStatusValue: $("updateStatusValue"),
+  updateBanner: $("updateBanner"),
+  updateBannerTitle: $("updateBannerTitle"),
+  updateBannerText: $("updateBannerText"),
+  updateBannerInstallButton: $("updateBannerInstallButton"),
+  updateBannerDismissButton: $("updateBannerDismissButton"),
   checkUpdateButton: $("checkUpdateButton"),
   installUpdateButton: $("installUpdateButton"),
   threadTitle: $("threadTitle"),
@@ -671,6 +680,11 @@ function bindEvents() {
   el.openDataFromSettingsButton.addEventListener("click", () => window.deepx.openDataDir());
   el.checkUpdateButton.addEventListener("click", checkAppUpdate);
   el.installUpdateButton.addEventListener("click", installAppUpdate);
+  el.updateBannerInstallButton.addEventListener("click", installAppUpdate);
+  el.updateBannerDismissButton.addEventListener("click", () => {
+    state.updateDismissedVersion = state.updateInfo?.latestVersion || null;
+    updateUpdateBanner();
+  });
   el.closeSettingsButton.addEventListener("click", hideSettings);
   el.closeSettingsIconButton.addEventListener("click", hideSettings);
   el.cacheDetailsButton.addEventListener("click", hideSettings);
@@ -708,7 +722,10 @@ function bindEvents() {
     state.webSearchEnabled = false;
     updateWebSearchControls();
   });
-  el.permissionButton.addEventListener("click", (event) => togglePopover(el.permissionMenu, el.permissionButton, event));
+  el.permissionButton.addEventListener("click", (event) => {
+    renderPermissionMenu();
+    togglePopover(el.permissionMenu, el.permissionButton, event);
+  });
   el.effortMenuButton.addEventListener("click", (event) => togglePopover(el.effortMenu, el.effortMenuButton, event));
   el.providerMiniButton.addEventListener("click", () => showSettings("models"));
   el.contextMiniButton.addEventListener("click", () => showSettings("models"));
@@ -719,9 +736,6 @@ function bindEvents() {
   el.saveButton.addEventListener("click", saveConfig);
   el.resetAppearanceButton.addEventListener("click", resetAppearance);
 
-  document.querySelectorAll("[data-settings-target]").forEach((button) => {
-    button.addEventListener("click", () => showSettings(button.dataset.settingsTarget));
-  });
   [el.themeModeLight, el.themeModeDark, el.themeModeSystem].forEach((button) => {
     button.addEventListener("click", () => {
       setThemeMode(button.dataset.themeMode);
@@ -851,11 +865,8 @@ function updateLanguageOptions() {
 
 function updateCoreStatus() {
   const text = state.core?.version ? `${t("coreReady")} : ${state.core.version}` : t("coreStarting");
-  el.statusLine.textContent = text;
   el.providerStatus.textContent = text;
-  el.coreValue.textContent = state.core?.baseUrl || "...";
   if (state.core?.dataRoot) {
-    el.dataRootValue.textContent = state.core.dataRoot;
     el.settingsDataRootValue.textContent = state.core.dataRoot;
   }
   updateUpdateStatus();
@@ -880,11 +891,27 @@ function updateUpdateStatus(message) {
   } else if (!message && info && !info.updateAvailable) {
     text = t("updateUpToDate", { version: appVersionLabel(info.currentVersion || currentAppVersion()) });
   }
+  if (!message && info?.source === "release-page") {
+    text = `${text} ${t("updateApiFallback")}`;
+  }
   el.updateStatusValue.textContent = text;
   el.checkUpdateButton.disabled = !!state.updateBusy;
   const canInstall = !!info?.updateAvailable && info.canInstall !== false;
   el.installUpdateButton.classList.toggle("hidden", !canInstall);
   el.installUpdateButton.disabled = !!state.updateBusy || !canInstall;
+  updateUpdateBanner(message);
+}
+
+function updateUpdateBanner(message) {
+  if (!el.updateBanner) return;
+  const info = state.updateInfo;
+  const canShow = !!info?.updateAvailable && info.canInstall !== false && state.updateDismissedVersion !== info.latestVersion && !message;
+  el.updateBanner.classList.toggle("hidden", !canShow);
+  if (!canShow) return;
+  const version = appVersionLabel(info.latestVersion);
+  el.updateBannerTitle.textContent = t("updateBannerTitle");
+  el.updateBannerText.textContent = t("updateBannerText", { version });
+  el.updateBannerInstallButton.disabled = !!state.updateBusy;
 }
 
 async function checkAppUpdate() {
@@ -894,17 +921,14 @@ async function checkAppUpdate() {
   try {
     const info = await window.deepx.checkForUpdates();
     state.updateInfo = info;
+    if (!info.updateAvailable) {
+      state.updateDismissedVersion = null;
+    }
     updateUpdateStatus();
-    toast(
-      info.updateAvailable
-        ? t("updateAvailable", { version: appVersionLabel(info.latestVersion) })
-        : t("updateUpToDate", { version: appVersionLabel(info.currentVersion || currentAppVersion()) })
-    );
   } catch (error) {
     failed = true;
     console.error(error);
     updateUpdateStatus(`${t("updateFailed")}: ${error.message || error}`);
-    toast(`${t("updateFailed")}: ${error.message || error}`, true);
   } finally {
     state.updateBusy = false;
     if (!failed) updateUpdateStatus();
@@ -916,8 +940,6 @@ async function installAppUpdate() {
     await checkAppUpdate();
   }
   if (!state.updateInfo?.updateAvailable) return;
-  const version = appVersionLabel(state.updateInfo.latestVersion);
-  if (!window.confirm(t("updateInstallConfirm", { version }))) return;
   state.updateBusy = true;
   updateUpdateStatus(t("updateDownloading", { percent: 0 }));
   try {
@@ -931,7 +953,6 @@ async function installAppUpdate() {
     console.error(error);
     state.updateBusy = false;
     updateUpdateStatus(`${t("updateFailed")}: ${error.message || error}`);
-    toast(`${t("updateFailed")}: ${error.message || error}`, true);
   }
 }
 
@@ -1265,11 +1286,31 @@ function renderPermissionMenu() {
       help: t(help),
       selected: state.permissionMode === mode,
       action: () => {
-        state.permissionMode = mode;
-        updatePermissionButton();
+        setPermissionMode(mode);
         closeAllPopovers();
       },
     }));
+  }
+}
+
+async function setPermissionMode(mode) {
+  const normalized = normalizePermissionMode(mode);
+  state.permissionMode = normalized;
+  state.settings.permissionMode = normalized;
+  updatePermissionButton();
+  renderPermissionMenu();
+  try {
+    const response = await api("/config", {
+      method: "POST",
+      body: JSON.stringify({ permissionMode: normalized }),
+    });
+    state.settings = response.settings || state.settings;
+    state.permissionMode = normalizePermissionMode(state.settings.permissionMode || normalized);
+    updatePermissionButton();
+    renderPermissionMenu();
+  } catch (error) {
+    console.warn("Failed to save permission mode", error);
+    toast(`${t("saveFailed")}: ${error.message || error}`, true);
   }
 }
 
@@ -1942,12 +1983,31 @@ function renderToolCalls(item, tools) {
     panel?.remove();
     return;
   }
-  if (!panel) {
-    panel = document.createElement("div");
+  if (!panel || panel.tagName !== "DETAILS") {
+    panel?.remove();
+    panel = document.createElement("details");
     panel.className = "tool-call-panel";
+    panel.addEventListener("toggle", () => {
+      if (panel.dataset.updating === "true") return;
+      panel.dataset.userToggled = "true";
+      panel.dataset.open = String(panel.open);
+    });
     item.insertBefore(panel, item.querySelector(".message-body"));
   }
-  panel.innerHTML = `<div class="tool-call-title">${t("toolCalls")}</div>`;
+  const hasRunning = tools.some((tool) => !tool.status || tool.status === "running");
+  const hasFailed = tools.some((tool) => tool.status === "failed");
+  if (panel.dataset.userToggled === "true") {
+    panel.open = panel.dataset.open !== "false";
+  } else {
+    panel.dataset.updating = "true";
+    panel.open = hasRunning || hasFailed;
+    setTimeout(() => {
+      delete panel.dataset.updating;
+    }, 0);
+  }
+  const completeCount = tools.filter((tool) => tool.status === "done").length;
+  panel.innerHTML = `<summary class="tool-call-title"><span>${t("toolCalls")}</span><small>${completeCount}/${tools.length}</small></summary><div class="tool-call-list"></div>`;
+  const list = panel.querySelector(".tool-call-list");
   for (const tool of tools) {
     const row = document.createElement("div");
     row.className = `tool-call-row ${tool.status || "running"}`;
@@ -1957,7 +2017,7 @@ function renderToolCalls(item, tools) {
     row.querySelector(".tool-call-status").textContent = status;
     row.querySelector(".tool-call-name").textContent = tool.name || "tool";
     row.querySelector(".tool-call-summary").textContent = details;
-    panel.appendChild(row);
+    list.appendChild(row);
   }
 }
 function renderMetricFooter(footer, metric, usage) {
@@ -2138,15 +2198,18 @@ async function testConnection() {
 function showSettings(section = state.settingsSection) {
   state.settingsSection = section;
   el.settingsOverlay.classList.remove("hidden");
-  document.querySelectorAll("[data-settings-target]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.settingsTarget === section);
-  });
+  el.settingsTitle.textContent = t("settings");
   document.querySelectorAll("[data-settings-section]").forEach((panel) => {
-    panel.classList.toggle("active", panel.dataset.settingsSection === section);
+    panel.classList.remove("active");
   });
-  const titleNode = document.querySelector(`[data-settings-target="${section}"] [data-i18n]`);
-  const key = titleNode?.dataset.i18n || "settings";
-  el.settingsTitle.textContent = t(key);
+  const target = document.querySelector(`[data-settings-section="${section}"]`);
+  target?.classList.add("active");
+  requestAnimationFrame(() => {
+    const page = document.querySelector(".settings-page");
+    if (!target || !page) return;
+    const offset = target.offsetTop - 128;
+    page.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
+  });
 }
 
 function hideSettings() {
@@ -2341,6 +2404,7 @@ function applyAppearanceFromForm() {
   root.style.setProperty("--code-font-size", `${codeFontSize}px`);
   root.style.setProperty("--font-scale", "1");
   root.style.setProperty("--density-scale", density === "compact" ? "0.86" : density === "spacious" ? "1.16" : "1");
+  root.dataset.density = density;
   root.style.setProperty("--settings-bg", bg);
   root.style.setProperty("--settings-sidebar", dark ? surface0 : "#eef8f0");
   root.style.setProperty("--settings-row", surface1);
@@ -2354,7 +2418,7 @@ function applyAppearanceFromForm() {
   root.style.setProperty("--sidebar-bg-translucent", sidebarTranslucent);
   root.style.setProperty("--composer-bg", composerBg);
   root.style.setProperty("--composer-border", composerBorder);
-  root.style.setProperty("--composer-shadow", dark ? "0 24px 80px rgba(0, 0, 0, 0.45)" : "none");
+  root.style.setProperty("--composer-shadow", "none");
   root.style.setProperty("--composer-input-fg", fg);
   root.style.setProperty("--composer-placeholder", muted);
   root.style.setProperty("--composer-fade", hexToRgba(bg, 0));

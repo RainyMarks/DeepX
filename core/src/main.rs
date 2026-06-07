@@ -36,6 +36,9 @@ const MAX_WORKSPACE_READ_BYTES: u64 = 256 * 1024;
 const MAX_WORKSPACE_GREP_FILE_BYTES: u64 = 512 * 1024;
 const MAX_WORKSPACE_WRITE_BYTES: usize = 1024 * 1024;
 const MAX_SHELL_OUTPUT_CHARS: usize = 32_000;
+const MAX_TOOL_RESULT_CHARS: usize = 24_000;
+const MAX_PROJECT_INSTRUCTION_FILE_BYTES: u64 = 64 * 1024;
+const MAX_PROJECT_INSTRUCTION_TOTAL_BYTES: usize = 96 * 1024;
 const DEFAULT_SHELL_TIMEOUT_SECONDS: u64 = 30;
 const MAX_CHECKPOINT_FILES: usize = 5_000;
 const MAX_CHECKPOINT_FILE_BYTES: u64 = 1024 * 1024;
@@ -661,7 +664,7 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
     if session.prefix_hash.is_empty() {
         prefix_change_reasons.push("new_session".to_string());
     } else if prefix_changed {
-        prefix_change_reasons.push("provider_model_context_or_permissions_changed".to_string());
+        prefix_change_reasons.push("provider_model_context_permissions_or_project_instructions_changed".to_string());
     }
 
     let prefix_message = ChatMessage::system(prefix);
@@ -2081,6 +2084,13 @@ struct EstimatedCost {
     currency: String,
 }
 
+#[derive(Debug, Clone)]
+struct ProjectInstructions {
+    content: String,
+    hash: String,
+    files: Vec<String>,
+}
+
 fn write_metric_file(root: &Path, metric: &TurnMetric) -> Result<()> {
     let path = root
         .join("cache-metrics")
@@ -2115,6 +2125,14 @@ fn build_prefix(provider: &ProviderProfile, settings: &Settings) -> String {
     facts.insert("permissionMode", json!(settings.permission_mode));
     facts.insert("webSearchEnabled", json!(settings.web_search_enabled));
     facts.insert("webSearchProvider", json!("duckduckgo-instant-answer"));
+    if let Some(project_instructions) = load_project_instructions(settings) {
+        facts.insert("projectInstructionsHash", json!(project_instructions.hash));
+        facts.insert("projectInstructionsFiles", json!(project_instructions.files));
+        facts.insert("projectInstructions", json!(project_instructions.content));
+    } else {
+        facts.insert("projectInstructionsHash", Value::Null);
+        facts.insert("projectInstructionsFiles", json!([]));
+    }
     facts.insert("systemPrompt", json!(DEFAULT_SYSTEM_PROMPT));
     serde_json::to_string(&facts).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
 }
@@ -2814,6 +2832,7 @@ async fn run_agent_turn(
                     json!({
                         "id": tool_call.id,
                         "name": tool_call.name,
+                        "round": round + 1,
                         "arguments": compact_tool_arguments(&tool_call.arguments)
                     }),
                 )
@@ -2827,14 +2846,14 @@ async fn run_agent_turn(
                     json!({
                         "id": tool_call.id,
                         "name": tool_call.name,
+                        "round": round + 1,
                         "ok": output.get("ok").and_then(Value::as_bool).unwrap_or(false),
                         "summary": output.get("summary").and_then(Value::as_str).unwrap_or("")
                     }),
                 )
                 .await;
             }
-            let content = serde_json::to_string(&output)
-                .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output serialization failed\"}".to_string());
+            let content = serialize_tool_output_for_model(&tool_call.name, &output);
             messages.push(ChatMessage::tool_result(tool_call.id, tool_call.name, content));
         }
         if round + 1 == MAX_AGENT_TOOL_ROUNDS {
@@ -2892,6 +2911,85 @@ fn compact_tool_arguments(value: &Value) -> Value {
     } else {
         value.clone()
     }
+}
+
+fn load_project_instructions(settings: &Settings) -> Option<ProjectInstructions> {
+    let root = workspace_root(settings)?;
+    let mut files = Vec::new();
+    let mut sections = Vec::new();
+    let mut total_bytes = 0usize;
+
+    for candidate in project_instruction_candidates(&root) {
+        let canonical = fs::canonicalize(&candidate).ok()?;
+        if !canonical.starts_with(&root) || !canonical.is_file() {
+            continue;
+        }
+        let relative = relative_path(&root, &canonical);
+        let meta = fs::metadata(&canonical).ok()?;
+        if meta.len() > MAX_PROJECT_INSTRUCTION_FILE_BYTES {
+            files.push(relative.clone());
+            sections.push(format!(
+                "## {relative}\n<skipped: file exceeds {} bytes>",
+                MAX_PROJECT_INSTRUCTION_FILE_BYTES
+            ));
+            continue;
+        }
+        let bytes = fs::read(&canonical).ok()?;
+        if total_bytes + bytes.len() > MAX_PROJECT_INSTRUCTION_TOTAL_BYTES {
+            sections.push(format!(
+                "## {relative}\n<skipped: project instructions exceed {} bytes>",
+                MAX_PROJECT_INSTRUCTION_TOTAL_BYTES
+            ));
+            break;
+        }
+        total_bytes += bytes.len();
+        let text = String::from_utf8_lossy(&bytes).trim().to_string();
+        if text.is_empty() {
+            continue;
+        }
+        files.push(relative.clone());
+        sections.push(format!("## {relative}\n{text}"));
+    }
+
+    if sections.is_empty() {
+        return None;
+    }
+    let content = format!(
+        "Project instructions loaded from AGENTS.md. Apply them to workspace work unless they conflict with user instructions or DeepX safety rules.\n\n{}",
+        sections.join("\n\n")
+    );
+    let hash = sha256_hex(content.as_bytes());
+    Some(ProjectInstructions {
+        content,
+        hash,
+        files,
+    })
+}
+
+fn project_instruction_candidates(root: &Path) -> Vec<PathBuf> {
+    vec![root.join("AGENTS.md")]
+}
+
+fn serialize_tool_output_for_model(tool_name: &str, output: &Value) -> String {
+    let raw = serde_json::to_string(output)
+        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output serialization failed\"}".to_string());
+    if raw.len() <= MAX_TOOL_RESULT_CHARS {
+        return raw;
+    }
+    let summary = output
+        .get("summary")
+        .and_then(Value::as_str)
+        .unwrap_or("tool output truncated");
+    let compressed = json!({
+        "ok": output.get("ok").and_then(Value::as_bool).unwrap_or(false),
+        "tool": tool_name,
+        "summary": summary,
+        "truncated": true,
+        "maxChars": MAX_TOOL_RESULT_CHARS,
+        "preview": truncate(&raw, MAX_TOOL_RESULT_CHARS)
+    });
+    serde_json::to_string(&compressed)
+        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output truncation failed\"}".to_string())
 }
 
 fn workspace_tool_definitions(settings: &Settings) -> Value {
@@ -3081,10 +3179,20 @@ fn build_workspace_turn_context(settings: &Settings) -> Option<String> {
     let tree = collect_workspace_tree(&root, &root, 2, MAX_WORKSPACE_TREE_ENTRIES).unwrap_or_else(|error| {
         vec![format!("<workspace tree unavailable: {error}>")]
     });
+    let instruction_note = load_project_instructions(settings)
+        .map(|instructions| {
+            format!(
+                "Project instructions loaded in stable context: {} (hash {}).",
+                instructions.files.join(", "),
+                truncate(&instructions.hash, 12)
+            )
+        })
+        .unwrap_or_else(|| "No AGENTS.md project instructions were found.".to_string());
     Some(format!(
-        "Current workspace is available to DeepX tools. Root: {}\nPermission mode: {}\nUse tools to inspect files instead of saying you cannot access the workspace. Write and shell tools may be unavailable unless the selected permission mode allows them. Top-level tree:\n{}",
+        "Current workspace is available to DeepX tools. Root: {}\nPermission mode: {}\n{}\nUse tools to inspect files instead of saying you cannot access the workspace. Default and auto-review permission modes expose only read-only tools; full-access exposes workspace write and shell tools. Top-level tree:\n{}",
         root.display(),
         settings.permission_mode,
+        instruction_note,
         tree.join("\n")
     ))
 }
@@ -3929,10 +4037,19 @@ fn estimate_cost(
 }
 
 fn truncate(value: &str, max: usize) -> String {
+    if max == 0 {
+        return String::new();
+    }
     if value.len() <= max {
         value.to_string()
     } else {
-        format!("{}...", &value[..max])
+        let end = value
+            .char_indices()
+            .map(|(idx, _)| idx)
+            .take_while(|idx| *idx <= max)
+            .last()
+            .unwrap_or(0);
+        format!("{}...", &value[..end])
     }
 }
 
@@ -4167,6 +4284,37 @@ mod tests {
         assert!(!tool_names.iter().any(|name| name == "edit_file"));
         assert!(!tool_names.iter().any(|name| name == "write_file"));
         assert!(!tool_names.iter().any(|name| name == "run_shell_command"));
+    }
+
+    #[test]
+    fn agents_md_is_loaded_into_stable_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("AGENTS.md"),
+            "Prefer read-only inspection first. Keep project answers concrete.",
+        )
+        .unwrap();
+        let mut settings = Settings::default();
+        settings.workspace_path = Some(dir.path().to_string_lossy().to_string());
+        let provider = provider_profiles().remove(0);
+        let prefix = build_prefix(&provider, &settings);
+        assert!(prefix.contains("projectInstructionsHash"));
+        assert!(prefix.contains("AGENTS.md"));
+        assert!(prefix.contains("Prefer read-only inspection first"));
+    }
+
+    #[test]
+    fn large_tool_output_is_truncated_for_model_context() {
+        let output = json!({
+            "ok": true,
+            "summary": "large grep result",
+            "items": "中文输出".repeat(MAX_TOOL_RESULT_CHARS)
+        });
+        let serialized = serialize_tool_output_for_model("grep_workspace", &output);
+        let parsed: Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["truncated"], true);
+        assert!(serialized.len() < MAX_TOOL_RESULT_CHARS + 1200);
     }
 
     #[test]

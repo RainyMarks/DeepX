@@ -70,6 +70,17 @@
           </div>
         </div>
 
+        <div id="updateBanner" class="update-banner hidden" role="status" aria-live="polite">
+          <div>
+            <strong id="updateBannerTitle"></strong>
+            <span id="updateBannerText"></span>
+          </div>
+          <div class="update-banner-actions">
+            <button id="updateBannerInstallButton" class="primary-button" type="button" data-i18n="installUpdate">Download and install</button>
+            <button id="updateBannerDismissButton" class="secondary-button" type="button" data-i18n="dismiss">Dismiss</button>
+          </div>
+        </div>
+
         <div id="transcript" class="thread" tabindex="0" aria-live="polite"></div>
 
         <form id="composer" class="composer">
@@ -128,38 +139,9 @@
 
       <section id="settingsOverlay" class="modal-overlay hidden" aria-label="Settings">
         <div class="settings-modal">
-          <aside class="settings-nav">
-            <button id="closeSettingsButton" class="settings-back" type="button" data-i18n="backToApp">Back to app</button>
-            <nav aria-label="Settings sections">
-              <button class="settings-nav-item active" type="button" data-settings-target="general">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19 12h2"></path><path d="M3 12h2"></path><path d="M12 3v2"></path><path d="M12 19v2"></path></svg>
-                <span data-i18n="general">General</span>
-              </button>
-              <button class="settings-nav-item" type="button" data-settings-target="models">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="M8 10h8"></path><path d="M8 14h5"></path></svg>
-                <span data-i18n="modelAccess">Models</span>
-              </button>
-              <button class="settings-nav-item" type="button" data-settings-target="appearance">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.9 4.9l1.4 1.4"></path><path d="M17.7 17.7l1.4 1.4"></path><path d="M2 12h2"></path><path d="M20 12h2"></path></svg>
-                <span data-i18n="appearance">Appearance</span>
-              </button>
-              <button class="settings-nav-item" type="button" data-settings-target="web">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"></path></svg>
-                <span data-i18n="webSearch">Web search</span>
-              </button>
-              <button class="settings-nav-item" type="button" data-settings-target="cache">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7c0-2 4-4 8-4s8 2 8 4-4 4-8 4-8-2-8-4z"></path><path d="M4 7v10c0 2 4 4 8 4s8-2 8-4V7"></path><path d="M4 12c0 2 4 4 8 4s8-2 8-4"></path></svg>
-                <span data-i18n="cache">Cache & usage</span>
-              </button>
-              <button class="settings-nav-item" type="button" data-settings-target="portable">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3z"></path><path d="M8 7V5h8v2"></path><path d="M8 12h8"></path></svg>
-                <span data-i18n="portable">Environment</span>
-              </button>
-            </nav>
-          </aside>
-
           <div class="settings-page">
             <header class="settings-header">
+              <button id="closeSettingsButton" class="settings-back" type="button" data-i18n="backToApp">Back to app</button>
               <div>
                 <h1 id="settingsTitle" data-i18n="settings">Settings</h1>
                 <p id="settingsSubtitle" data-i18n="settingsSubtitle">Configuration is stored in DeepX/data.</p>
@@ -184,13 +166,6 @@
                       <option value="en-US">English</option>
                     </select>
                   </label>
-                  <div class="settings-row">
-                    <span>
-                      <strong data-i18n="core">Core</strong>
-                      <small id="statusLine" data-i18n="preparing">Preparing DeepX</small>
-                    </span>
-                    <code id="coreValue">...</code>
-                  </div>
                   <div class="settings-row">
                     <span>
                       <strong data-i18n="appUpdate">App update</strong>
@@ -406,7 +381,6 @@
             </div>
 
             <footer class="settings-footer">
-              <span id="dataRootValue" class="data-root"></span>
               <div class="settings-footer-actions">
                 <button id="testButton" class="secondary-button" type="button" data-i18n="testConnection">Test connection</button>
                 <button id="saveButton" class="primary-button" type="button" data-i18n="save">Save</button>
