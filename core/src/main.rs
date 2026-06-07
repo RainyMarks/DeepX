@@ -39,6 +39,8 @@ const MAX_SHELL_OUTPUT_CHARS: usize = 32_000;
 const MAX_TOOL_RESULT_CHARS: usize = 24_000;
 const MAX_PROJECT_INSTRUCTION_FILE_BYTES: u64 = 64 * 1024;
 const MAX_PROJECT_INSTRUCTION_TOTAL_BYTES: usize = 96 * 1024;
+const MAX_PROJECT_INSTRUCTION_SCAN_DEPTH: usize = 5;
+const MAX_PROJECT_INSTRUCTION_CANDIDATES: usize = 80;
 const DEFAULT_SHELL_TIMEOUT_SECONDS: u64 = 30;
 const MAX_CHECKPOINT_FILES: usize = 5_000;
 const MAX_CHECKPOINT_FILE_BYTES: u64 = 1024 * 1024;
@@ -2963,7 +2965,7 @@ fn load_project_instructions(settings: &Settings) -> Option<ProjectInstructions>
         return None;
     }
     let content = format!(
-        "Project instructions loaded from AGENTS.md. Apply them to workspace work unless they conflict with user instructions or DeepX safety rules.\n\n{}",
+        "Project instructions loaded from workspace instruction files. Apply them to matching workspace paths unless they conflict with user instructions or DeepX safety rules. More deeply nested instruction files are more specific.\n\n{}",
         sections.join("\n\n")
     );
     let hash = sha256_hex(content.as_bytes());
@@ -2976,6 +2978,7 @@ fn load_project_instructions(settings: &Settings) -> Option<ProjectInstructions>
 
 fn project_instruction_candidates(root: &Path) -> Vec<PathBuf> {
     let mut candidates = vec![
+        root.join("AGENTS.override.md"),
         root.join("AGENTS.md"),
         root.join("CLAUDE.md"),
         root.join("CODEX.md"),
@@ -2998,7 +3001,58 @@ fn project_instruction_candidates(root: &Path) -> Vec<PathBuf> {
         files.sort();
         candidates.extend(files);
     }
+    let mut nested = Vec::new();
+    collect_nested_project_instruction_candidates(root, root, 0, &mut nested);
+    nested.sort();
+    for candidate in nested {
+        if candidates.len() >= MAX_PROJECT_INSTRUCTION_CANDIDATES {
+            break;
+        }
+        if !candidates.iter().any(|existing| existing == &candidate) {
+            candidates.push(candidate);
+        }
+    }
     candidates
+}
+
+fn collect_nested_project_instruction_candidates(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    candidates: &mut Vec<PathBuf>,
+) {
+    if depth >= MAX_PROJECT_INSTRUCTION_SCAN_DEPTH
+        || candidates.len() >= MAX_PROJECT_INSTRUCTION_CANDIDATES
+    {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut dirs: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|item| item.path()))
+        .filter(|path| path.is_dir())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map_or(true, |name| !should_skip_dir(name))
+        })
+        .collect();
+    dirs.sort();
+    for child in dirs {
+        for file_name in ["AGENTS.override.md", "AGENTS.md", "CLAUDE.md", "CODEX.md"] {
+            let candidate = child.join(file_name);
+            if candidate.is_file() {
+                candidates.push(candidate);
+                if candidates.len() >= MAX_PROJECT_INSTRUCTION_CANDIDATES {
+                    return;
+                }
+            }
+        }
+        if child.starts_with(root) {
+            collect_nested_project_instruction_candidates(root, &child, depth + 1, candidates);
+        }
+    }
 }
 
 fn serialize_tool_output_for_model(tool_name: &str, output: &Value) -> String {
@@ -4388,6 +4442,50 @@ mod tests {
         let a = instructions.content.find("Cursor rule A").unwrap();
         let b = instructions.content.find("Cursor rule B").unwrap();
         assert!(a < b);
+    }
+
+    #[test]
+    fn nested_project_instruction_files_are_loaded_in_stable_order() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("src").join("feature")).unwrap();
+        fs::create_dir_all(dir.path().join("node_modules").join("pkg")).unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "Root project rule").unwrap();
+        fs::write(
+            dir.path().join("src").join("AGENTS.override.md"),
+            "Source override rule",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("src").join("feature").join("AGENTS.md"),
+            "Feature subtree rule",
+        )
+        .unwrap();
+        fs::write(
+            dir.path()
+                .join("node_modules")
+                .join("pkg")
+                .join("AGENTS.md"),
+            "Skipped dependency rule",
+        )
+        .unwrap();
+        let mut settings = Settings::default();
+        settings.workspace_path = Some(dir.path().to_string_lossy().to_string());
+        let instructions = load_project_instructions(&settings).unwrap();
+        assert!(instructions.files.iter().any(|file| file == "AGENTS.md"));
+        assert!(instructions
+            .files
+            .iter()
+            .any(|file| file == "src/AGENTS.override.md"));
+        assert!(instructions
+            .files
+            .iter()
+            .any(|file| file == "src/feature/AGENTS.md"));
+        assert!(!instructions.content.contains("Skipped dependency rule"));
+        let root = instructions.content.find("Root project rule").unwrap();
+        let source = instructions.content.find("Source override rule").unwrap();
+        let feature = instructions.content.find("Feature subtree rule").unwrap();
+        assert!(root < source);
+        assert!(source < feature);
     }
 
     #[test]
