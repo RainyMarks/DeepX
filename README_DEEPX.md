@@ -1,6 +1,6 @@
 # DeepX Portable
 
-DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。用户自己填写模型 API key，配置、会话、日志、缓存指标和本地密钥默认都保存在应用目录的 `data/` 下。
+DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。用户自己填写模型 API key；配置、会话、日志、缓存指标和本地密钥默认都保存在应用目录的 `data/` 下。
 
 ## 运行
 
@@ -36,4 +36,4 @@ DeepX 是独立项目，不是 DeepSeek 官方项目，也不是 OpenAI/Codex �
 
 ## License
 
-DeepX 使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景下分发；未经授权不得用于商业目的。
+DeepX 使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景中分发；未经授权不得用于商业目的。

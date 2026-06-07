@@ -550,7 +550,8 @@ async fn chat(
     Json(req): Json<ChatRequest>,
 ) -> Result<Json<Value>, ApiError> {
     let prepared = prepare_chat_turn(&state.data_root, req)?;
-    let result = run_agent_turn(&state.http, prepared.call.clone(), None).await?;
+    let session_id = prepared.session.id.clone();
+    let result = run_agent_turn(&state.http, prepared.call.clone(), &state.data_root, &session_id, None).await?;
     let completed = finish_chat_turn(&state.data_root, prepared, result)?;
 
     Ok(Json(json!({
@@ -572,10 +573,11 @@ async fn chat_stream(
     let prepared = prepare_chat_turn(&state.data_root, req)?;
     let data_root = state.data_root.as_ref().clone();
     let http = state.http.clone();
+    let session_id = prepared.session.id.clone();
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
 
     tokio::spawn(async move {
-        match run_agent_turn(&http, prepared.call.clone(), Some(&tx)).await {
+        match run_agent_turn(&http, prepared.call.clone(), &data_root, &session_id, Some(&tx)).await {
             Ok(result) => match finish_chat_turn(&data_root, prepared, result) {
                 Ok(completed) => {
                     send_sse(&tx, "metric", json!({ "metric": completed.metric })).await;
@@ -2778,6 +2780,8 @@ fn parse_tool_calls(message: &Value) -> Vec<ToolCallRequest> {
 async fn run_agent_turn(
     http: &reqwest::Client,
     mut call: ModelCall,
+    data_root: &Path,
+    session_id: &str,
     tx: Option<&mpsc::Sender<Result<Event, Infallible>>>,
 ) -> Result<ModelResult, ApiError> {
     if !call.tools_enabled || !call.provider.supports_tools || workspace_root(&call.settings).is_none() {
@@ -2838,7 +2842,7 @@ async fn run_agent_turn(
                 )
                 .await;
             }
-            let output = execute_agent_tool(&call.settings, &tool_call).await;
+            let output = execute_agent_tool(data_root, session_id, &call.settings, &tool_call).await;
             if let Some(tx) = tx {
                 send_sse(
                     tx,
@@ -2848,7 +2852,8 @@ async fn run_agent_turn(
                         "name": tool_call.name,
                         "round": round + 1,
                         "ok": output.get("ok").and_then(Value::as_bool).unwrap_or(false),
-                        "summary": output.get("summary").and_then(Value::as_str).unwrap_or("")
+                        "summary": output.get("summary").and_then(Value::as_str).unwrap_or(""),
+                        "checkpointId": output.get("checkpointId").and_then(Value::as_str)
                     }),
                 )
                 .await;
@@ -3180,7 +3185,12 @@ fn workspace_tool_definitions(settings: &Settings) -> Value {
     Value::Array(tools)
 }
 
-async fn execute_agent_tool(settings: &Settings, call: &ToolCallRequest) -> Value {
+async fn execute_agent_tool(data_root: &Path, session_id: &str, settings: &Settings, call: &ToolCallRequest) -> Value {
+    let checkpoint_id = if tool_has_side_effect(&call.name) && permission_allows_write(settings) {
+        create_workspace_checkpoint(data_root, settings, session_id).ok().flatten()
+    } else {
+        None
+    };
     let result = match call.name.as_str() {
         "workspace_tree" => tool_workspace_tree(settings, &call.arguments),
         "list_directory" => tool_list_directory(settings, &call.arguments),
@@ -3194,10 +3204,21 @@ async fn execute_agent_tool(settings: &Settings, call: &ToolCallRequest) -> Valu
         "git_status" => tool_git_status(settings).await,
         _ => Err(format!("unknown tool: {}", call.name)),
     };
-    match result {
+    let mut value = match result {
         Ok(value) => value,
         Err(error) => json!({ "ok": false, "error": error, "summary": error }),
+    };
+    if let Some(checkpoint_id) = checkpoint_id {
+        if let Some(object) = value.as_object_mut() {
+            object.insert("checkpointId".into(), json!(checkpoint_id));
+            object.insert("checkpointKind".into(), json!("before_tool"));
+        }
     }
+    value
+}
+
+fn tool_has_side_effect(name: &str) -> bool {
+    matches!(name, "edit_file" | "write_file" | "run_shell_command")
 }
 
 fn build_workspace_turn_context(settings: &Settings) -> Option<String> {
@@ -4374,7 +4395,7 @@ mod tests {
         let output = json!({
             "ok": true,
             "summary": "large grep result",
-            "items": "中文输出".repeat(MAX_TOOL_RESULT_CHARS)
+            "items": "large tool output".repeat(MAX_TOOL_RESULT_CHARS)
         });
         let serialized = serialize_tool_output_for_model("grep_workspace", &output);
         let parsed: Value = serde_json::from_str(&serialized).unwrap();
@@ -4392,6 +4413,16 @@ mod tests {
         assert!(!permission_allows_shell(&settings, "rg foo; del bar"));
         settings.permission_mode = "full-access".into();
         assert!(permission_allows_shell(&settings, "cargo test"));
+    }
+
+    #[test]
+    fn side_effect_tools_are_marked_for_checkpoints() {
+        assert!(tool_has_side_effect("edit_file"));
+        assert!(tool_has_side_effect("write_file"));
+        assert!(tool_has_side_effect("run_shell_command"));
+        assert!(!tool_has_side_effect("read_file"));
+        assert!(!tool_has_side_effect("grep_workspace"));
+        assert!(!tool_has_side_effect("git_status"));
     }
 
     #[test]

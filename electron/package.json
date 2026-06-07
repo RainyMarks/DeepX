@@ -1,7 +1,7 @@
 {
   "name": "deepx",
   "productName": "DeepX",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "description": "Source-available noncommercial multi-provider coding agent shell",
   "main": "main.js",
   "author": "RainyMarks",

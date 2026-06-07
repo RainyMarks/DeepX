@@ -1674,7 +1674,7 @@ function renderAttachments() {
   for (const attachment of state.attachments) {
     const chip = document.createElement("span");
     chip.className = "attachment-chip";
-    chip.innerHTML = `<span></span><button type="button" title="${t("removeAttachment")}">脳</button>`;
+    chip.innerHTML = `<span></span><button type="button" title="${t("removeAttachment")}">x</button>`;
     chip.querySelector("span").textContent = attachment.name;
     chip.title = attachment.path;
     chip.querySelector("button").addEventListener("click", () => {
@@ -1692,28 +1692,27 @@ async function buildMessageWithAttachments(message, attachments) {
   const fileBlocks = files.map((file, index) => {
     const status = file.truncated ? `\n${t("fileTooLarge")}` : "";
     if (file.error) {
-      return `文件 ${index + 1}: ${file.name}\n路径: ${file.path}\n读取失败: ${file.error}`;
+      return `\u6587\u4ef6 ${index + 1}: ${file.name}\n\u8def\u5f84: ${file.path}\n\u8bfb\u53d6\u5931\u8d25: ${file.error}`;
     }
     return [
-      `文件 ${index + 1}: ${file.name}`,
-      `路径: ${file.path}`,
-      `大小: ${formatBytes(file.size)}`,
+      `\u6587\u4ef6 ${index + 1}: ${file.name}`,
+      `\u8def\u5f84: ${file.path}`,
+      `\u5927\u5c0f: ${formatBytes(file.size)}`,
       status.trim(),
-      "内容:",
-      file.content || "(空文件)",
+      "\u5185\u5bb9:",
+      file.content || "(\u7a7a\u6587\u4ef6)",
     ].filter(Boolean).join("\n");
   });
-  const prompt = message || (state.language === "zh-CN" ? "请根据附件内容进行分析。" : "Please analyze the attached file content.");
-  return `${prompt}\n\n[DeepX 附加文件上下文]\n${fileBlocks.join("\n\n---\n\n")}`;
+  const prompt = message || (state.language === "zh-CN" ? "\u8bf7\u6839\u636e\u9644\u4ef6\u5185\u5bb9\u8fdb\u884c\u5206\u6790\u3002" : "Please analyze the attached file content.");
+  return `${prompt}\n\n[DeepX \u9644\u4ef6\u4e0a\u4e0b\u6587]\n${fileBlocks.join("\n\n---\n\n")}`;
 }
 
 function formatUserMessageWithAttachments(message, attachments) {
   if (!attachments.length) return message;
   const names = attachments.map((item) => `- ${item.name}`).join("\n");
-  const prefix = message || (state.language === "zh-CN" ? "已添加附件。" : "Attached files.");
-  return `${prefix}\n\n${state.language === "zh-CN" ? "附件" : "Attachments"}:\n${names}`;
+  const prefix = message || (state.language === "zh-CN" ? "\u5df2\u6dfb\u52a0\u9644\u4ef6\u3002" : "Attached files.");
+  return `${prefix}\n\n${state.language === "zh-CN" ? "\u9644\u4ef6" : "Attachments"}:\n${names}`;
 }
-
 async function buildWebContext(query) {
   const payload = await api("/web-search", {
     method: "POST",
@@ -1902,6 +1901,7 @@ function appendMessage({ role, content = "", reasoning, metric, checkpointId = n
       tool.status = status || tool.status;
       tool.summary = payload?.summary || tool.summary || "";
       tool.arguments = payload?.arguments || tool.arguments || null;
+      tool.checkpointId = payload?.checkpointId || tool.checkpointId || null;
       this.setStatus(t(tool.status === "failed" ? "toolFailed" : tool.status === "done" ? "toolDone" : "toolRunning", { name: tool.name }));
       render(false);
     },
@@ -1971,10 +1971,9 @@ function parseMarkdown(markedApi, raw) {
 
 function normalizeMarkdown(raw) {
   return String(raw)
-    .replace(/([:：])\s+\|(?=[^\n]*\|\s+\|\s*:?-{3,})/g, "$1\n\n|")
+    .replace(/([:\uff1a])\s+\|(?=[^\n]*\|\s+\|\s*:?-{3,})/g, "$1\n\n|")
     .replace(/\|\s+\|(?=\s*(?:\|?\s*:?-{3,}|`|\*\*|[*_#A-Za-z0-9\u4e00-\u9fff]))/g, "|\n|");
 }
-
 function renderReasoning(item, reasoning) {
   let details = item.querySelector(".reasoning-block");
   if (!reasoning) {
@@ -2025,8 +2024,9 @@ function renderToolCalls(item, tools) {
   for (const tool of tools) {
     const row = document.createElement("div");
     row.className = `tool-call-row ${tool.status || "running"}`;
-    const status = tool.status === "failed" ? "×" : tool.status === "done" ? "✓" : "…";
-    const details = [tool.summary, tool.arguments ? JSON.stringify(tool.arguments) : ""].filter(Boolean).join(" · ");
+    const status = tool.status === "failed" ? "!" : tool.status === "done" ? "ok" : "...";
+    const checkpoint = tool.checkpointId ? `checkpoint ${tool.checkpointId}` : "";
+    const details = [tool.summary, checkpoint, tool.arguments ? JSON.stringify(tool.arguments) : ""].filter(Boolean).join(" / ");
     row.innerHTML = `<span class="tool-call-status"></span><span class="tool-call-name"></span><span class="tool-call-summary"></span>`;
     row.querySelector(".tool-call-status").textContent = status;
     row.querySelector(".tool-call-name").textContent = tool.name || "tool";

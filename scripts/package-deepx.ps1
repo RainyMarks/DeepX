@@ -1,6 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$PackageJson = Get-Content -Raw -LiteralPath (Join-Path $Root "package.json") | ConvertFrom-Json
+$AppVersion = [string]$PackageJson.version
 $BackupRoot = Join-Path (Split-Path $Root -Parent) "DeepX-original-backup"
 $Resources = Join-Path $Root "resources"
 $Data = Join-Path $Root "data"
@@ -181,9 +183,13 @@ $rcedit = Get-Command rcedit.exe -ErrorAction SilentlyContinue
 $rceditArgs = @(
   $DeepXExe,
   "--set-icon", $IconIco,
+  "--set-file-version", $AppVersion,
+  "--set-product-version", $AppVersion,
   "--set-version-string", "CompanyName", "DeepX",
   "--set-version-string", "FileDescription", "DeepX",
   "--set-version-string", "ProductName", "DeepX",
+  "--set-version-string", "ProductVersion", $AppVersion,
+  "--set-version-string", "FileVersion", $AppVersion,
   "--set-version-string", "InternalName", "DeepX",
   "--set-version-string", "OriginalFilename", "DeepX.exe"
 )
@@ -199,6 +205,7 @@ if ($rcedit) {
   $env:DEEPX_RCEDIT_MODULE = Join-Path $RceditTmp "node_modules\rcedit\lib\index.js"
   $env:DEEPX_RCEDIT_EXE = $DeepXExe
   $env:DEEPX_RCEDIT_ICON = $IconIco
+  $env:DEEPX_RCEDIT_VERSION = $AppVersion
   $RceditScript = Join-Path $RceditTmp "set-icon.mjs"
 @'
 import { pathToFileURL } from "node:url";
@@ -210,6 +217,8 @@ await rcedit(process.env.DEEPX_RCEDIT_EXE, {
     CompanyName: "DeepX",
     FileDescription: "DeepX",
     ProductName: "DeepX",
+    ProductVersion: process.env.DEEPX_RCEDIT_VERSION,
+    FileVersion: process.env.DEEPX_RCEDIT_VERSION,
     InternalName: "DeepX",
     OriginalFilename: "DeepX.exe",
   },
