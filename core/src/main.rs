@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -37,6 +38,8 @@ const MAX_WORKSPACE_GREP_FILE_BYTES: u64 = 512 * 1024;
 const MAX_WORKSPACE_WRITE_BYTES: usize = 1024 * 1024;
 const MAX_SHELL_OUTPUT_CHARS: usize = 32_000;
 const MAX_TOOL_RESULT_CHARS: usize = 24_000;
+const MAX_TRACE_MESSAGE_CHARS: usize = 16_000;
+const MAX_TRACE_REASONING_CHARS: usize = 8_000;
 const MAX_PROJECT_INSTRUCTION_FILE_BYTES: u64 = 64 * 1024;
 const MAX_PROJECT_INSTRUCTION_TOTAL_BYTES: usize = 96 * 1024;
 const MAX_PROJECT_INSTRUCTION_SCAN_DEPTH: usize = 5;
@@ -776,9 +779,10 @@ fn finish_chat_turn(
     session.prefix_hash = prefix_hash.clone();
     session.prefix_changed = prefix_changed;
     session.prefix_change_reasons = prefix_change_reasons.clone();
+    let user_content = user_message;
     session.messages.push(StoredMessage {
         role: "user".to_string(),
-        content: user_message,
+        content: user_content.clone(),
         reasoning_content: None,
         checkpoint_id: None,
         created_at: now,
@@ -822,6 +826,19 @@ fn finish_chat_turn(
     session.metrics.push(metric.clone());
     write_session_file(&path, &session).map_err(ApiError::internal)?;
     write_metric_file(data_root, &metric).map_err(ApiError::internal)?;
+    append_session_trace_entries(
+        data_root,
+        &session.id,
+        &chat_turn_trace_entries(
+            &session,
+            &settings,
+            &user_content,
+            &result,
+            &metric,
+            checkpoint_id.as_deref(),
+        ),
+    )
+    .map_err(ApiError::internal)?;
 
     Ok(CompletedChatTurn {
         session_id: session.id,
@@ -2043,14 +2060,120 @@ impl StoredMessage {
     }
 }
 
+fn valid_session_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 fn session_path(root: &Path, id: &str) -> Result<PathBuf, ApiError> {
-    if !id
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    {
+    if !valid_session_id(id) {
         return Err(ApiError::bad_request("invalid session id"));
     }
     Ok(root.join("sessions").join(format!("{id}.json")))
+}
+
+fn session_trace_path(root: &Path, id: &str) -> Result<PathBuf> {
+    if !valid_session_id(id) {
+        return Err(anyhow!("invalid session id"));
+    }
+    Ok(root.join("sessions").join(format!("{id}.jsonl")))
+}
+
+fn append_session_trace_entries(root: &Path, id: &str, entries: &[Value]) -> Result<()> {
+    let path = session_trace_path(root, id)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("failed to open {}", path.display()))?;
+    for entry in entries {
+        serde_json::to_writer(&mut file, entry)?;
+        file.write_all(b"\n")?;
+    }
+    file.flush()?;
+    Ok(())
+}
+
+fn chat_turn_trace_entries(
+    session: &Session,
+    settings: &Settings,
+    user_message: &str,
+    result: &ModelResult,
+    metric: &TurnMetric,
+    checkpoint_id: Option<&str>,
+) -> Vec<Value> {
+    let timestamp = Utc::now();
+    let mut assistant_message = json!({
+        "event": "assistant.message",
+        "timestamp": timestamp,
+        "sessionId": session.id,
+        "content": truncate(&result.content, MAX_TRACE_MESSAGE_CHARS),
+        "contentChars": result.content.chars().count(),
+        "checkpointId": checkpoint_id
+    });
+    if let Some(reasoning) = &result.reasoning {
+        assistant_message["reasoning"] = json!({
+            "chars": reasoning.chars().count(),
+            "preview": truncate(reasoning, MAX_TRACE_REASONING_CHARS)
+        });
+    }
+
+    let mut entries = vec![json!({
+        "event": "user.message",
+        "timestamp": timestamp,
+        "sessionId": session.id,
+        "content": truncate(user_message, MAX_TRACE_MESSAGE_CHARS),
+        "contentChars": user_message.chars().count(),
+        "workspacePath": session.workspace_path
+    })];
+
+    for tool in &result.tool_trace {
+        entries.push(json!({
+            "event": "tool.end",
+            "timestamp": timestamp,
+            "sessionId": session.id,
+            "toolCallId": tool.id,
+            "name": tool.name,
+            "round": tool.round,
+            "arguments": tool.arguments,
+            "ok": tool.ok,
+            "summary": tool.summary,
+            "checkpointId": tool.checkpoint_id
+        }));
+    }
+
+    entries.push(assistant_message);
+    entries.push(json!({
+        "event": "turn.metric",
+        "timestamp": timestamp,
+        "sessionId": session.id,
+        "metricId": metric.id,
+        "providerId": settings.provider_id,
+        "model": settings.model,
+        "permissionMode": settings.permission_mode,
+        "contextWindow": settings.context_window,
+        "maxTokens": settings.max_tokens,
+        "thinkingEnabled": settings.thinking_enabled,
+        "reasoningEffort": settings.reasoning_effort,
+        "usage": result.usage,
+        "cache": {
+            "hitTokens": metric.cache_hit_tokens,
+            "missTokens": metric.cache_miss_tokens,
+            "hitRatio": metric.hit_ratio
+        },
+        "prefixHash": metric.prefix_hash,
+        "prefixChanged": metric.prefix_changed,
+        "prefixChangeReasons": metric.prefix_change_reasons,
+        "contextTruncated": metric.context_truncated,
+        "contextTruncatedMessages": metric.context_truncated_messages,
+        "checkpointId": checkpoint_id
+    }));
+    entries
 }
 
 fn read_session_file(path: &Path) -> Result<Session> {
@@ -2252,6 +2375,7 @@ struct ModelResult {
     reasoning: Option<String>,
     usage: NormalizedUsage,
     tool_calls: Vec<ToolCallRequest>,
+    tool_trace: Vec<ToolTraceEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -2259,6 +2383,18 @@ struct ToolCallRequest {
     id: String,
     name: String,
     arguments: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolTraceEntry {
+    id: String,
+    name: String,
+    round: usize,
+    arguments: Value,
+    ok: bool,
+    summary: String,
+    checkpoint_id: Option<String>,
 }
 
 #[derive(Default)]
@@ -2361,6 +2497,7 @@ async fn stream_model_and_emit(
                     reasoning: non_empty(reasoning),
                     usage,
                     tool_calls: Vec::new(),
+                    tool_trace: Vec::new(),
                 });
             }
             let value: Value = serde_json::from_str(data).map_err(|err| {
@@ -2387,6 +2524,7 @@ async fn stream_model_and_emit(
         reasoning: non_empty(reasoning),
         usage,
         tool_calls: Vec::new(),
+        tool_trace: Vec::new(),
     })
 }
 
@@ -2671,6 +2809,7 @@ async fn parse_sse_response(resp: reqwest::Response) -> Result<ModelResult, ApiE
                     reasoning: non_empty(reasoning),
                     usage,
                     tool_calls: Vec::new(),
+                    tool_trace: Vec::new(),
                 });
             }
             let value: Value = serde_json::from_str(data).map_err(|err| {
@@ -2685,6 +2824,7 @@ async fn parse_sse_response(resp: reqwest::Response) -> Result<ModelResult, ApiE
         reasoning: non_empty(reasoning),
         usage,
         tool_calls: Vec::new(),
+        tool_trace: Vec::new(),
     })
 }
 
@@ -2767,6 +2907,7 @@ fn parse_non_stream_response(value: &Value) -> ModelResult {
         reasoning: non_empty(reasoning),
         usage,
         tool_calls,
+        tool_trace: Vec::new(),
     }
 }
 
@@ -2824,6 +2965,7 @@ async fn run_agent_turn(
 
     let mut messages = call.messages.clone();
     let mut usage = NormalizedUsage::default();
+    let mut tool_trace = Vec::new();
     for round in 0..MAX_AGENT_TOOL_ROUNDS {
         let step_call = ModelCall {
             messages: messages.clone(),
@@ -2835,6 +2977,7 @@ async fn run_agent_turn(
         add_usage(&mut usage, &result.usage);
         if result.tool_calls.is_empty() {
             result.usage = usage;
+            result.tool_trace = tool_trace;
             if let Some(tx) = tx {
                 if let Some(reasoning) = &result.reasoning {
                     send_sse(tx, "reasoning.delta", json!({ "text": reasoning })).await;
@@ -2873,6 +3016,15 @@ async fn run_agent_turn(
             }
             let output =
                 execute_agent_tool(data_root, session_id, &call.settings, &tool_call).await;
+            let tool_ok = output.get("ok").and_then(Value::as_bool).unwrap_or(false);
+            let tool_summary = truncate(
+                output.get("summary").and_then(Value::as_str).unwrap_or(""),
+                1200,
+            );
+            let tool_checkpoint_id = output
+                .get("checkpointId")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned);
             if let Some(tx) = tx {
                 send_sse(
                     tx,
@@ -2881,13 +3033,22 @@ async fn run_agent_turn(
                         "id": tool_call.id,
                         "name": tool_call.name,
                         "round": round + 1,
-                        "ok": output.get("ok").and_then(Value::as_bool).unwrap_or(false),
-                        "summary": output.get("summary").and_then(Value::as_str).unwrap_or(""),
-                        "checkpointId": output.get("checkpointId").and_then(Value::as_str)
+                        "ok": tool_ok,
+                        "summary": tool_summary,
+                        "checkpointId": tool_checkpoint_id
                     }),
                 )
                 .await;
             }
+            tool_trace.push(ToolTraceEntry {
+                id: tool_call.id.clone(),
+                name: tool_call.name.clone(),
+                round: round + 1,
+                arguments: compact_tool_arguments(&tool_call.arguments),
+                ok: tool_ok,
+                summary: tool_summary,
+                checkpoint_id: tool_checkpoint_id,
+            });
             let content = serialize_tool_output_for_model(&tool_call.name, &output);
             messages.push(ChatMessage::tool_result(
                 tool_call.id,
@@ -2913,6 +3074,7 @@ async fn run_agent_turn(
     };
     add_usage(&mut usage, &final_result.usage);
     final_result.usage = usage;
+    final_result.tool_trace = tool_trace;
     Ok(final_result)
 }
 
@@ -4520,6 +4682,110 @@ mod tests {
             })
             .count();
         assert_eq!(backups, 1);
+    }
+
+    #[test]
+    fn session_trace_appends_valid_jsonl_and_rejects_invalid_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        append_session_trace_entries(
+            dir.path(),
+            "s-test_1",
+            &[
+                json!({ "event": "user.message" }),
+                json!({ "event": "turn.metric" }),
+            ],
+        )
+        .unwrap();
+        append_session_trace_entries(dir.path(), "s-test_1", &[json!({ "event": "done" })])
+            .unwrap();
+
+        let path = session_trace_path(dir.path(), "s-test_1").unwrap();
+        let lines: Vec<String> = fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .map(ToOwned::to_owned)
+            .collect();
+        assert_eq!(lines.len(), 3);
+        for line in lines {
+            let parsed: Value = serde_json::from_str(&line).unwrap();
+            assert!(parsed.get("event").is_some());
+        }
+        assert!(session_trace_path(dir.path(), "..\\outside").is_err());
+        assert!(session_trace_path(dir.path(), "../outside").is_err());
+    }
+
+    #[test]
+    fn chat_turn_trace_includes_tool_events_before_final_metric() {
+        let settings = Settings::default();
+        let now = Utc::now();
+        let session = Session {
+            id: "s-test".into(),
+            title: "trace".into(),
+            provider_id: settings.provider_id.clone(),
+            model: settings.model.clone(),
+            workspace_path: Some("C:\\workspace".into()),
+            created_at: now,
+            updated_at: now,
+            prefix_hash: "prefix".into(),
+            prefix_changed: false,
+            prefix_change_reasons: Vec::new(),
+            messages: Vec::new(),
+            metrics: Vec::new(),
+        };
+        let metric = TurnMetric {
+            id: "m-test".into(),
+            created_at: now,
+            provider_id: settings.provider_id.clone(),
+            model: settings.model.clone(),
+            cache_hit_tokens: 1,
+            cache_miss_tokens: 2,
+            hit_ratio: 1.0 / 3.0,
+            prompt_tokens: 3,
+            completion_tokens: 4,
+            reasoning_tokens: 5,
+            total_tokens: 12,
+            estimated_cost: None,
+            prefix_hash: "prefix".into(),
+            prefix_changed: false,
+            prefix_change_reasons: Vec::new(),
+            context_truncated: false,
+            context_truncated_messages: 0,
+            context_window: settings.context_window,
+        };
+        let result = ModelResult {
+            content: "done".into(),
+            reasoning: None,
+            usage: NormalizedUsage::default(),
+            tool_calls: Vec::new(),
+            tool_trace: vec![ToolTraceEntry {
+                id: "call-1".into(),
+                name: "read_file".into(),
+                round: 1,
+                arguments: json!({ "path": "src/main.rs" }),
+                ok: true,
+                summary: "read 10 lines".into(),
+                checkpoint_id: None,
+            }],
+        };
+
+        let entries =
+            chat_turn_trace_entries(&session, &settings, "read file", &result, &metric, None);
+        let events: Vec<&str> = entries
+            .iter()
+            .map(|entry| entry["event"].as_str().unwrap())
+            .collect();
+
+        assert_eq!(
+            events,
+            vec![
+                "user.message",
+                "tool.end",
+                "assistant.message",
+                "turn.metric"
+            ]
+        );
+        assert_eq!(entries[1]["name"], "read_file");
+        assert_eq!(entries[1]["ok"], true);
     }
 
     #[test]
