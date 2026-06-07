@@ -453,7 +453,9 @@ async fn session_checkpoint_restore(
         session.updated_at = Utc::now();
         write_session_file(&path, &session).map_err(ApiError::internal)?;
     }
-    Ok(Json(json!({ "ok": true, "summary": summary, "session": session })))
+    Ok(Json(
+        json!({ "ok": true, "summary": summary, "session": session }),
+    ))
 }
 
 async fn test_connection(
@@ -553,7 +555,14 @@ async fn chat(
 ) -> Result<Json<Value>, ApiError> {
     let prepared = prepare_chat_turn(&state.data_root, req)?;
     let session_id = prepared.session.id.clone();
-    let result = run_agent_turn(&state.http, prepared.call.clone(), &state.data_root, &session_id, None).await?;
+    let result = run_agent_turn(
+        &state.http,
+        prepared.call.clone(),
+        &state.data_root,
+        &session_id,
+        None,
+    )
+    .await?;
     let completed = finish_chat_turn(&state.data_root, prepared, result)?;
 
     Ok(Json(json!({
@@ -579,7 +588,15 @@ async fn chat_stream(
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
 
     tokio::spawn(async move {
-        match run_agent_turn(&http, prepared.call.clone(), &data_root, &session_id, Some(&tx)).await {
+        match run_agent_turn(
+            &http,
+            prepared.call.clone(),
+            &data_root,
+            &session_id,
+            Some(&tx),
+        )
+        .await
+        {
             Ok(result) => match finish_chat_turn(&data_root, prepared, result) {
                 Ok(completed) => {
                     send_sse(&tx, "metric", json!({ "metric": completed.metric })).await;
@@ -668,7 +685,8 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
     if session.prefix_hash.is_empty() {
         prefix_change_reasons.push("new_session".to_string());
     } else if prefix_changed {
-        prefix_change_reasons.push("provider_model_context_permissions_or_project_instructions_changed".to_string());
+        prefix_change_reasons
+            .push("provider_model_context_permissions_or_project_instructions_changed".to_string());
     }
 
     let prefix_message = ChatMessage::system(prefix);
@@ -836,10 +854,7 @@ fn trim_history_to_context_budget(
             .sum::<u64>()
         + approximate_message_tokens(current_user)
         + 96;
-    let mut history_tokens = history
-        .iter()
-        .map(approximate_message_tokens)
-        .sum::<u64>();
+    let mut history_tokens = history.iter().map(approximate_message_tokens).sum::<u64>();
     let mut truncated_messages = 0;
 
     while !history.is_empty() && fixed_tokens + history_tokens > budget {
@@ -848,10 +863,7 @@ fn trim_history_to_context_budget(
             break;
         }
         truncated_messages += removed;
-        history_tokens = history
-            .iter()
-            .map(approximate_message_tokens)
-            .sum::<u64>();
+        history_tokens = history.iter().map(approximate_message_tokens).sum::<u64>();
     }
 
     ContextBudgetResult { truncated_messages }
@@ -870,7 +882,10 @@ fn remove_oldest_turn(history: &mut Vec<ChatMessage>) -> usize {
     let first_role = history[0].role.clone();
     history.remove(0);
     let mut removed = 1;
-    if first_role == "user" && history.first().is_some_and(|message| message.role == "assistant")
+    if first_role == "user"
+        && history
+            .first()
+            .is_some_and(|message| message.role == "assistant")
     {
         history.remove(0);
         removed += 1;
@@ -1551,7 +1566,8 @@ fn default_ui_font() -> String {
 }
 
 fn default_code_font() -> String {
-    "\"JetBrains Mono\", ui-monospace, \"SFMono-Regular\", \"SF Mono\", Menlo, Consolas, monospace".into()
+    "\"JetBrains Mono\", ui-monospace, \"SFMono-Regular\", \"SF Mono\", Menlo, Consolas, monospace"
+        .into()
 }
 
 fn default_font_scale() -> u64 {
@@ -2131,7 +2147,10 @@ fn build_prefix(provider: &ProviderProfile, settings: &Settings) -> String {
     facts.insert("webSearchProvider", json!("duckduckgo-instant-answer"));
     if let Some(project_instructions) = load_project_instructions(settings) {
         facts.insert("projectInstructionsHash", json!(project_instructions.hash));
-        facts.insert("projectInstructionsFiles", json!(project_instructions.files));
+        facts.insert(
+            "projectInstructionsFiles",
+            json!(project_instructions.files),
+        );
         facts.insert("projectInstructions", json!(project_instructions.content));
     } else {
         facts.insert("projectInstructionsHash", Value::Null);
@@ -2513,7 +2532,10 @@ fn build_chat_body(call: &ModelCall) -> Value {
         body.insert("temperature".into(), json!(call.settings.temperature));
     }
     body.insert("max_tokens".into(), json!(call.settings.max_tokens));
-    if call.tools_enabled && call.provider.supports_tools && workspace_root(&call.settings).is_some() {
+    if call.tools_enabled
+        && call.provider.supports_tools
+        && workspace_root(&call.settings).is_some()
+    {
         body.insert("tools".into(), workspace_tool_definitions(&call.settings));
         body.insert("tool_choice".into(), json!("auto"));
     }
@@ -2767,7 +2789,9 @@ fn parse_tool_calls(message: &Value) -> Vec<ToolCallRequest> {
             .unwrap_or_else(|| format!("call_{}", Uuid::new_v4().simple()));
         let raw_args = function.get("arguments").cloned().unwrap_or(Value::Null);
         let arguments = match raw_args {
-            Value::String(s) => serde_json::from_str::<Value>(&s).unwrap_or_else(|_| json!({ "raw": s })),
+            Value::String(s) => {
+                serde_json::from_str::<Value>(&s).unwrap_or_else(|_| json!({ "raw": s }))
+            }
             other => other,
         };
         calls.push(ToolCallRequest {
@@ -2786,7 +2810,10 @@ async fn run_agent_turn(
     session_id: &str,
     tx: Option<&mpsc::Sender<Result<Event, Infallible>>>,
 ) -> Result<ModelResult, ApiError> {
-    if !call.tools_enabled || !call.provider.supports_tools || workspace_root(&call.settings).is_none() {
+    if !call.tools_enabled
+        || !call.provider.supports_tools
+        || workspace_root(&call.settings).is_none()
+    {
         return if let Some(tx) = tx {
             stream_model_and_emit(http, call, tx).await
         } else {
@@ -2844,7 +2871,8 @@ async fn run_agent_turn(
                 )
                 .await;
             }
-            let output = execute_agent_tool(data_root, session_id, &call.settings, &tool_call).await;
+            let output =
+                execute_agent_tool(data_root, session_id, &call.settings, &tool_call).await;
             if let Some(tx) = tx {
                 send_sse(
                     tx,
@@ -2861,7 +2889,11 @@ async fn run_agent_turn(
                 .await;
             }
             let content = serialize_tool_output_for_model(&tool_call.name, &output);
-            messages.push(ChatMessage::tool_result(tool_call.id, tool_call.name, content));
+            messages.push(ChatMessage::tool_result(
+                tool_call.id,
+                tool_call.name,
+                content,
+            ));
         }
         if round + 1 == MAX_AGENT_TOOL_ROUNDS {
             messages.push(ChatMessage::system("Tool round limit reached. Stop calling tools and provide the best final answer from the gathered evidence."));
@@ -2984,7 +3016,10 @@ fn project_instruction_candidates(root: &Path) -> Vec<PathBuf> {
         root.join("CODEX.md"),
         root.join(".github").join("copilot-instructions.md"),
     ];
-    for rules_dir in [root.join(".cursor").join("rules"), root.join(".windsurf").join("rules")] {
+    for rules_dir in [
+        root.join(".cursor").join("rules"),
+        root.join(".windsurf").join("rules"),
+    ] {
         let Ok(entries) = fs::read_dir(&rules_dir) else {
             continue;
         };
@@ -3056,25 +3091,52 @@ fn collect_nested_project_instruction_candidates(
 }
 
 fn serialize_tool_output_for_model(tool_name: &str, output: &Value) -> String {
-    let raw = serde_json::to_string(output)
-        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output serialization failed\"}".to_string());
+    let raw = serde_json::to_string(output).unwrap_or_else(|_| {
+        "{\"ok\":false,\"error\":\"tool output serialization failed\"}".to_string()
+    });
     if raw.len() <= MAX_TOOL_RESULT_CHARS {
         return raw;
     }
-    let summary = output
-        .get("summary")
-        .and_then(Value::as_str)
-        .unwrap_or("tool output truncated");
-    let compressed = json!({
+    let summary = truncate(
+        output
+            .get("summary")
+            .and_then(Value::as_str)
+            .unwrap_or("tool output truncated"),
+        512,
+    );
+    let mut preview_limit = MAX_TOOL_RESULT_CHARS.saturating_sub(2048).max(1000);
+    for _ in 0..6 {
+        let preview = truncate(&raw, preview_limit);
+        let compressed = json!({
+            "ok": output.get("ok").and_then(Value::as_bool).unwrap_or(false),
+            "tool": tool_name,
+            "summary": summary.clone(),
+            "truncated": true,
+            "originalChars": raw.len(),
+            "omittedChars": raw.len().saturating_sub(preview.len()),
+            "maxChars": MAX_TOOL_RESULT_CHARS,
+            "preview": preview
+        });
+        let serialized = serde_json::to_string(&compressed).unwrap_or_else(|_| {
+            "{\"ok\":false,\"error\":\"tool output truncation failed\"}".to_string()
+        });
+        if serialized.len() <= MAX_TOOL_RESULT_CHARS {
+            return serialized;
+        }
+        let overflow = serialized.len().saturating_sub(MAX_TOOL_RESULT_CHARS);
+        preview_limit = preview_limit.saturating_sub(overflow + 256).max(256);
+    }
+    serde_json::to_string(&json!({
         "ok": output.get("ok").and_then(Value::as_bool).unwrap_or(false),
         "tool": tool_name,
         "summary": summary,
         "truncated": true,
+        "originalChars": raw.len(),
+        "omittedChars": raw.len().saturating_sub(256),
         "maxChars": MAX_TOOL_RESULT_CHARS,
-        "preview": truncate(&raw, MAX_TOOL_RESULT_CHARS)
-    });
-    serde_json::to_string(&compressed)
-        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output truncation failed\"}".to_string())
+        "preview": truncate(&raw, 256)
+    }))
+    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output truncation failed\"}".to_string())
 }
 
 fn workspace_tool_definitions(settings: &Settings) -> Value {
@@ -3239,9 +3301,16 @@ fn workspace_tool_definitions(settings: &Settings) -> Value {
     Value::Array(tools)
 }
 
-async fn execute_agent_tool(data_root: &Path, session_id: &str, settings: &Settings, call: &ToolCallRequest) -> Value {
+async fn execute_agent_tool(
+    data_root: &Path,
+    session_id: &str,
+    settings: &Settings,
+    call: &ToolCallRequest,
+) -> Value {
     let checkpoint_id = if tool_has_side_effect(&call.name) && permission_allows_write(settings) {
-        create_workspace_checkpoint(data_root, settings, session_id).ok().flatten()
+        create_workspace_checkpoint(data_root, settings, session_id)
+            .ok()
+            .flatten()
     } else {
         None
     };
@@ -3277,9 +3346,8 @@ fn tool_has_side_effect(name: &str) -> bool {
 
 fn build_workspace_turn_context(settings: &Settings) -> Option<String> {
     let root = workspace_root(settings)?;
-    let tree = collect_workspace_tree(&root, &root, 2, MAX_WORKSPACE_TREE_ENTRIES).unwrap_or_else(|error| {
-        vec![format!("<workspace tree unavailable: {error}>")]
-    });
+    let tree = collect_workspace_tree(&root, &root, 2, MAX_WORKSPACE_TREE_ENTRIES)
+        .unwrap_or_else(|error| vec![format!("<workspace tree unavailable: {error}>")]);
     let instruction_note = load_project_instructions(settings)
         .map(|instructions| {
             format!(
@@ -3312,7 +3380,10 @@ fn workspace_root(settings: &Settings) -> Option<PathBuf> {
     }
 }
 
-fn resolve_existing_workspace_path(settings: &Settings, raw: &str) -> Result<(PathBuf, PathBuf), String> {
+fn resolve_existing_workspace_path(
+    settings: &Settings,
+    raw: &str,
+) -> Result<(PathBuf, PathBuf), String> {
     let root = workspace_root(settings).ok_or_else(|| "no workspace selected".to_string())?;
     let candidate = path_candidate(&root, raw);
     let resolved = fs::canonicalize(&candidate).map_err(|err| format!("path not found: {err}"))?;
@@ -3320,23 +3391,33 @@ fn resolve_existing_workspace_path(settings: &Settings, raw: &str) -> Result<(Pa
     Ok((root, resolved))
 }
 
-fn resolve_writable_workspace_path(settings: &Settings, raw: &str, create_parents: bool) -> Result<(PathBuf, PathBuf), String> {
+fn resolve_writable_workspace_path(
+    settings: &Settings,
+    raw: &str,
+    create_parents: bool,
+) -> Result<(PathBuf, PathBuf), String> {
     let root = workspace_root(settings).ok_or_else(|| "no workspace selected".to_string())?;
     let candidate = path_candidate(&root, raw);
     let candidate = lexical_normalize_path(&candidate);
     ensure_under_workspace_lexical(&root, &candidate)?;
-    let parent = candidate.parent().ok_or_else(|| "invalid target path".to_string())?;
+    let parent = candidate
+        .parent()
+        .ok_or_else(|| "invalid target path".to_string())?;
     ensure_under_workspace_lexical(&root, parent)?;
     if create_parents {
         let existing = nearest_existing_ancestor(parent)
             .ok_or_else(|| "no existing ancestor for target path".to_string())?;
-        let existing = fs::canonicalize(existing).map_err(|err| format!("ancestor path unavailable: {err}"))?;
+        let existing = fs::canonicalize(existing)
+            .map_err(|err| format!("ancestor path unavailable: {err}"))?;
         ensure_under_workspace(&root, &existing)?;
-        fs::create_dir_all(parent).map_err(|err| format!("failed to create parent directories: {err}"))?;
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create parent directories: {err}"))?;
     }
     let parent = fs::canonicalize(parent).map_err(|err| format!("parent path not found: {err}"))?;
     ensure_under_workspace(&root, &parent)?;
-    let file_name = candidate.file_name().ok_or_else(|| "invalid target file name".to_string())?;
+    let file_name = candidate
+        .file_name()
+        .ok_or_else(|| "invalid target file name".to_string())?;
     Ok((root, parent.join(file_name)))
 }
 
@@ -3388,7 +3469,8 @@ fn nearest_existing_ancestor(path: &Path) -> Option<PathBuf> {
 }
 
 fn ensure_under_workspace(root: &Path, path: &Path) -> Result<(), String> {
-    let canonical_root = fs::canonicalize(root).map_err(|err| format!("workspace unavailable: {err}"))?;
+    let canonical_root =
+        fs::canonicalize(root).map_err(|err| format!("workspace unavailable: {err}"))?;
     if path.starts_with(&canonical_root) {
         Ok(())
     } else {
@@ -3433,7 +3515,17 @@ fn permission_allows_shell(settings: &Settings, _command: &str) -> bool {
 fn should_skip_dir(name: &str) -> bool {
     matches!(
         name,
-        ".git" | "node_modules" | "target" | "dist" | "build" | ".next" | ".cache" | "coverage" | "vendor" | ".venv" | "__pycache__"
+        ".git"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+            | ".next"
+            | ".cache"
+            | "coverage"
+            | "vendor"
+            | ".venv"
+            | "__pycache__"
     )
 }
 
@@ -3441,7 +3533,12 @@ fn is_hidden_name(name: &str) -> bool {
     name.starts_with('.')
 }
 
-fn collect_workspace_tree(root: &Path, dir: &Path, depth: usize, max_entries: usize) -> Result<Vec<String>, String> {
+fn collect_workspace_tree(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    max_entries: usize,
+) -> Result<Vec<String>, String> {
     let mut lines = Vec::new();
     collect_workspace_tree_inner(root, dir, depth, max_entries, 0, &mut lines)?;
     Ok(lines)
@@ -3461,7 +3558,10 @@ fn collect_workspace_tree_inner(
     let mut entries = sorted_entries(dir)?;
     entries.sort_by_key(|entry| {
         let is_file = entry.file_type().map(|t| t.is_file()).unwrap_or(false);
-        (is_file, entry.file_name().to_string_lossy().to_ascii_lowercase())
+        (
+            is_file,
+            entry.file_name().to_string_lossy().to_ascii_lowercase(),
+        )
     });
     for entry in entries {
         if lines.len() >= max_entries {
@@ -3475,7 +3575,12 @@ fn collect_workspace_tree_inner(
         }
         let path = entry.path();
         let suffix = if ty.is_dir() { "/" } else { "" };
-        lines.push(format!("{}{}{}", "  ".repeat(level), relative_path(root, &path), suffix));
+        lines.push(format!(
+            "{}{}{}",
+            "  ".repeat(level),
+            relative_path(root, &path),
+            suffix
+        ));
         if ty.is_dir() && level + 1 < depth {
             collect_workspace_tree_inner(root, &path, depth, max_entries, level + 1, lines)?;
         }
@@ -3500,7 +3605,9 @@ fn tool_workspace_tree(settings: &Settings, args: &Value) -> Result<Value, Strin
     let depth = arg_usize(args, "depth", 2, 1, 6);
     let max_entries = arg_usize(args, "maxEntries", MAX_WORKSPACE_TREE_ENTRIES, 1, 400);
     let tree = collect_workspace_tree(&root, &dir, depth, max_entries)?;
-    Ok(json!({ "ok": true, "summary": format!("{} tree entries", tree.len()), "root": root, "path": relative_path(&root, &dir), "tree": tree }))
+    Ok(
+        json!({ "ok": true, "summary": format!("{} tree entries", tree.len()), "root": root, "path": relative_path(&root, &dir), "tree": tree }),
+    )
 }
 
 fn tool_list_directory(settings: &Settings, args: &Value) -> Result<Value, String> {
@@ -3540,7 +3647,8 @@ fn tool_read_file(settings: &Settings, args: &Value) -> Result<Value, String> {
     if meta.len() > MAX_WORKSPACE_READ_BYTES {
         return Err(format!("file too large: {} bytes", meta.len()));
     }
-    let content = fs::read_to_string(&path).map_err(|err| format!("failed to read UTF-8 file: {err}"))?;
+    let content =
+        fs::read_to_string(&path).map_err(|err| format!("failed to read UTF-8 file: {err}"))?;
     let start = arg_usize(args, "startLine", 1, 1, usize::MAX);
     let limit = arg_usize(args, "limitLines", 400, 1, 1000);
     let lines = content
@@ -3584,7 +3692,11 @@ fn tool_search_files(settings: &Settings, args: &Value) -> Result<Value, String>
     if query.is_empty() {
         return Err("query is required".into());
     }
-    let extension = args.get("extension").and_then(Value::as_str).map(|s| s.trim().trim_start_matches('.').to_ascii_lowercase()).filter(|s| !s.is_empty());
+    let extension = args
+        .get("extension")
+        .and_then(Value::as_str)
+        .map(|s| s.trim().trim_start_matches('.').to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
     let max_results = arg_usize(args, "maxResults", MAX_WORKSPACE_SEARCH_RESULTS, 1, 200);
     let mut results = Vec::new();
     let mut visited = 0usize;
@@ -3594,7 +3706,12 @@ fn tool_search_files(settings: &Settings, args: &Value) -> Result<Value, String>
         }
         let rel = relative_path(&root, path);
         if let Some(ext) = &extension {
-            if path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) != Some(ext.clone()) {
+            if path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_ascii_lowercase())
+                != Some(ext.clone())
+            {
                 return;
             }
         }
@@ -3602,7 +3719,9 @@ fn tool_search_files(settings: &Settings, args: &Value) -> Result<Value, String>
             results.push(json!({ "path": rel, "type": if meta.is_dir() { "directory" } else { "file" }, "size": meta.len() }));
         }
     })?;
-    Ok(json!({ "ok": true, "summary": format!("{} matches", results.len()), "results": results, "visited": visited }))
+    Ok(
+        json!({ "ok": true, "summary": format!("{} matches", results.len()), "results": results, "visited": visited }),
+    )
 }
 
 fn tool_grep_workspace(settings: &Settings, args: &Value) -> Result<Value, String> {
@@ -3612,19 +3731,30 @@ fn tool_grep_workspace(settings: &Settings, args: &Value) -> Result<Value, Strin
         return Err("query is required".into());
     }
     let case_sensitive = arg_bool(args, "caseSensitive", false);
-    let needle = if case_sensitive { query.to_string() } else { query.to_ascii_lowercase() };
+    let needle = if case_sensitive {
+        query.to_string()
+    } else {
+        query.to_ascii_lowercase()
+    };
     let max_results = arg_usize(args, "maxResults", MAX_WORKSPACE_SEARCH_RESULTS, 1, 200);
     let mut results = Vec::new();
     let mut visited = 0usize;
     walk_workspace(&root, &start, &mut visited, &mut |path, meta| {
-        if results.len() >= max_results || !meta.is_file() || meta.len() > MAX_WORKSPACE_GREP_FILE_BYTES {
+        if results.len() >= max_results
+            || !meta.is_file()
+            || meta.len() > MAX_WORKSPACE_GREP_FILE_BYTES
+        {
             return;
         }
         let Ok(content) = fs::read_to_string(path) else {
             return;
         };
         for (idx, line) in content.lines().enumerate() {
-            let haystack = if case_sensitive { line.to_string() } else { line.to_ascii_lowercase() };
+            let haystack = if case_sensitive {
+                line.to_string()
+            } else {
+                line.to_ascii_lowercase()
+            };
             if haystack.contains(&needle) {
                 results.push(json!({ "path": relative_path(&root, path), "line": idx + 1, "text": truncate(line, 500) }));
                 if results.len() >= max_results {
@@ -3633,7 +3763,9 @@ fn tool_grep_workspace(settings: &Settings, args: &Value) -> Result<Value, Strin
             }
         }
     })?;
-    Ok(json!({ "ok": true, "summary": format!("{} matches", results.len()), "results": results, "visited": visited }))
+    Ok(
+        json!({ "ok": true, "summary": format!("{} matches", results.len()), "results": results, "visited": visited }),
+    )
 }
 
 fn walk_workspace<F>(root: &Path, dir: &Path, visited: &mut usize, f: &mut F) -> Result<(), String>
@@ -3654,7 +3786,10 @@ where
         if meta.is_dir() && should_skip_dir(&name) {
             continue;
         }
-        ensure_under_workspace(root, &fs::canonicalize(&path).map_err(|err| err.to_string())?)?;
+        ensure_under_workspace(
+            root,
+            &fs::canonicalize(&path).map_err(|err| err.to_string())?,
+        )?;
         f(&path, &meta);
         if meta.is_dir() {
             walk_workspace(root, &path, visited, f)?;
@@ -3684,7 +3819,9 @@ fn tool_edit_file(settings: &Settings, args: &Value) -> Result<Value, String> {
     }
     let updated = content.replace(old_text, new_text);
     fs::write(&path, updated).map_err(|err| format!("failed to write file: {err}"))?;
-    Ok(json!({ "ok": true, "summary": format!("edited {}", relative_path(&root, &path)), "path": relative_path(&root, &path), "replacements": count }))
+    Ok(
+        json!({ "ok": true, "summary": format!("edited {}", relative_path(&root, &path)), "path": relative_path(&root, &path), "replacements": count }),
+    )
 }
 
 fn tool_write_file(settings: &Settings, args: &Value) -> Result<Value, String> {
@@ -3696,9 +3833,12 @@ fn tool_write_file(settings: &Settings, args: &Value) -> Result<Value, String> {
         return Err("content too large".into());
     }
     let create_parents = arg_bool(args, "createParents", true);
-    let (root, path) = resolve_writable_workspace_path(settings, arg_str(args, "path", ""), create_parents)?;
+    let (root, path) =
+        resolve_writable_workspace_path(settings, arg_str(args, "path", ""), create_parents)?;
     fs::write(&path, content).map_err(|err| format!("failed to write file: {err}"))?;
-    Ok(json!({ "ok": true, "summary": format!("wrote {}", relative_path(&root, &path)), "path": relative_path(&root, &path), "bytes": content.len() }))
+    Ok(
+        json!({ "ok": true, "summary": format!("wrote {}", relative_path(&root, &path)), "path": relative_path(&root, &path), "bytes": content.len() }),
+    )
 }
 
 async fn tool_run_shell_command(settings: &Settings, args: &Value) -> Result<Value, String> {
@@ -3713,11 +3853,24 @@ async fn tool_run_shell_command(settings: &Settings, args: &Value) -> Result<Val
     if !cwd.is_dir() {
         return Err("cwd is not a directory".into());
     }
-    let timeout_seconds = arg_usize(args, "timeoutSeconds", DEFAULT_SHELL_TIMEOUT_SECONDS as usize, 1, 120) as u64;
+    let timeout_seconds = arg_usize(
+        args,
+        "timeoutSeconds",
+        DEFAULT_SHELL_TIMEOUT_SECONDS as usize,
+        1,
+        120,
+    ) as u64;
     let max_output = arg_usize(args, "maxOutputChars", MAX_SHELL_OUTPUT_CHARS, 1000, 100000);
     let mut cmd = if cfg!(windows) {
         let mut c = Command::new("powershell.exe");
-        c.args(["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
+        c.args([
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            command,
+        ]);
         c
     } else {
         let mut c = Command::new("/bin/sh");
@@ -3745,9 +3898,13 @@ async fn tool_run_shell_command(settings: &Settings, args: &Value) -> Result<Val
 
 async fn tool_git_status(settings: &Settings) -> Result<Value, String> {
     let root = workspace_root(settings).ok_or_else(|| "no workspace selected".to_string())?;
-    let branch = run_program(&root, "git", &["branch", "--show-current"], 10).await.unwrap_or_default();
+    let branch = run_program(&root, "git", &["branch", "--show-current"], 10)
+        .await
+        .unwrap_or_default();
     let status = run_program(&root, "git", &["status", "--short", "--branch"], 10).await?;
-    let diff_stat = run_program(&root, "git", &["diff", "--stat"], 10).await.unwrap_or_default();
+    let diff_stat = run_program(&root, "git", &["diff", "--stat"], 10)
+        .await
+        .unwrap_or_default();
     Ok(json!({
         "ok": true,
         "summary": "git status",
@@ -3757,7 +3914,12 @@ async fn tool_git_status(settings: &Settings) -> Result<Value, String> {
     }))
 }
 
-async fn run_program(cwd: &Path, program: &str, args: &[&str], timeout_seconds: u64) -> Result<String, String> {
+async fn run_program(
+    cwd: &Path,
+    program: &str,
+    args: &[&str],
+    timeout_seconds: u64,
+) -> Result<String, String> {
     let output = timeout(
         Duration::from_secs(timeout_seconds),
         Command::new(program).args(args).current_dir(cwd).output(),
@@ -3906,7 +4068,6 @@ fn get_u64(value: &Value, key: &str) -> u64 {
     value.get(key).and_then(Value::as_u64).unwrap_or(0)
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceCheckpointManifest {
@@ -3947,7 +4108,11 @@ fn create_workspace_checkpoint(
     let Some(workspace) = workspace_root(settings) else {
         return Ok(None);
     };
-    let checkpoint_id = format!("c-{}-{}", Utc::now().format("%Y%m%d%H%M%S"), Uuid::new_v4().simple());
+    let checkpoint_id = format!(
+        "c-{}-{}",
+        Utc::now().format("%Y%m%d%H%M%S"),
+        Uuid::new_v4().simple()
+    );
     let checkpoint_dir = checkpoint_path(data_root, session_id, &checkpoint_id)
         .map_err(|err| anyhow!(err.message))?;
     let files_dir = checkpoint_dir.join("files");
@@ -3990,7 +4155,8 @@ fn restore_workspace_checkpoint(
         return Err(ApiError::bad_request("checkpoint not found"));
     }
     let raw = fs::read_to_string(&manifest_path).map_err(ApiError::internal)?;
-    let manifest: WorkspaceCheckpointManifest = serde_json::from_str(&raw).map_err(ApiError::internal)?;
+    let manifest: WorkspaceCheckpointManifest =
+        serde_json::from_str(&raw).map_err(ApiError::internal)?;
     if manifest.session_id != session_id || manifest.id != checkpoint_id {
         return Err(ApiError::bad_request("checkpoint metadata mismatch"));
     }
@@ -4023,7 +4189,8 @@ fn restore_workspace_checkpoint(
     let mut deleted_files = 0usize;
     if !manifest.truncated {
         let mut current = Vec::new();
-        collect_workspace_file_paths(&workspace, &workspace, &mut current).map_err(ApiError::internal)?;
+        collect_workspace_file_paths(&workspace, &workspace, &mut current)
+            .map_err(ApiError::internal)?;
         for path in current {
             let rel = relative_path(&workspace, &path);
             if known.contains_key(&rel) {
@@ -4072,7 +4239,15 @@ fn collect_checkpoint_files(
             if should_skip_dir(&name) {
                 continue;
             }
-            collect_checkpoint_files(root, &path, files_dir, files, total_bytes, stored_bytes, truncated)?;
+            collect_checkpoint_files(
+                root,
+                &path,
+                files_dir,
+                files,
+                total_bytes,
+                stored_bytes,
+                truncated,
+            )?;
             continue;
         }
         if !meta.is_file() {
@@ -4127,10 +4302,17 @@ fn collect_workspace_file_paths(root: &Path, dir: &Path, out: &mut Vec<PathBuf>)
     Ok(())
 }
 
-fn checkpoint_path(data_root: &Path, session_id: &str, checkpoint_id: &str) -> Result<PathBuf, ApiError> {
+fn checkpoint_path(
+    data_root: &Path,
+    session_id: &str,
+    checkpoint_id: &str,
+) -> Result<PathBuf, ApiError> {
     validate_storage_id(session_id, "session")?;
     validate_storage_id(checkpoint_id, "checkpoint")?;
-    Ok(data_root.join("checkpoints").join(session_id).join(checkpoint_id))
+    Ok(data_root
+        .join("checkpoints")
+        .join(session_id)
+        .join(checkpoint_id))
 }
 
 fn validate_storage_id(value: &str, label: &str) -> Result<(), ApiError> {
@@ -4184,11 +4366,14 @@ fn truncate(value: &str, max: usize) -> String {
     }
     if value.len() <= max {
         value.to_string()
+    } else if max <= 3 {
+        ".".repeat(max)
     } else {
+        let content_max = max - 3;
         let end = value
             .char_indices()
             .map(|(idx, _)| idx)
-            .take_while(|idx| *idx <= max)
+            .take_while(|idx| *idx <= content_max)
             .last()
             .unwrap_or(0);
         format!("{}...", &value[..end])
@@ -4251,7 +4436,10 @@ mod tests {
         settings.background_color = "#FFFFFF".into();
         settings.foreground_color = "#0D0D0D".into();
         let path = config_dir.join("settings.json");
-        let body = format!("\u{feff}{}", serde_json::to_string_pretty(&settings).unwrap());
+        let body = format!(
+            "\u{feff}{}",
+            serde_json::to_string_pretty(&settings).unwrap()
+        );
         fs::write(&path, body).unwrap();
 
         let loaded = load_settings(dir.path()).unwrap();
@@ -4279,7 +4467,12 @@ mod tests {
         let backups = fs::read_dir(&config_dir)
             .unwrap()
             .filter_map(Result::ok)
-            .filter(|entry| entry.file_name().to_string_lossy().starts_with("settings.invalid-"))
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("settings.invalid-")
+            })
             .count();
         assert_eq!(backups, 1);
     }
@@ -4388,7 +4581,10 @@ mod tests {
             .find(|p| p.id == "deepseek")
             .unwrap();
         let thinking = selected_thinking_profile(&provider, "deepseek-v4-flash");
-        assert_eq!(provider_reasoning_effort("deepseek", &thinking, "low"), "high");
+        assert_eq!(
+            provider_reasoning_effort("deepseek", &thinking, "low"),
+            "high"
+        );
         assert_eq!(
             provider_reasoning_effort("deepseek", &thinking, "medium"),
             "high"
@@ -4397,7 +4593,10 @@ mod tests {
             provider_reasoning_effort("deepseek", &thinking, "xhigh"),
             "max"
         );
-        assert_eq!(provider_reasoning_effort("deepseek", &thinking, "max"), "max");
+        assert_eq!(
+            provider_reasoning_effort("deepseek", &thinking, "max"),
+            "max"
+        );
     }
 
     #[test]
@@ -4540,7 +4739,20 @@ mod tests {
         let parsed: Value = serde_json::from_str(&serialized).unwrap();
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["truncated"], true);
-        assert!(serialized.len() < MAX_TOOL_RESULT_CHARS + 1200);
+        assert!(parsed["originalChars"].as_u64().unwrap() > MAX_TOOL_RESULT_CHARS as u64);
+        assert!(parsed["omittedChars"].as_u64().unwrap() > 0);
+        assert!(serialized.len() <= MAX_TOOL_RESULT_CHARS);
+    }
+
+    #[test]
+    fn truncate_respects_requested_byte_budget() {
+        assert_eq!(truncate("abcdef", 0), "");
+        assert_eq!(truncate("abcdef", 2), "..");
+        assert_eq!(truncate("abcdef", 5), "ab...");
+        let value = "中文输出".repeat(100);
+        let truncated = truncate(&value, 17);
+        assert!(truncated.len() <= 17);
+        assert!(truncated.ends_with("..."));
     }
 
     #[test]
@@ -4581,11 +4793,14 @@ mod tests {
     #[test]
     fn writable_relative_parent_escape_does_not_create_outside_parent_dirs() {
         let workspace = tempfile::tempdir().unwrap();
-        let outside_dir = workspace.path().parent().unwrap().join(format!(
-            "deepx-outside-{}",
-            Uuid::new_v4()
-        ));
-        let target = PathBuf::from("..").join(outside_dir.file_name().unwrap()).join("file.txt");
+        let outside_dir = workspace
+            .path()
+            .parent()
+            .unwrap()
+            .join(format!("deepx-outside-{}", Uuid::new_v4()));
+        let target = PathBuf::from("..")
+            .join(outside_dir.file_name().unwrap())
+            .join("file.txt");
         let mut settings = Settings::default();
         settings.workspace_path = Some(workspace.path().to_string_lossy().to_string());
         let err = resolve_writable_workspace_path(&settings, &target.to_string_lossy(), true)
@@ -4604,10 +4819,7 @@ mod tests {
             .find(|m| m.id == "deepseek-v4-flash")
             .unwrap();
         assert_eq!(deepseek_model.thinking.kind, "effort");
-        assert_eq!(
-            deepseek_model.thinking.effort_values,
-            vec!["high", "max"]
-        );
+        assert_eq!(deepseek_model.thinking.effort_values, vec!["high", "max"]);
 
         let stepfun = profiles.iter().find(|p| p.id == "stepfun").unwrap();
         let step_model = stepfun
