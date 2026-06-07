@@ -873,8 +873,22 @@ function updateCoreStatus() {
 }
 
 function appVersionLabel(version = currentAppVersion()) {
-  const normalized = String(version || "0.0.0").replace(/^v/i, "");
+  const normalized = normalizeVersionLabel(version);
   return `v${normalized}`;
+}
+
+function normalizeVersionLabel(version) {
+  let raw;
+  if (Array.isArray(version)) {
+    raw = version.join(".");
+  } else if (version && typeof version === "object") {
+    const parts = ["major", "minor", "patch"].map((key) => version[key]).filter((part) => part !== undefined);
+    raw = parts.length ? parts.join(".") : String(version);
+  } else {
+    raw = String(version || "0.0.0");
+  }
+  const normalized = raw.trim().replace(/^v/i, "").replace(/[，,]+/g, ".");
+  return normalized.match(/\d+(?:\.\d+)*/)?.[0] || "0.0.0";
 }
 
 function currentAppVersion() {

@@ -536,13 +536,13 @@ html[data-translucent-sidebar="true"] .sidebar {
 
 .thread::-webkit-scrollbar,
 .session-list::-webkit-scrollbar,
-.settings-page::-webkit-scrollbar {
+.settings-content::-webkit-scrollbar {
   width: 10px;
 }
 
 .thread::-webkit-scrollbar-thumb,
 .session-list::-webkit-scrollbar-thumb,
-.settings-page::-webkit-scrollbar-thumb {
+.settings-content::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border: 3px solid transparent;
   border-radius: 999px;
@@ -1148,7 +1148,7 @@ html[data-theme="light"] .settings-close-icon:hover {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--settings-bg);
 }
 
@@ -1197,7 +1197,9 @@ html[data-theme="light"] .settings-header {
 .settings-content {
   width: min(980px, calc(100vw - 56px));
   margin: 0 auto;
-  padding: 46px 0 110px;
+  padding: 46px 0 34px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .settings-section {
@@ -1560,8 +1562,7 @@ html[data-theme="light"] .code-pane + .code-pane {
   padding: 12px min(8vw, 92px);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: var(--settings-bg);
-  position: sticky;
-  bottom: 0;
+  position: static;
   z-index: 4;
 }
 

@@ -97,8 +97,19 @@ function sendUpdateStatus(payload) {
   }
 }
 
+function stringifyVersion(value) {
+  if (Array.isArray(value)) return value.join(".");
+  if (value && typeof value === "object") {
+    const parts = ["major", "minor", "patch"].map((key) => value[key]).filter((part) => part !== undefined);
+    if (parts.length) return parts.join(".");
+  }
+  return String(value || "0.0.0");
+}
+
 function normalizeVersion(value) {
-  return String(value || "0.0.0").trim().replace(/^v/i, "").split(/[+-]/)[0];
+  const raw = stringifyVersion(value).trim().replace(/^v/i, "").replace(/[，,]+/g, ".");
+  const match = raw.match(/\d+(?:\.\d+)*/);
+  return (match ? match[0] : "0.0.0").split(/[+-]/)[0];
 }
 
 function compareVersions(left, right) {
@@ -343,6 +354,7 @@ async function latestReleaseFromPublicPage(errorKind = "network") {
     : `https://github.com/${UPDATE_REPOSITORY}/releases/download/${releaseTag}/DeepX-portable-v${latestVersion}.zip`;
   const assetName = path.basename(decodeURIComponent(new URL(assetDownloadUrl).pathname));
   const assetFound = !!assetHref;
+  const canInstall = app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1";
   return {
     currentVersion: appVersion,
     latestVersion,
@@ -352,11 +364,11 @@ async function latestReleaseFromPublicPage(errorKind = "network") {
     assetSize: 0,
     publishedAt: null,
     notes: "",
-    canInstall: assetFound && app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1",
+    canInstall,
     checkedAt: new Date().toISOString(),
     assetDownloadUrl,
     source: "release-page",
-    errorKind: assetFound ? errorKind : "asset-missing",
+    errorKind: assetFound ? errorKind : "release-page-fallback",
   };
 }
 

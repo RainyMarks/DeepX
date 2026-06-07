@@ -2920,7 +2920,10 @@ fn load_project_instructions(settings: &Settings) -> Option<ProjectInstructions>
     let mut total_bytes = 0usize;
 
     for candidate in project_instruction_candidates(&root) {
-        let canonical = fs::canonicalize(&candidate).ok()?;
+        let canonical = match fs::canonicalize(&candidate) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
         if !canonical.starts_with(&root) || !canonical.is_file() {
             continue;
         }
@@ -2967,7 +2970,30 @@ fn load_project_instructions(settings: &Settings) -> Option<ProjectInstructions>
 }
 
 fn project_instruction_candidates(root: &Path) -> Vec<PathBuf> {
-    vec![root.join("AGENTS.md")]
+    let mut candidates = vec![
+        root.join("AGENTS.md"),
+        root.join("CLAUDE.md"),
+        root.join("CODEX.md"),
+        root.join(".github").join("copilot-instructions.md"),
+    ];
+    for rules_dir in [root.join(".cursor").join("rules"), root.join(".windsurf").join("rules")] {
+        let Ok(entries) = fs::read_dir(&rules_dir) else {
+            continue;
+        };
+        let mut files: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok().map(|item| item.path()))
+            .filter(|path| {
+                path.is_file()
+                    && path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+            })
+            .collect();
+        files.sort();
+        candidates.extend(files);
+    }
+    candidates
 }
 
 fn serialize_tool_output_for_model(tool_name: &str, output: &Value) -> String {
@@ -4301,6 +4327,46 @@ mod tests {
         assert!(prefix.contains("projectInstructionsHash"));
         assert!(prefix.contains("AGENTS.md"));
         assert!(prefix.contains("Prefer read-only inspection first"));
+    }
+
+    #[test]
+    fn vendor_instruction_files_are_loaded_in_stable_order() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".cursor").join("rules")).unwrap();
+        fs::create_dir_all(dir.path().join(".windsurf").join("rules")).unwrap();
+        fs::create_dir_all(dir.path().join(".github")).unwrap();
+        fs::write(dir.path().join("CLAUDE.md"), "Claude style project rule").unwrap();
+        fs::write(
+            dir.path().join(".cursor").join("rules").join("b.md"),
+            "Cursor rule B",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".cursor").join("rules").join("a.md"),
+            "Cursor rule A",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".windsurf").join("rules").join("team.md"),
+            "Windsurf team memory rule",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join(".github").join("copilot-instructions.md"),
+            "Copilot instruction file",
+        )
+        .unwrap();
+        let mut settings = Settings::default();
+        settings.workspace_path = Some(dir.path().to_string_lossy().to_string());
+        let instructions = load_project_instructions(&settings).unwrap();
+        assert!(instructions.content.contains("Claude style project rule"));
+        assert!(instructions.content.contains("Copilot instruction file"));
+        assert!(instructions.content.contains("Cursor rule A"));
+        assert!(instructions.content.contains("Cursor rule B"));
+        assert!(instructions.content.contains("Windsurf team memory rule"));
+        let a = instructions.content.find("Cursor rule A").unwrap();
+        let b = instructions.content.find("Cursor rule B").unwrap();
+        assert!(a < b);
     }
 
     #[test]
