@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::process::Command;
@@ -3323,8 +3323,15 @@ fn resolve_existing_workspace_path(settings: &Settings, raw: &str) -> Result<(Pa
 fn resolve_writable_workspace_path(settings: &Settings, raw: &str, create_parents: bool) -> Result<(PathBuf, PathBuf), String> {
     let root = workspace_root(settings).ok_or_else(|| "no workspace selected".to_string())?;
     let candidate = path_candidate(&root, raw);
+    let candidate = lexical_normalize_path(&candidate);
+    ensure_under_workspace_lexical(&root, &candidate)?;
     let parent = candidate.parent().ok_or_else(|| "invalid target path".to_string())?;
+    ensure_under_workspace_lexical(&root, parent)?;
     if create_parents {
+        let existing = nearest_existing_ancestor(parent)
+            .ok_or_else(|| "no existing ancestor for target path".to_string())?;
+        let existing = fs::canonicalize(existing).map_err(|err| format!("ancestor path unavailable: {err}"))?;
+        ensure_under_workspace(&root, &existing)?;
         fs::create_dir_all(parent).map_err(|err| format!("failed to create parent directories: {err}"))?;
     }
     let parent = fs::canonicalize(parent).map_err(|err| format!("parent path not found: {err}"))?;
@@ -3343,6 +3350,40 @@ fn path_candidate(root: &Path, raw: &str) -> PathBuf {
         path
     } else {
         root.join(path)
+    }
+}
+
+fn lexical_normalize_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn ensure_under_workspace_lexical(root: &Path, path: &Path) -> Result<(), String> {
+    let normalized_root = lexical_normalize_path(root);
+    let normalized_path = lexical_normalize_path(path);
+    if normalized_path.starts_with(&normalized_root) {
+        Ok(())
+    } else {
+        Err("path escapes workspace sandbox".into())
+    }
+}
+
+fn nearest_existing_ancestor(path: &Path) -> Option<PathBuf> {
+    let mut current = path;
+    loop {
+        if current.exists() {
+            return Some(current.to_path_buf());
+        }
+        current = current.parent()?;
     }
 }
 
@@ -4521,6 +4562,36 @@ mod tests {
         assert!(!tool_has_side_effect("read_file"));
         assert!(!tool_has_side_effect("grep_workspace"));
         assert!(!tool_has_side_effect("git_status"));
+    }
+
+    #[test]
+    fn writable_absolute_escape_does_not_create_outside_parent_dirs() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let target_dir = outside.path().join("created-by-deepx");
+        let target = target_dir.join("file.txt");
+        let mut settings = Settings::default();
+        settings.workspace_path = Some(workspace.path().to_string_lossy().to_string());
+        let err = resolve_writable_workspace_path(&settings, &target.to_string_lossy(), true)
+            .expect_err("absolute path outside workspace must be rejected");
+        assert!(err.contains("workspace sandbox"));
+        assert!(!target_dir.exists());
+    }
+
+    #[test]
+    fn writable_relative_parent_escape_does_not_create_outside_parent_dirs() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside_dir = workspace.path().parent().unwrap().join(format!(
+            "deepx-outside-{}",
+            Uuid::new_v4()
+        ));
+        let target = PathBuf::from("..").join(outside_dir.file_name().unwrap()).join("file.txt");
+        let mut settings = Settings::default();
+        settings.workspace_path = Some(workspace.path().to_string_lossy().to_string());
+        let err = resolve_writable_workspace_path(&settings, &target.to_string_lossy(), true)
+            .expect_err("relative parent escape must be rejected before mkdir");
+        assert!(err.contains("workspace sandbox"));
+        assert!(!outside_dir.exists());
     }
 
     #[test]
