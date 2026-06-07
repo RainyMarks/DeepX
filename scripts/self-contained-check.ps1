@@ -9,6 +9,12 @@ $Needles = @(
   ([string]::Concat("login-with-chat", "gpt")),
   ([string]::Concat("OpenAI", ".Cod", "ex"))
 )
+foreach ($dynamicNeedle in @($env:USERPROFILE, $Root)) {
+  if ($dynamicNeedle -and $dynamicNeedle.Trim()) {
+    $Needles += $dynamicNeedle
+  }
+}
+$Needles = @($Needles | Where-Object { $_ } | Sort-Object -Unique)
 
 $Targets = @(
   (Join-Path $Root "electron\main.js"),
@@ -17,6 +23,7 @@ $Targets = @(
   (Join-Path $Root "electron\package.json"),
   (Join-Path $Root "resources\app.asar"),
   (Join-Path $Root "resources\app.asar.unpacked"),
+  (Join-Path $Root "resources\deepx-core.exe"),
   (Join-Path $Root "core\src")
 )
 
@@ -40,7 +47,7 @@ $failures = @()
 foreach ($needle in $Needles) {
   foreach ($target in $Targets) {
     if (Test-Path $target) {
-      $matches = & $Rg -n --fixed-strings $needle $target 2>$null
+      $matches = & $Rg -n --text --fixed-strings $needle $target 2>$null
       if ($LASTEXITCODE -eq 0) {
         $failures += "Found '$needle' in $target`n$matches"
       }

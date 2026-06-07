@@ -10,6 +10,13 @@ contextBridge.exposeInMainWorld("deepx", {
   readTextFiles: (paths) => ipcRenderer.invoke("deepx:read-text-files", paths),
   getFilePath: (file) => webUtils?.getPathForFile?.(file) || file?.path || "",
   openDataDir: () => ipcRenderer.invoke("deepx:open-data-dir"),
+  checkForUpdates: () => ipcRenderer.invoke("deepx:update-check"),
+  installUpdate: () => ipcRenderer.invoke("deepx:update-install"),
+  onUpdateStatus: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("deepx:update-status", listener);
+    return () => ipcRenderer.removeListener("deepx:update-status", listener);
+  },
   terminalStart: (options) => ipcRenderer.invoke("deepx:terminal-start", options),
   terminalWrite: (data) => ipcRenderer.invoke("deepx:terminal-write", data),
   terminalResize: (size) => ipcRenderer.invoke("deepx:terminal-resize", size),

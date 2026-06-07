@@ -1241,6 +1241,14 @@ html[data-theme="light"] .settings-row {
   color: var(--warning);
 }
 
+.settings-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
 input,
 select {
   min-height: 36px;

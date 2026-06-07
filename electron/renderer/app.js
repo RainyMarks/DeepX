@@ -181,6 +181,19 @@ const I18N = {
     portableHelp: "运行时、配置、会话、日志和本机密钥都放在 DeepX 目录内。",
     dataRoot: "数据目录",
     openDataDir: "打开数据目录",
+    appUpdate: "应用更新",
+    updateIdle: "当前版本 {version}，可检查 GitHub Release 更新。",
+    checkUpdate: "检查更新",
+    checkingUpdate: "正在检查更新",
+    updateAvailable: "发现新版本 {version}",
+    updateUpToDate: "已是最新版本 {version}",
+    installUpdate: "下载并安装",
+    updateDownloading: "正在下载 {percent}%",
+    updateExtracting: "正在解压更新包",
+    updateInstalling: "正在安装，应用将自动重启",
+    updateInstallConfirm: "将下载并安装 DeepX {version}。安装过程会保留 data 目录和 API key，应用会自动重启。继续吗？",
+    updateFailed: "更新失败",
+    updateUnavailableInDev: "开发模式不能直接安装更新。",
     testConnection: "测试连接",
     save: "保存",
     saved: "已保存",
@@ -338,6 +351,19 @@ const I18N = {
     portableHelp: "Runtime, config, sessions, logs, and local secrets stay inside the DeepX directory.",
     dataRoot: "Data directory",
     openDataDir: "Open data directory",
+    appUpdate: "App update",
+    updateIdle: "Current version {version}. Check GitHub Releases for updates.",
+    checkUpdate: "Check update",
+    checkingUpdate: "Checking update",
+    updateAvailable: "New version {version} is available",
+    updateUpToDate: "Already up to date: {version}",
+    installUpdate: "Download and install",
+    updateDownloading: "Downloading {percent}%",
+    updateExtracting: "Extracting update package",
+    updateInstalling: "Installing. DeepX will restart automatically",
+    updateInstallConfirm: "Download and install DeepX {version}? The data directory and API keys will be preserved, and the app will restart.",
+    updateFailed: "Update failed",
+    updateUnavailableInDev: "Updates can only be installed from the packaged app.",
     testConnection: "Test connection",
     save: "Save",
     saved: "Saved",
@@ -423,6 +449,8 @@ const state = {
   busy: false,
   workspace: null,
   lastMetric: null,
+  updateInfo: null,
+  updateBusy: false,
   language: "zh-CN",
   thinkingEnabled: true,
   webSearchEnabled: false,
@@ -452,6 +480,9 @@ const el = {
   coreValue: $("coreValue"),
   dataRootValue: $("dataRootValue"),
   statusLine: $("statusLine"),
+  updateStatusValue: $("updateStatusValue"),
+  checkUpdateButton: $("checkUpdateButton"),
+  installUpdateButton: $("installUpdateButton"),
   threadTitle: $("threadTitle"),
   terminalToggleButton: $("terminalToggleButton"),
   providerMiniButton: $("providerMiniButton"),
@@ -546,9 +577,11 @@ async function boot() {
   state.core = await window.deepx.getCoreInfo();
   state.paths = await window.deepx.getPaths().catch(() => null);
   updateCoreStatus();
+  updateUpdateStatus();
   await loadInitialData();
   await loadSessions();
   setupTerminalDataListener();
+  setupUpdateStatusListener();
   updateSendButton();
 }
 
@@ -636,6 +669,8 @@ function bindEvents() {
   el.settingsButton.addEventListener("click", () => showSettings("general"));
   el.openDataButton.addEventListener("click", () => window.deepx.openDataDir());
   el.openDataFromSettingsButton.addEventListener("click", () => window.deepx.openDataDir());
+  el.checkUpdateButton.addEventListener("click", checkAppUpdate);
+  el.installUpdateButton.addEventListener("click", installAppUpdate);
   el.closeSettingsButton.addEventListener("click", hideSettings);
   el.closeSettingsIconButton.addEventListener("click", hideSettings);
   el.cacheDetailsButton.addEventListener("click", hideSettings);
@@ -795,6 +830,7 @@ function applyLanguage(language) {
   updateProviderStatus();
   updateContextLabels();
   updateCacheStatus();
+  updateUpdateStatus();
   renderProjects();
   renderSessions();
 }
@@ -822,6 +858,96 @@ function updateCoreStatus() {
     el.dataRootValue.textContent = state.core.dataRoot;
     el.settingsDataRootValue.textContent = state.core.dataRoot;
   }
+  updateUpdateStatus();
+}
+
+function appVersionLabel(version = currentAppVersion()) {
+  const normalized = String(version || "0.0.0").replace(/^v/i, "");
+  return `v${normalized}`;
+}
+
+function currentAppVersion() {
+  return state.paths?.appVersion || state.core?.appVersion || "0.0.0";
+}
+
+function updateUpdateStatus(message) {
+  if (!el.updateStatusValue) return;
+  const info = state.updateInfo;
+  let text = message || t("updateIdle", { version: appVersionLabel() });
+  if (!message && info?.updateAvailable) {
+    text = t("updateAvailable", { version: appVersionLabel(info.latestVersion) });
+    if (!info.canInstall) text = `${text} · ${t("updateUnavailableInDev")}`;
+  } else if (!message && info && !info.updateAvailable) {
+    text = t("updateUpToDate", { version: appVersionLabel(info.currentVersion || currentAppVersion()) });
+  }
+  el.updateStatusValue.textContent = text;
+  el.checkUpdateButton.disabled = !!state.updateBusy;
+  const canInstall = !!info?.updateAvailable && info.canInstall !== false;
+  el.installUpdateButton.classList.toggle("hidden", !canInstall);
+  el.installUpdateButton.disabled = !!state.updateBusy || !canInstall;
+}
+
+async function checkAppUpdate() {
+  state.updateBusy = true;
+  updateUpdateStatus(t("checkingUpdate"));
+  let failed = false;
+  try {
+    const info = await window.deepx.checkForUpdates();
+    state.updateInfo = info;
+    updateUpdateStatus();
+    toast(
+      info.updateAvailable
+        ? t("updateAvailable", { version: appVersionLabel(info.latestVersion) })
+        : t("updateUpToDate", { version: appVersionLabel(info.currentVersion || currentAppVersion()) })
+    );
+  } catch (error) {
+    failed = true;
+    console.error(error);
+    updateUpdateStatus(`${t("updateFailed")}: ${error.message || error}`);
+    toast(`${t("updateFailed")}: ${error.message || error}`, true);
+  } finally {
+    state.updateBusy = false;
+    if (!failed) updateUpdateStatus();
+  }
+}
+
+async function installAppUpdate() {
+  if (!state.updateInfo?.updateAvailable) {
+    await checkAppUpdate();
+  }
+  if (!state.updateInfo?.updateAvailable) return;
+  const version = appVersionLabel(state.updateInfo.latestVersion);
+  if (!window.confirm(t("updateInstallConfirm", { version }))) return;
+  state.updateBusy = true;
+  updateUpdateStatus(t("updateDownloading", { percent: 0 }));
+  try {
+    const result = await window.deepx.installUpdate();
+    if (result && result.updateAvailable === false) {
+      state.updateBusy = false;
+      state.updateInfo = { ...state.updateInfo, updateAvailable: false };
+      updateUpdateStatus();
+    }
+  } catch (error) {
+    console.error(error);
+    state.updateBusy = false;
+    updateUpdateStatus(`${t("updateFailed")}: ${error.message || error}`);
+    toast(`${t("updateFailed")}: ${error.message || error}`, true);
+  }
+}
+
+function setupUpdateStatusListener() {
+  if (!window.deepx.onUpdateStatus) return;
+  window.deepx.onUpdateStatus((payload) => {
+    if (!payload?.status) return;
+    if (payload.status === "downloading") {
+      const percent = payload.total ? Math.floor((payload.received / payload.total) * 100) : 0;
+      updateUpdateStatus(t("updateDownloading", { percent }));
+    } else if (payload.status === "extracting") {
+      updateUpdateStatus(t("updateExtracting"));
+    } else if (payload.status === "installing") {
+      updateUpdateStatus(t("updateInstalling"));
+    }
+  });
 }
 
 function populateProviders() {

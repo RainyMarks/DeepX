@@ -11,6 +11,12 @@ DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版
 
 发行包默认不包含 `data/secrets.local.json`，也不包含任何个人 API key。
 
+## 更新
+
+在“设置 -> 常规 -> 应用更新”里可以检查 GitHub Release，并直接下载、安装新的 portable 包。
+
+更新只替换程序文件，不覆盖 `data/` 目录；已有配置、会话和 API key 会保留。
+
 ## 目录
 
 ```text

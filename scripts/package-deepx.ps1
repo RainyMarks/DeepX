@@ -45,6 +45,16 @@ foreach ($dir in @(
 }
 
 Write-Host "[DeepX] building deepx-core.exe"
+$rustFlagSeparator = [char]0x1f
+$encodedRustFlags = @()
+if ($env:CARGO_ENCODED_RUSTFLAGS) {
+  $encodedRustFlags += ($env:CARGO_ENCODED_RUSTFLAGS -split $rustFlagSeparator)
+}
+$encodedRustFlags += "--remap-path-prefix=$Root=DeepX"
+if ($env:USERPROFILE) {
+  $encodedRustFlags += "--remap-path-prefix=$($env:USERPROFILE)=USERPROFILE"
+}
+$env:CARGO_ENCODED_RUSTFLAGS = ($encodedRustFlags | Where-Object { $_ }) -join $rustFlagSeparator
 cargo build --release --manifest-path (Join-Path $Root "core\Cargo.toml")
 Copy-Item -Force (Join-Path $Root "core\target\release\deepx-core.exe") (Join-Path $Resources "deepx-core.exe")
 

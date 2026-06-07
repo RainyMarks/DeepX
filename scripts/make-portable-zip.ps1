@@ -137,6 +137,12 @@ $needles = @(
   ([string]::Concat("login-with-chat", "gpt")),
   ([string]::Concat("OpenAI", ".Cod", "ex"))
 )
+foreach ($dynamicNeedle in @($env:USERPROFILE, $Root)) {
+  if ($dynamicNeedle -and $dynamicNeedle.Trim()) {
+    $needles += $dynamicNeedle
+  }
+}
+$needles = @($needles | Where-Object { $_ } | Sort-Object -Unique)
 
 function Get-RipgrepPath {
   $bundled = Join-Path $Root "resources\rg.exe"
@@ -155,7 +161,7 @@ function Get-RipgrepPath {
 
 $Rg = Get-RipgrepPath
 foreach ($needle in $needles) {
-  $matches = & $Rg -n --fixed-strings $needle $Out 2>$null
+  $matches = & $Rg -n --text --fixed-strings $needle $Out 2>$null
   if ($LASTEXITCODE -eq 0) {
     throw "Portable output contains forbidden text '$needle':`n$matches"
   }

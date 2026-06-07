@@ -1,12 +1,15 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require("electron");
 const fs = require("node:fs");
+const https = require("node:https");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const pty = require("node-pty");
+const packageInfo = require("./package.json");
 
 const isDev = !app.isPackaged || process.env.DEEPX_DEV === "1";
+const appVersion = packageInfo.version || app.getVersion() || "0.0.0";
 const appRoot = process.env.DEEPX_APP_ROOT || path.dirname(process.execPath);
 const resourcesRoot = process.resourcesPath || path.join(appRoot, "resources");
 const dataRoot = process.env.DEEPX_HOME || path.join(appRoot, "data");
@@ -16,6 +19,8 @@ const realHomeRoot = process.env.USERPROFILE || os.homedir();
 const realDesktopRoot = path.join(realHomeRoot, "Desktop");
 const downloadsDirName = ["Down", "loads"].join("");
 const MAX_INLINE_FILE_BYTES = 512 * 1024;
+const UPDATE_REPOSITORY = "RainyMarks/DeepX";
+const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPOSITORY}/releases/latest`;
 
 for (const dir of [
   dataRoot,
@@ -59,6 +64,7 @@ let coreInfo = null;
 let coreReadyPromise = null;
 let terminalPty = null;
 let terminalCwd = null;
+let lastUpdateInfo = null;
 
 function sanitizeHexColor(value, fallback) {
   const raw = String(value || "").trim();
@@ -82,6 +88,314 @@ function applyWindowTheme(theme = {}) {
 function log(message) {
   const line = `[${new Date().toISOString()}] ${message}\n`;
   fs.appendFileSync(logPath, line, "utf8");
+}
+
+function sendUpdateStatus(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("deepx:update-status", payload);
+  }
+}
+
+function normalizeVersion(value) {
+  return String(value || "0.0.0").trim().replace(/^v/i, "").split(/[+-]/)[0];
+}
+
+function compareVersions(left, right) {
+  const a = normalizeVersion(left).split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const b = normalizeVersion(right).split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    if ((a[i] || 0) > (b[i] || 0)) return 1;
+    if ((a[i] || 0) < (b[i] || 0)) return -1;
+  }
+  return 0;
+}
+
+function requestJson(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": `DeepX/${appVersion}`,
+        },
+        timeout: 20000,
+      },
+      (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          response.resume();
+          if (redirects >= 5) {
+            reject(new Error("too many redirects"));
+            return;
+          }
+          resolve(requestJson(new URL(response.headers.location, url).toString(), redirects + 1));
+          return;
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          response.resume();
+          reject(new Error(`request failed: HTTP ${response.statusCode}`));
+          return;
+        }
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+          if (body.length > 5 * 1024 * 1024) {
+            request.destroy(new Error("response is too large"));
+          }
+        });
+        response.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+    );
+    request.on("timeout", () => request.destroy(new Error("request timed out")));
+    request.on("error", reject);
+  });
+}
+
+function downloadFile(url, destination, onProgress, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destination);
+    const request = https.get(
+      url,
+      {
+        headers: {
+          "User-Agent": `DeepX/${appVersion}`,
+        },
+        timeout: 30000,
+      },
+      (response) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          response.resume();
+          if (redirects >= 8) {
+            file.close(() => fs.rm(destination, { force: true }, () => {}));
+            reject(new Error("too many download redirects"));
+            return;
+          }
+          file.close(() => {
+            fs.rm(destination, { force: true }, () => {
+              resolve(downloadFile(new URL(response.headers.location, url).toString(), destination, onProgress, redirects + 1));
+            });
+          });
+          return;
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          response.resume();
+          file.close(() => fs.rm(destination, { force: true }, () => {}));
+          reject(new Error(`download failed: HTTP ${response.statusCode}`));
+          return;
+        }
+        const total = Number(response.headers["content-length"]) || 0;
+        let received = 0;
+        response.on("data", (chunk) => {
+          received += chunk.length;
+          if (typeof onProgress === "function") onProgress({ received, total });
+        });
+        response.pipe(file);
+        file.on("finish", () => file.close(() => resolve({ received, total })));
+      }
+    );
+    request.on("timeout", () => request.destroy(new Error("download timed out")));
+    request.on("error", (error) => {
+      file.close(() => fs.rm(destination, { force: true }, () => {}));
+      reject(error);
+    });
+    file.on("error", (error) => {
+      request.destroy();
+      fs.rm(destination, { force: true }, () => {});
+      reject(error);
+    });
+  });
+}
+
+function runPowerShell(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(powershellPath(), args, {
+      cwd: appRoot,
+      env: { ...process.env, ...portableEnv },
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || `PowerShell exited with ${code}`));
+    });
+  });
+}
+
+async function extractZip(zipPath, destination) {
+  fs.rmSync(destination, { recursive: true, force: true });
+  fs.mkdirSync(destination, { recursive: true });
+  await runPowerShell([
+    "-NoLogo",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
+    zipPath,
+    destination,
+  ]);
+}
+
+function portableRootFromExtracted(stageRoot) {
+  const candidates = [
+    stageRoot,
+    ...fs
+      .readdirSync(stageRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(stageRoot, entry.name)),
+  ];
+  for (const candidate of candidates) {
+    if (
+      fs.existsSync(path.join(candidate, "DeepX.exe")) &&
+      fs.existsSync(path.join(candidate, "resources", "app.asar"))
+    ) {
+      return candidate;
+    }
+  }
+  throw new Error("downloaded update package is not a DeepX portable build");
+}
+
+function findUpdateAsset(release, latestVersion) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  const exactName = `DeepX-portable-v${latestVersion}.zip`;
+  return (
+    assets.find((asset) => asset.name === exactName) ||
+    assets.find((asset) => /^DeepX-portable-v?\d+\.\d+\.\d+\.zip$/i.test(asset.name || "")) ||
+    assets.find((asset) => /^DeepX-portable.*\.zip$/i.test(asset.name || ""))
+  );
+}
+
+async function checkForUpdates() {
+  const release = await requestJson(UPDATE_API_URL);
+  const latestVersion = normalizeVersion(release.tag_name || release.name);
+  const asset = findUpdateAsset(release, latestVersion);
+  if (!asset?.browser_download_url) {
+    throw new Error("latest release does not contain a DeepX portable zip");
+  }
+  const updateInfo = {
+    currentVersion: appVersion,
+    latestVersion,
+    updateAvailable: compareVersions(appVersion, latestVersion) < 0,
+    releaseUrl: release.html_url,
+    assetName: asset.name,
+    assetSize: asset.size || 0,
+    publishedAt: release.published_at || null,
+    notes: release.body || "",
+    canInstall: app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1",
+    checkedAt: new Date().toISOString(),
+  };
+  updateInfo.assetDownloadUrl = asset.browser_download_url;
+  lastUpdateInfo = updateInfo;
+  return { ...updateInfo, assetDownloadUrl: undefined };
+}
+
+function writeUpdateScript(scriptPath) {
+  const script = `
+param(
+  [Parameter(Mandatory=$true)][string]$Source,
+  [Parameter(Mandatory=$true)][string]$Target,
+  [Parameter(Mandatory=$true)][int]$ParentPid
+)
+$ErrorActionPreference = "Stop"
+$logDir = Join-Path $Target "data\\logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$logPath = Join-Path $logDir "deepx-updater.log"
+function Write-UpdateLog([string]$Message) {
+  Add-Content -LiteralPath $logPath -Encoding UTF8 -Value ("[{0}] {1}" -f (Get-Date).ToString("o"), $Message)
+}
+try {
+  Write-UpdateLog "waiting for DeepX process $ParentPid"
+  Wait-Process -Id $ParentPid -Timeout 120 -ErrorAction SilentlyContinue
+} catch {}
+Start-Sleep -Milliseconds 900
+$preserve = @("data")
+Write-UpdateLog "copying update from $Source to $Target"
+Get-ChildItem -LiteralPath $Source -Force | Where-Object { $preserve -notcontains $_.Name } | ForEach-Object {
+  $dest = Join-Path $Target $_.Name
+  if (Test-Path -LiteralPath $dest) {
+    Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  Copy-Item -LiteralPath $_.FullName -Destination $dest -Recurse -Force
+}
+$exe = Join-Path $Target "DeepX.exe"
+if (!(Test-Path -LiteralPath $exe)) {
+  throw "DeepX.exe missing after update"
+}
+Write-UpdateLog "starting updated DeepX"
+Start-Process -FilePath $exe -WorkingDirectory $Target
+`;
+  fs.writeFileSync(scriptPath, script.trimStart(), "utf8");
+}
+
+async function downloadAndInstallUpdate() {
+  if (!lastUpdateInfo?.updateAvailable) {
+    await checkForUpdates();
+  }
+  const info = lastUpdateInfo;
+  if (!info.updateAvailable) {
+    return { ok: true, updateAvailable: false, currentVersion: appVersion, latestVersion: info.latestVersion };
+  }
+  if (!info.canInstall) {
+    throw new Error("updates can only be installed from the packaged portable app");
+  }
+
+  const updateRoot = path.join(dataRoot, "updates");
+  fs.mkdirSync(updateRoot, { recursive: true });
+  const zipPath = path.join(updateRoot, info.assetName);
+  const stageRoot = path.join(updateRoot, `stage-${Date.now()}`);
+
+  sendUpdateStatus({ status: "downloading", latestVersion: info.latestVersion, received: 0, total: info.assetSize || 0 });
+  await downloadFile(info.assetDownloadUrl, zipPath, (progress) => {
+    sendUpdateStatus({ status: "downloading", latestVersion: info.latestVersion, ...progress });
+  });
+
+  sendUpdateStatus({ status: "extracting", latestVersion: info.latestVersion });
+  await extractZip(zipPath, stageRoot);
+  const sourceRoot = portableRootFromExtracted(stageRoot);
+  const updateScript = path.join(updateRoot, "apply-update.ps1");
+  writeUpdateScript(updateScript);
+
+  sendUpdateStatus({ status: "installing", latestVersion: info.latestVersion });
+  const updater = spawn(
+    powershellPath(),
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      updateScript,
+      "-Source",
+      sourceRoot,
+      "-Target",
+      appRoot,
+      "-ParentPid",
+      String(process.pid),
+    ],
+    {
+      cwd: appRoot,
+      env: { ...process.env, ...portableEnv },
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    }
+  );
+  updater.unref();
+  setTimeout(() => app.quit(), 500);
+  return { ok: true, updateAvailable: true, latestVersion: info.latestVersion };
 }
 
 function resolveCorePath() {
@@ -168,6 +482,7 @@ function startCore() {
               dataRoot,
               appRoot,
               resourcesRoot,
+              appVersion,
             };
             resolved = true;
             resolve(coreInfo);
@@ -254,6 +569,7 @@ ipcMain.handle("deepx:paths", async () => ({
   logPath,
   homeRoot: realHomeRoot,
   desktopRoot: defaultWorkspaceRoot(),
+  appVersion,
 }));
 
 ipcMain.handle("deepx:asset-url", async (_event, relativePath) => {
@@ -341,6 +657,14 @@ ipcMain.handle("deepx:read-text-files", async (_event, paths = []) => {
 
 ipcMain.handle("deepx:open-data-dir", async () => {
   await shell.openPath(dataRoot);
+});
+
+ipcMain.handle("deepx:update-check", async () => {
+  return await checkForUpdates();
+});
+
+ipcMain.handle("deepx:update-install", async () => {
+  return await downloadAndInstallUpdate();
 });
 
 ipcMain.handle("deepx:terminal-start", async (_event, options = {}) => {
