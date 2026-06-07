@@ -3505,11 +3505,53 @@ fn permission_allows_write(settings: &Settings) -> bool {
     settings.permission_mode == "full-access"
 }
 
-fn permission_allows_shell(settings: &Settings, _command: &str) -> bool {
-    match settings.permission_mode.as_str() {
-        "full-access" => true,
-        _ => false,
+fn permission_allows_shell(settings: &Settings, command: &str) -> bool {
+    settings.permission_mode == "full-access" && dangerous_shell_command_reason(command).is_none()
+}
+
+fn dangerous_shell_command_reason(command: &str) -> Option<&'static str> {
+    let normalized = command.to_ascii_lowercase();
+    if normalized.contains(":(){") || normalized.contains("rm -rf /") {
+        return Some("dangerous destructive shell pattern");
     }
+    let normalized = normalized
+        .replace("&&", ";")
+        .replace("||", ";")
+        .replace('|', ";");
+    for segment in normalized.split([';', '\n', '\r']) {
+        let segment = segment.trim();
+        if segment.is_empty() {
+            continue;
+        }
+        let mut words = segment.split_whitespace();
+        let Some(program) = words.next() else {
+            continue;
+        };
+        match program {
+            "shutdown" | "restart-computer" | "stop-computer" | "diskpart" | "bcdedit"
+            | "bootrec" | "mountvol" => return Some("dangerous system command"),
+            "format" | "format.com" => return Some("dangerous disk format command"),
+            "mkfs" => return Some("dangerous filesystem command"),
+            program if program.starts_with("mkfs.") => return Some("dangerous filesystem command"),
+            "cipher" if segment.contains("/w") || segment.contains("-w") => {
+                return Some("dangerous disk wipe command")
+            }
+            "reg" if segment.contains(" delete ") || segment.contains(" add hklm") => {
+                return Some("dangerous registry command")
+            }
+            "remove-item" if segment.contains("-recurse") && segment.contains("-force") => {
+                return Some("dangerous recursive remove command")
+            }
+            "rd" | "rmdir" if segment.contains("/s") && segment.contains("/q") => {
+                return Some("dangerous recursive remove command")
+            }
+            "del" if segment.contains("/s") && segment.contains("/q") => {
+                return Some("dangerous recursive delete command")
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn should_skip_dir(name: &str) -> bool {
@@ -3845,6 +3887,9 @@ async fn tool_run_shell_command(settings: &Settings, args: &Value) -> Result<Val
     let command = arg_str(args, "command", "").trim();
     if command.is_empty() {
         return Err("command is required".into());
+    }
+    if let Some(reason) = dangerous_shell_command_reason(command) {
+        return Err(format!("shell command blocked by safety policy: {reason}"));
     }
     if !permission_allows_shell(settings, command) {
         return Err("current permission mode does not allow this shell command".into());
@@ -4764,6 +4809,22 @@ mod tests {
         assert!(!permission_allows_shell(&settings, "rg foo; del bar"));
         settings.permission_mode = "full-access".into();
         assert!(permission_allows_shell(&settings, "cargo test"));
+        assert!(permission_allows_shell(
+            &settings,
+            "npm run format && cargo test"
+        ));
+        assert!(!permission_allows_shell(
+            &settings,
+            "echo ok; shutdown /s /t 0"
+        ));
+        assert!(!permission_allows_shell(
+            &settings,
+            "Remove-Item -Recurse -Force C:\\"
+        ));
+        assert_eq!(
+            dangerous_shell_command_reason("rg foo | diskpart"),
+            Some("dangerous system command")
+        );
     }
 
     #[test]
