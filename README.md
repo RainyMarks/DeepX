@@ -2,7 +2,8 @@
 
 DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。它把多模型 API 接入、项目工作区、对话、缓存指标、终端和本地文件只读 Agent 能力放在一个 Windows portable 应用里，用户自己填写 API key 即可使用。
 
-![DeepX showcase](docs/images/deepx-showcase.png)
+![Uploading image.png…]()
+
 
 ## 动机
 
