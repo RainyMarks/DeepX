@@ -1,0 +1,43 @@
+# Local user state and secrets
+data/
+*.log
+secrets.local.json
+*.env
+*.local.json
+
+# Build outputs
+dist/
+core/target/
+electron/node_modules/
+resources/app.asar
+resources/app.asar.unpacked/
+resources/deepx-core.exe
+resources/node.exe
+resources/node_repl.exe
+resources/rg
+resources/DeepX.png
+resources/codex-notification.wav
+
+# Legacy renderer copies at repository root. The real renderer lives in electron/renderer/.
+/app.js
+/index.html
+/styles.css
+
+# Packaged Electron runtime at repository root
+DeepX.exe
+chrome_*.pak
+icudtl.dat
+LICENSES.chromium.html
+resources.pak
+snapshot_blob.bin
+v8_context_snapshot.bin
+vk_swiftshader_icd.json
+/version
+*.dll
+*.bin
+locales/
+
+# Generated release archives
+*.zip
+!releases/
+!releases/*.zip

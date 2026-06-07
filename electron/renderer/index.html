@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DeepX</title>
+    <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="../node_modules/highlight.js/styles/github-dark.min.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="deepx-shell">
+      <header class="window-strip" aria-label="DeepX">
+        <div class="window-brand">
+          <img id="brandIcon" alt="" />
+          <span>DeepX</span>
+        </div>
+        <div class="window-drag"></div>
+      </header>
+
+      <aside class="sidebar" aria-label="DeepX navigation">
+        <div class="sidebar-top">
+          <button id="sidebarToggleButton" class="sidebar-icon" type="button" data-i18n-title="toggleSidebar" aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M9 5v14"></path></svg>
+          </button>
+          <button id="newSessionButton" class="sidebar-action" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+            <span data-i18n="newChat">New chat</span>
+          </button>
+        </div>
+
+        <button id="workspaceButton" class="workspace-row" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7l2 2h7v11H4z"></path><path d="M4 7V5h7l2 2"></path></svg>
+          <span id="workspaceValue" data-i18n="noWorkspace">No workspace selected</span>
+        </button>
+
+        <section class="project-section">
+          <div class="section-label" data-i18n="projects">Projects</div>
+          <div id="projectList" class="project-list"></div>
+        </section>
+
+        <section class="session-section">
+          <div class="section-label" data-i18n="recent">Recent</div>
+          <div id="sessionList" class="session-list"></div>
+        </section>
+
+        <div class="sidebar-bottom">
+          <button id="settingsButton" class="sidebar-action" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6l-.02.02a2 2 0 1 1-3.96 0L10 20a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1L4 13.98a2 2 0 1 1 0-3.96L4 10a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6L10.02 4a2 2 0 1 1 3.96 0L14 4a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.08.36.28.7.6 1l.02.02a2 2 0 1 1 0 3.96L20 14c-.32.3-.52.64-.6 1z"></path></svg>
+            <span data-i18n="settings">Settings</span>
+          </button>
+          <button id="openDataButton" class="sidebar-action subtle" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4z"></path><path d="M4 7l2-3h12l2 3"></path></svg>
+            <span data-i18n="data">Data</span>
+          </button>
+        </div>
+        <div id="sidebarResizeHandle" class="sidebar-resize-handle" aria-hidden="true"></div>
+      </aside>
+
+      <main id="mainSurface" class="main-surface">
+        <div class="thread-toolbar">
+          <div class="thread-title">
+            <strong id="threadTitle" data-i18n="newChat">New chat</strong>
+            <span id="providerStatus" class="toolbar-status" data-i18n="preparing">Preparing DeepX</span>
+          </div>
+          <div class="toolbar-actions">
+            <button id="terminalToggleButton" class="toolbar-icon" type="button" data-i18n-title="toggleTerminal" aria-label="Toggle terminal">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M8 9l3 3-3 3"></path><path d="M13 15h3"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="transcript" class="thread" tabindex="0" aria-live="polite"></div>
+
+        <form id="composer" class="composer">
+          <div class="composer-surface">
+            <textarea id="messageInput" rows="1" data-i18n-placeholder="messagePlaceholder" placeholder="Message DeepX"></textarea>
+            <div id="attachmentTray" class="attachment-tray hidden"></div>
+            <div class="composer-bar">
+              <div class="composer-left-controls">
+                <button id="addContextButton" class="composer-icon" type="button" data-i18n-title="addContext" aria-label="Add context">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                </button>
+                <button id="permissionButton" class="composer-chip permission-chip" type="button" aria-haspopup="menu" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-5"></path></svg>
+                  <span id="permissionLabel">Custom</span>
+                  <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+                </button>
+                <button id="webSearchButton" class="composer-icon" type="button" data-i18n-title="webSearch" aria-label="Web search" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"></path></svg>
+                </button>
+              </div>
+              <div class="composer-right-controls">
+                <button id="providerMiniButton" class="composer-chip" type="button">DeepSeek</button>
+                <button id="contextMiniButton" class="composer-chip" type="button">1M</button>
+                <button id="effortMenuButton" class="composer-chip effort-chip" type="button" aria-haspopup="menu" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L5 14h7l-1 8 8-12h-7z"></path></svg>
+                  <span id="effortButtonText">high</span>
+                  <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+                </button>
+                <button id="sendButton" class="send-button" type="submit" data-i18n-title="send" aria-label="Send">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"></path><path d="M5 12l7-7 7 7"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div id="permissionMenu" class="popover permission-popover hidden" role="menu" aria-label="Permission mode"></div>
+            <div id="effortMenu" class="popover effort-popover hidden" role="menu" aria-label="Thinking"></div>
+          </div>
+        </form>
+
+        <section id="terminalPanel" class="terminal-panel hidden" aria-label="Terminal">
+          <div class="terminal-tabs">
+            <button class="terminal-tab active" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M8 9l3 3-3 3"></path><path d="M13 15h3"></path></svg>
+              <span id="terminalCwdLabel">PowerShell</span>
+            </button>
+            <button id="terminalRestartButton" class="terminal-icon" type="button" data-i18n-title="restartTerminal" aria-label="Restart terminal">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v6h6"></path></svg>
+            </button>
+            <button id="terminalCloseButton" class="terminal-icon" type="button" data-i18n-title="close" aria-label="Close terminal">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+            </button>
+          </div>
+          <div id="terminalContainer" class="terminal-container"></div>
+        </section>
+      </main>
+
+      <section id="settingsOverlay" class="modal-overlay hidden" aria-label="Settings">
+        <div class="settings-modal">
+          <aside class="settings-nav">
+            <button id="closeSettingsButton" class="settings-back" type="button" data-i18n="backToApp">Back to app</button>
+            <nav aria-label="Settings sections">
+              <button class="settings-nav-item active" type="button" data-settings-target="general">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19 12h2"></path><path d="M3 12h2"></path><path d="M12 3v2"></path><path d="M12 19v2"></path></svg>
+                <span data-i18n="general">General</span>
+              </button>
+              <button class="settings-nav-item" type="button" data-settings-target="models">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"></path><path d="M8 10h8"></path><path d="M8 14h5"></path></svg>
+                <span data-i18n="modelAccess">Models</span>
+              </button>
+              <button class="settings-nav-item" type="button" data-settings-target="appearance">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.9 4.9l1.4 1.4"></path><path d="M17.7 17.7l1.4 1.4"></path><path d="M2 12h2"></path><path d="M20 12h2"></path></svg>
+                <span data-i18n="appearance">Appearance</span>
+              </button>
+              <button class="settings-nav-item" type="button" data-settings-target="web">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z"></path></svg>
+                <span data-i18n="webSearch">Web search</span>
+              </button>
+              <button class="settings-nav-item" type="button" data-settings-target="cache">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7c0-2 4-4 8-4s8 2 8 4-4 4-8 4-8-2-8-4z"></path><path d="M4 7v10c0 2 4 4 8 4s8-2 8-4V7"></path><path d="M4 12c0 2 4 4 8 4s8-2 8-4"></path></svg>
+                <span data-i18n="cache">Cache & usage</span>
+              </button>
+              <button class="settings-nav-item" type="button" data-settings-target="portable">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3z"></path><path d="M8 7V5h8v2"></path><path d="M8 12h8"></path></svg>
+                <span data-i18n="portable">Environment</span>
+              </button>
+            </nav>
+          </aside>
+
+          <div class="settings-page">
+            <header class="settings-header">
+              <div>
+                <h1 id="settingsTitle" data-i18n="settings">Settings</h1>
+                <p id="settingsSubtitle" data-i18n="settingsSubtitle">Configuration is stored in DeepX/data.</p>
+              </div>
+              <button id="closeSettingsIconButton" class="settings-close-icon" type="button" data-i18n-title="close" aria-label="Close">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+              </button>
+            </header>
+
+            <div class="settings-content">
+              <section class="settings-section active" data-settings-section="general">
+                <h2 data-i18n="general">General</h2>
+                <p class="section-help" data-i18n="generalHelp">Basic preferences and current runtime status.</p>
+                <div class="settings-list">
+                  <label class="settings-row">
+                    <span>
+                      <strong data-i18n="language">Language</strong>
+                      <small data-i18n="languageHelp">Switch the interface between Chinese and English.</small>
+                    </span>
+                    <select id="languageSelect">
+                      <option value="zh-CN">中文</option>
+                      <option value="en-US">English</option>
+                    </select>
+                  </label>
+                  <div class="settings-row">
+                    <span>
+                      <strong data-i18n="core">Core</strong>
+                      <small id="statusLine" data-i18n="preparing">Preparing DeepX</small>
+                    </span>
+                    <code id="coreValue">...</code>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-section" data-settings-section="models">
+                <h2 data-i18n="modelAccess">Models</h2>
+                <p class="section-help" data-i18n="modelAccessHelp">Provider, model, API key, and context limits.</p>
+                <div class="settings-list">
+                  <label class="settings-row">
+                    <span><strong data-i18n="provider">Provider</strong></span>
+                    <select id="providerSelect"></select>
+                  </label>
+                  <label class="settings-row" id="modelSelectRow">
+                    <span><strong data-i18n="model">Model</strong></span>
+                    <select id="modelSelect"></select>
+                  </label>
+                  <label class="settings-row hidden" id="customModelRow">
+                    <span><strong data-i18n="customModel">Custom model</strong></span>
+                    <input id="modelNameInput" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-row">
+                    <span><strong data-i18n="baseUrl">Base URL</strong></span>
+                    <input id="baseUrlInput" type="url" spellcheck="false" />
+                  </label>
+                  <label class="settings-row">
+                    <span>
+                      <strong data-i18n="apiKey">API key</strong>
+                      <small id="apiKeyHelp" class="status-help"></small>
+                    </span>
+                    <input id="apiKeyInput" type="password" autocomplete="off" spellcheck="false" />
+                  </label>
+                  <label class="settings-row">
+                    <span><strong data-i18n="authHeader">Auth header</strong></span>
+                    <input id="authHeaderInput" type="text" spellcheck="false" />
+                  </label>
+                  <label class="settings-row">
+                    <span>
+                      <strong data-i18n="contextWindow">Context window</strong>
+                      <small id="contextEffectiveValue"></small>
+                    </span>
+                    <input id="contextInput" type="number" min="1024" step="1024" />
+                  </label>
+                  <label class="settings-row">
+                    <span><strong data-i18n="maxTokens">Max output</strong></span>
+                    <input id="maxTokensInput" type="number" min="1" step="256" />
+                  </label>
+                  <label class="settings-row">
+                    <span><strong data-i18n="temperature">Temperature</strong></span>
+                    <input id="temperatureInput" type="number" min="0" max="2" step="0.1" />
+                  </label>
+                  <label class="settings-row">
+                    <span>
+                      <strong data-i18n="preserveReasoning">Preserve reasoning history</strong>
+                      <small data-i18n="preserveReasoningHelp">Use only for providers that explicitly support it.</small>
+                    </span>
+                    <input id="preserveReasoningInput" type="checkbox" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="settings-section" data-settings-section="appearance">
+                <h2 data-i18n="appearance">Appearance</h2>
+                <p class="section-help" data-i18n="appearanceHelp">Tune DeepX colors, fonts, and density.</p>
+                <div class="theme-card">
+                  <div class="theme-card-head">
+                    <div>
+                      <strong data-i18n="theme">Theme</strong>
+                      <small data-i18n="themeHelp">Use light, dark, or match system settings.</small>
+                    </div>
+                    <div class="segmented">
+                      <button id="themeModeLight" type="button" data-theme-mode="light"><span data-i18n="light">Light</span></button>
+                      <button id="themeModeDark" type="button" data-theme-mode="dark"><span data-i18n="dark">Dark</span></button>
+                      <button id="themeModeSystem" type="button" data-theme-mode="system"><span data-i18n="system">System</span></button>
+                    </div>
+                  </div>
+                  <div class="theme-preview" aria-hidden="true">
+                    <div class="preview-sidebar">
+                      <span></span>
+                      <strong>DeepX</strong>
+                      <small data-i18n="themePreviewSession">Session</small>
+                    </div>
+                    <div class="preview-thread">
+                      <p data-i18n="themePreviewTitle">DeepX theme preview</p>
+                      <pre><code>const ready = true;</code></pre>
+                    </div>
+                  </div>
+                  <div class="settings-list compact">
+                    <label class="settings-row">
+                      <span><strong data-i18n="themePreset">Theme preset</strong></span>
+                      <select id="themePresetSelect"></select>
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="foreground">Foreground</strong></span>
+                      <input id="foregroundColorInput" type="color" />
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="uiFont">UI font</strong></span>
+                      <input id="uiFontInput" type="text" spellcheck="false" />
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="codeFont">Code font</strong></span>
+                      <input id="codeFontInput" type="text" spellcheck="false" />
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="uiFontSize">UI size</strong></span>
+                      <input id="uiFontSizeInput" type="number" min="12" max="18" step="1" />
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="codeFontSize">Code size</strong></span>
+                      <input id="codeFontSizeInput" type="number" min="10" max="16" step="1" />
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="density">Density</strong></span>
+                      <select id="densitySelect">
+                        <option value="compact">Compact</option>
+                        <option value="comfortable">Comfortable</option>
+                        <option value="spacious">Spacious</option>
+                      </select>
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="translucentSidebar">Translucent sidebar</strong></span>
+                      <input id="translucentSidebarInput" type="checkbox" />
+                    </label>
+                    <label class="settings-row">
+                      <span><strong data-i18n="contrast">Contrast</strong></span>
+                      <input id="contrastInput" type="range" min="35" max="85" />
+                    </label>
+                    <label class="settings-row">
+                      <span>
+                        <strong data-i18n="pointerCursor">Use pointer cursor</strong>
+                        <small data-i18n="pointerCursorHelp">Switch to pointer cursor over interactive elements.</small>
+                      </span>
+                      <input id="pointerCursorInput" type="checkbox" />
+                    </label>
+                    <div class="settings-row">
+                      <span>
+                        <strong data-i18n="restoreAppearance">Restore defaults</strong>
+                        <small data-i18n="restoreAppearanceHelp">Reset only appearance controls.</small>
+                      </span>
+                      <button id="resetAppearanceButton" class="secondary-button" type="button" data-i18n="restore">Restore</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-section" data-settings-section="web">
+                <h2 data-i18n="webSearch">Web search</h2>
+                <p class="section-help" data-i18n="webSearchHelp">Attach web summaries to the current turn when enabled.</p>
+                <div class="settings-list">
+                  <div class="settings-row">
+                    <span>
+                      <strong data-i18n="webSearchMode">Search mode</strong>
+                      <small data-i18n="webSearchModeHelp">Uses DuckDuckGo Instant Answer without an extra key.</small>
+                    </span>
+                    <div class="segmented small">
+                      <button id="webSearchOn" type="button" data-i18n="on">On</button>
+                      <button id="webSearchOff" type="button" data-i18n="off">Off</button>
+                    </div>
+                  </div>
+                  <label class="settings-row">
+                    <span>
+                      <strong data-i18n="webSearchResults">Result count</strong>
+                      <small data-i18n="webSearchResultsHelp">Results are not written to the stable cache prefix.</small>
+                    </span>
+                    <input id="webSearchMaxResultsInput" type="number" min="1" max="8" />
+                  </label>
+                </div>
+              </section>
+
+              <section class="settings-section" data-settings-section="cache">
+                <h2 data-i18n="cache">Cache & usage</h2>
+                <p class="section-help" data-i18n="cacheHelp">DeepX shows cache hit/miss, prefix hash, and estimated cost per turn.</p>
+                <div class="settings-list">
+                  <div class="settings-row">
+                    <span>
+                      <strong data-i18n="cacheLastTurn">Last turn</strong>
+                      <small id="cacheStatusValue" data-i18n="cacheNoMetric">No cache metric yet.</small>
+                    </span>
+                    <button id="cacheDetailsButton" class="secondary-button" type="button" data-i18n="showInThread">Back to thread</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-section" data-settings-section="portable">
+                <h2 data-i18n="portable">Environment</h2>
+                <p class="section-help" data-i18n="portableHelp">Runtime, config, sessions, logs, and local secrets stay inside the DeepX directory.</p>
+                <div class="settings-list">
+                  <div class="settings-row">
+                    <span>
+                      <strong data-i18n="dataRoot">Data directory</strong>
+                      <small id="settingsDataRootValue"></small>
+                    </span>
+                    <button id="openDataFromSettingsButton" class="secondary-button" type="button" data-i18n="openDataDir">Open data directory</button>
+                  </div>
+                </div>
+              </section>
+
+              <div class="settings-hidden-controls" aria-hidden="true">
+                <select id="effortSelect"></select>
+                <small id="effortHelp"></small>
+                <button id="thinkingOn" type="button"></button>
+                <button id="thinkingOff" type="button"></button>
+              </div>
+            </div>
+
+            <footer class="settings-footer">
+              <span id="dataRootValue" class="data-root"></span>
+              <div class="settings-footer-actions">
+                <button id="testButton" class="secondary-button" type="button" data-i18n="testConnection">Test connection</button>
+                <button id="saveButton" class="primary-button" type="button" data-i18n="save">Save</button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      </section>
+
+      <div id="toastHost" class="toast-host" aria-live="polite"></div>
+    </div>
+
+    <script src="../node_modules/dompurify/dist/purify.min.js"></script>
+    <script src="../node_modules/marked/marked.min.js"></script>
+    <script src="../node_modules/highlight.js/highlight.min.js"></script>
+    <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

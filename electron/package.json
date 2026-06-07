@@ -1,0 +1,17 @@
+{
+  "name": "deepx",
+  "productName": "DeepX",
+  "version": "0.1.0",
+  "description": "Source-available noncommercial multi-provider coding agent shell",
+  "main": "main.js",
+  "author": "RainyMarks",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "dompurify": "^3.3.1",
+    "highlight.js": "^11.11.1",
+    "marked": "^16.4.2",
+    "node-pty": "^1.0.0"
+  }
+}
