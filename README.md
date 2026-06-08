@@ -8,7 +8,7 @@
   <img src="docs/images/deepx-showcase.png" alt="DeepX showcase" />
 </p>
 
-DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。它把多模型 API 接入、项目工作区、对话、缓存指标、终端、本地文件 Agent 能力和应用内更新放在一个 Windows portable 应用里，用户自己填写 API key 即可使用。
+DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。它把多模型 API 接入、项目工作区、对话、缓存指标、终端、本地文件 Agent 能力和应用内更新放在一个 Windows portable 应用里，用户自己填写 API key 即可使用。本项目100%由CodeX开发。
 
 ## 动机
 
