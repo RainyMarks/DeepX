@@ -21,6 +21,16 @@ contextBridge.exposeInMainWorld("deepx", {
   terminalWrite: (data) => ipcRenderer.invoke("deepx:terminal-write", data),
   terminalResize: (size) => ipcRenderer.invoke("deepx:terminal-resize", size),
   terminalStop: () => ipcRenderer.invoke("deepx:terminal-stop"),
+  sshConnect: (options) => ipcRenderer.invoke("deepx:ssh-connect", options),
+  sshWrite: (payload) => ipcRenderer.invoke("deepx:ssh-write", payload),
+  sshDisconnect: (id) => ipcRenderer.invoke("deepx:ssh-disconnect", id),
+  sshMonitorStart: (payload) => ipcRenderer.invoke("deepx:ssh-monitor-start", payload),
+  sshMonitorStop: (id) => ipcRenderer.invoke("deepx:ssh-monitor-stop", id),
+  onSshData: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("deepx:ssh-data", listener);
+    return () => ipcRenderer.removeListener("deepx:ssh-data", listener);
+  },
   onTerminalData: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("deepx:terminal-data", listener);

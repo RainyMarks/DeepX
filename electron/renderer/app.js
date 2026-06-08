@@ -2,17 +2,19 @@ const DEFAULT_UI_FONT = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", s
 const DEFAULT_CODE_FONT = '"JetBrains Mono", ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace';
 const DEFAULT_UI_FONT_SIZE = 14;
 const DEFAULT_CODE_FONT_SIZE = 12;
-const SIDEBAR_MIN = 220;
-const SIDEBAR_MAX = 420;
-const SIDEBAR_DEFAULT = 300;
+const APP_BRAND = "雨刃";
+const APP_ENGLISH_NAME = "RainyReSearch";
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 360;
+const SIDEBAR_DEFAULT = 232;
 const LEGACY_THEME_DARK = ["cod", "ex"].join("");
 const LEGACY_THEME_LIGHT = `${LEGACY_THEME_DARK}-light`;
 
 const THEME_PRESETS = [
   {
-    id: "deepx-default",
-    labelZh: "DeepX 深色",
-    labelEn: "DeepX Dark",
+    id: "rainy-research-default",
+    labelZh: "雨刃 深色",
+    labelEn: "RainyReSearch Dark",
     mode: "dark",
     accent: "#0169cc",
     background: "#111111",
@@ -26,9 +28,9 @@ const THEME_PRESETS = [
     density: "comfortable",
   },
   {
-    id: "deepx-light",
-    labelZh: "DeepX 浅色",
-    labelEn: "DeepX Light",
+    id: "rainy-research-light",
+    labelZh: "雨刃 浅色",
+    labelEn: "RainyReSearch Light",
     mode: "light",
     accent: "#0169cc",
     background: "#ffffff",
@@ -99,8 +101,9 @@ const I18N = {
     coreReady: "核心已就绪",
     newChat: "新对话",
     noWorkspace: "未选择工作区",
+    serverMonitor: "服务器监控",
     workspaceSaved: "工作区已保存",
-    workspaceUnavailable: "工作区不可用，已回退到 DeepX 目录",
+    workspaceUnavailable: "工作区不可用，已回退到 RainyReSearch 目录",
     projects: "项目",
     noProjects: "暂无项目",
     projectSwitched: "已切换项目",
@@ -115,13 +118,13 @@ const I18N = {
     terminalStarting: "终端启动中",
     terminalStarted: "终端已启动",
     terminalStopped: "终端已停止",
-    preparing: "正在准备 DeepX",
+    preparing: "正在准备 RainyReSearch",
     workspacePreparing: "正在设置工作区",
     workspacePreparingDetail: "正在扫描目录树、AGENTS.md 和工具上下文",
     workspaceReady: "工作区已就绪",
     workspaceReadyDetail: "{treeEntries} 个目录项 · 说明: {instructions}",
     workspaceSetupFailed: "工作区设置失败",
-    messagePlaceholder: "向 DeepX 发送消息",
+    messagePlaceholder: "向雨刃发送消息",
     addContext: "添加文件",
     fileAttached: "已添加 {count} 个文件",
     fileAttachFailed: "文件添加失败",
@@ -130,13 +133,13 @@ const I18N = {
     send: "发送",
     close: "关闭",
     backToApp: "返回应用",
-    settingsSubtitle: "配置会保存到 DeepX/data，本机密钥不会进入发行包。",
+    settingsSubtitle: "配置会保存到 RainyReSearch/data，本机密钥不会进入发行包。",
     general: "常规",
     generalHelp: "基础偏好和当前运行状态。",
     modelAccess: "模型",
     modelAccessHelp: "服务商、模型、API key、上下文窗口和输出限制。",
     appearance: "外观",
-    appearanceHelp: "调整 DeepX 的颜色、字体、密度和交互细节。",
+    appearanceHelp: "调整 RainyReSearch 的颜色、字体、密度和交互细节。",
     provider: "服务商",
     providerFallback: "服务商",
     model: "模型",
@@ -180,14 +183,14 @@ const I18N = {
     restoreAppearanceHelp: "只重置外观控制项。",
     restore: "恢复",
     themePreviewSession: "会话",
-    themePreviewTitle: "DeepX 主题预览",
+    themePreviewTitle: "RainyReSearch 主题预览",
     cache: "缓存与用量",
     cacheHelp: "每轮显示缓存命中、prefix hash、裁剪状态和费用估算。",
     cacheLastTurn: "最近一轮",
     cacheNoMetric: "还没有缓存指标。",
     showInThread: "回到线程",
     portable: "环境",
-    portableHelp: "运行时、配置、会话、日志和本机密钥都放在 DeepX 目录内。",
+    portableHelp: "运行时、配置、会话、日志和本机密钥都放在 RainyReSearch 目录内。",
     dataRoot: "数据目录",
     openDataDir: "打开数据目录",
     appUpdate: "应用更新",
@@ -203,7 +206,7 @@ const I18N = {
     updateFailed: "更新失败",
     updateApiFallback: "GitHub API 受限，已切换到公开发布页检查。",
     updateBannerTitle: "发现新版本",
-    updateBannerText: "DeepX {version} 可更新。",
+    updateBannerText: "RainyReSearch {version} 可更新。",
     dismiss: "忽略",
     updateUnavailableInDev: "开发模式不能直接安装更新。",
     testConnection: "测试连接",
@@ -232,11 +235,19 @@ const I18N = {
     effortCompatible: "兼容档位：{from} 会按官方规则映射为 {to}。",
     effortOfficial: "官方参数：{mapping}",
     webSearch: "联网搜索",
-    webSearchHelp: "启用后，当前轮会附加网页摘要。",
+    webSearchHelp: "启用后，AI 可以主动调用更强的联网搜索工具。",
     webSearchMode: "搜索模式",
-    webSearchModeHelp: "使用 DuckDuckGo Instant Answer，不需要额外 API key。",
+    webSearchModeHelp: "优先使用 Brave、Tavily、Serper 或 SearXNG；未配置时用公开搜索兜底。",
     webSearchResults: "结果数量",
-    webSearchResultsHelp: "搜索结果不会进入稳定缓存前缀。",
+    webSearchResultsHelp: "用于 Agent 检索论文、文档、报错和最新信息。",
+    webBraveKey: "Brave Search API Key",
+    webBraveHelp: "推荐。适合通用网页和技术文档搜索。",
+    webTavilyKey: "Tavily API Key",
+    webTavilyHelp: "适合研究和 RAG 风格的深度搜索。",
+    webSerperKey: "Serper API Key",
+    webSerperHelp: "Google 结果聚合，适合补全公开网页。",
+    webSearxngUrl: "SearXNG 地址",
+    webSearxngHelp: "可填你自己的 SearXNG 实例 URL。",
     on: "开启",
     off: "关闭",
     permissionDefault: "默认权限",
@@ -255,7 +266,7 @@ const I18N = {
     toolFailed: "{name} 失败",
     toolCalls: "工具调用",
     userLabel: "你",
-    assistantLabel: "DeepX",
+    assistantLabel: "RainyReSearch",
     processed: "已处理",
     copied: "已复制",
     copy: "复制",
@@ -282,8 +293,9 @@ const I18N = {
     coreReady: "Core ready",
     newChat: "New chat",
     noWorkspace: "No workspace selected",
+    serverMonitor: "Server monitor",
     workspaceSaved: "Workspace saved",
-    workspaceUnavailable: "Workspace unavailable; DeepX root is used",
+    workspaceUnavailable: "Workspace unavailable; RainyReSearch root is used",
     projects: "Projects",
     noProjects: "No projects yet",
     projectSwitched: "Project switched",
@@ -298,13 +310,13 @@ const I18N = {
     terminalStarting: "Starting terminal",
     terminalStarted: "Terminal started",
     terminalStopped: "Terminal stopped",
-    preparing: "Preparing DeepX",
+    preparing: "Preparing RainyReSearch",
     workspacePreparing: "Setting up workspace",
     workspacePreparingDetail: "Scanning the tree, AGENTS.md, and tool context",
     workspaceReady: "Workspace ready",
     workspaceReadyDetail: "{treeEntries} tree entries · instructions: {instructions}",
     workspaceSetupFailed: "Workspace setup failed",
-    messagePlaceholder: "Message DeepX",
+    messagePlaceholder: "Message RainyReSearch",
     addContext: "Add files",
     fileAttached: "Added {count} file(s)",
     fileAttachFailed: "Failed to add file",
@@ -313,13 +325,13 @@ const I18N = {
     send: "Send",
     close: "Close",
     backToApp: "Back to app",
-    settingsSubtitle: "Configuration is stored in DeepX/data. Local secrets are not shipped.",
+    settingsSubtitle: "Configuration is stored in RainyReSearch/data. Local secrets are not shipped.",
     general: "General",
     generalHelp: "Base preferences and current runtime state.",
     modelAccess: "Models",
     modelAccessHelp: "Provider, model, API key, context window, and output limits.",
     appearance: "Appearance",
-    appearanceHelp: "Tune DeepX colors, fonts, density, and interaction details.",
+    appearanceHelp: "Tune RainyReSearch colors, fonts, density, and interaction details.",
     provider: "Provider",
     providerFallback: "Provider",
     model: "Model",
@@ -363,14 +375,14 @@ const I18N = {
     restoreAppearanceHelp: "Reset appearance controls only.",
     restore: "Restore",
     themePreviewSession: "Session",
-    themePreviewTitle: "DeepX theme preview",
+    themePreviewTitle: "RainyReSearch theme preview",
     cache: "Cache & usage",
     cacheHelp: "Shows cache hit/miss, prefix hash, truncation, and estimated cost per turn.",
     cacheLastTurn: "Last turn",
     cacheNoMetric: "No cache metric yet.",
     showInThread: "Back to thread",
     portable: "Environment",
-    portableHelp: "Runtime, config, sessions, logs, and local secrets stay inside the DeepX directory.",
+    portableHelp: "Runtime, config, sessions, logs, and local secrets stay inside the RainyReSearch directory.",
     dataRoot: "Data directory",
     openDataDir: "Open data directory",
     appUpdate: "App update",
@@ -382,11 +394,11 @@ const I18N = {
     installUpdate: "Download and install",
     updateDownloading: "Downloading {percent}%",
     updateExtracting: "Extracting update package",
-    updateInstalling: "Installing. DeepX will restart automatically",
+    updateInstalling: "Installing. RainyReSearch will restart automatically",
     updateFailed: "Update failed",
     updateApiFallback: "GitHub API is limited, using the public release page instead.",
     updateBannerTitle: "Update available",
-    updateBannerText: "DeepX {version} is available.",
+    updateBannerText: "RainyReSearch {version} is available.",
     dismiss: "Dismiss",
     updateUnavailableInDev: "Updates can only be installed from the packaged app.",
     testConnection: "Test connection",
@@ -415,11 +427,19 @@ const I18N = {
     effortCompatible: "Compatibility: {from} is mapped to {to}.",
     effortOfficial: "Official parameter: {mapping}",
     webSearch: "Web search",
-    webSearchHelp: "Attach web summaries to the current turn when enabled.",
+    webSearchHelp: "Let the AI call stronger web search while working.",
     webSearchMode: "Search mode",
-    webSearchModeHelp: "Uses DuckDuckGo Instant Answer without an extra key.",
+    webSearchModeHelp: "Prefers Brave, Tavily, Serper, or SearXNG; falls back to public search.",
     webSearchResults: "Result count",
-    webSearchResultsHelp: "Search results are not written to the stable cache prefix.",
+    webSearchResultsHelp: "Used for papers, docs, errors, and current information.",
+    webBraveKey: "Brave Search API key",
+    webBraveHelp: "Recommended for general web and technical documentation search.",
+    webTavilyKey: "Tavily API key",
+    webTavilyHelp: "Good for research and RAG-style deep search.",
+    webSerperKey: "Serper API key",
+    webSerperHelp: "Google result aggregation for public webpages.",
+    webSearxngUrl: "SearXNG URL",
+    webSearxngHelp: "Use your own SearXNG instance URL.",
     on: "On",
     off: "Off",
     permissionDefault: "Default permissions",
@@ -438,7 +458,7 @@ const I18N = {
     toolFailed: "{name} failed",
     toolCalls: "Tool calls",
     userLabel: "You",
-    assistantLabel: "DeepX",
+    assistantLabel: "RainyReSearch",
     processed: "Processed",
     copied: "Copied",
     copy: "Copy",
@@ -462,12 +482,130 @@ const I18N = {
   },
 };
 
+Object.assign(I18N["zh-CN"], {
+  newChat: "科研会话",
+  workspaceUnavailable: "工作区不可用，已回退到雨刃目录",
+  preparing: "正在准备雨刃",
+  messagePlaceholder: "向雨刃发送消息",
+  settingsSubtitle: "配置会保存到 RainyReSearch/data，本机密钥不会进入发行包。",
+  appearanceHelp: "调整雨刃的颜色、字体、密度和交互细节。",
+  themePreviewTitle: "雨刃主题预览",
+  portableHelp: "运行时、配置、会话、日志、研究数据和本机密钥都放在 RainyReSearch 目录内。",
+  updateBannerText: "RainyReSearch {version} 可更新。",
+  assistantLabel: "雨刃",
+  researchWorkbenchTitle: "科研复现工作台",
+  paperRadar: "论文雷达",
+  searchPapers: "搜索",
+  researchQueryPlaceholder: "输入论文标题、关键词、DOI 或 arXiv ID",
+  paperCard: "情报卡",
+  paperGraph: "关系图",
+  reproAudit: "代码分析",
+  ideaForge: "选题生成",
+  researchGuide: "配置教程",
+  openResearchSettings: "去填写配置",
+  agentTrace: "智能体",
+  paperCardEmpty: "搜索并选择论文后查看多源情报卡。",
+  graphHelp: "当前论文的引用、代码、方法和数据集技术血缘。",
+  reloadGraph: "重载关系图",
+  repoUrl: "代码仓库链接或本地路径",
+  runAudit: "运行审计",
+  runTrickScore: "风险评分",
+  exportReport: "导出报告",
+  generateIdeas: "生成方案",
+  agentTraceHelp: "旧会话仍可用于开发任务和论文追问。",
+  researchSources: "科研源",
+  researchSourcesHelp: "可选 source keys 提升覆盖率；留空不会覆盖已保存密钥。",
+  researchSearching: "正在聚合论文、代码和 AI 分析",
+  researchSearchDone: "找到 {count} 篇候选论文",
+  researchSearchFailed: "论文搜索失败",
+  noResearchResults: "暂无结果。可以换更具体的标题、DOI、arXiv ID 或作者年份。",
+  selectedPaperStatus: "已选择：{title}",
+  graphLoading: "正在构建图谱",
+  graphEmpty: "当前论文还没有可绘制的图谱边。",
+  auditRunning: "正在审计 repo",
+  auditDone: "审计完成",
+  auditFailed: "审计失败",
+  riskRunning: "正在计算复现/可信性风险",
+  riskDone: "风险评分完成",
+  ideaRunning: "正在生成研究方案",
+  ideaDone: "方案生成完成",
+  reportExported: "报告已导出：{path}",
+  sourceConfigured: "已配置",
+  sourceMissing: "未配置",
+  localOnlyOk: "无 key 时会降级到可用源和本地缓存",
+  aiAnalysis: "AI 分析",
+  riskLow: "低风险",
+  riskMedium: "中风险",
+  riskHigh: "高风险",
+  riskUnknown: "风险未知",
+});
+
+Object.assign(I18N["en-US"], {
+  workspaceUnavailable: "Workspace unavailable; RainyReSearch root is used",
+  preparing: "Preparing RainyReSearch",
+  messagePlaceholder: "Message RainyReSearch",
+  settingsSubtitle: "Configuration is stored in RainyReSearch/data. Local secrets are not shipped.",
+  appearanceHelp: "Tune RainyReSearch colors, fonts, density, and interaction details.",
+  themePreviewTitle: "RainyReSearch theme preview",
+  portableHelp: "Runtime, config, sessions, logs, research data, and local secrets stay inside the RainyReSearch directory.",
+  updateInstalling: "Installing. RainyReSearch will restart automatically",
+  updateBannerText: "RainyReSearch {version} is available.",
+  assistantLabel: "RainyReSearch",
+  researchWorkbenchTitle: "Research reproducibility workbench",
+  paperRadar: "Paper search",
+  searchPapers: "Search",
+  researchQueryPlaceholder: "Enter paper title, keywords, DOI, or arXiv ID",
+  paperCard: "Card",
+  paperGraph: "Graph",
+  reproAudit: "Code analysis",
+  ideaForge: "Ideas",
+  researchGuide: "Setup guide",
+  openResearchSettings: "Open settings",
+  agentTrace: "Agent",
+  paperCardEmpty: "Search and select a paper to inspect its intelligence card.",
+  graphHelp: "Citation, code, method, and dataset lineage for the selected paper.",
+  reloadGraph: "Reload graph",
+  repoUrl: "GitHub repo or local path",
+  runAudit: "Run audit",
+  runTrickScore: "Risk score",
+  exportReport: "Export report",
+  generateIdeas: "Generate ideas",
+  agentTraceHelp: "Legacy chat sessions remain available for development tasks and paper-specific follow-up.",
+  researchSources: "Research",
+  researchSourcesHelp: "Optional source keys improve coverage; blank values keep existing saved secrets.",
+  researchSearching: "Aggregating paper, code, and AI analysis",
+  researchSearchDone: "Found {count} candidate papers",
+  researchSearchFailed: "Paper search failed",
+  noResearchResults: "No results yet. Try a title, DOI, arXiv ID, or author-year query.",
+  selectedPaperStatus: "Selected: {title}",
+  graphLoading: "Building graph",
+  graphEmpty: "No graph edges are available for this paper yet.",
+  auditRunning: "Auditing repo",
+  auditDone: "Audit complete",
+  auditFailed: "Audit failed",
+  riskRunning: "Computing reproducibility and credibility risk",
+  riskDone: "Risk score complete",
+  ideaRunning: "Generating research ideas",
+  ideaDone: "Ideas generated",
+  reportExported: "Report exported: {path}",
+  sourceConfigured: "configured",
+  sourceMissing: "missing",
+  localOnlyOk: "Without keys, RainyReSearch falls back to available sources and local cache.",
+  aiAnalysis: "AI analysis",
+  riskLow: "low risk",
+  riskMedium: "medium risk",
+  riskHigh: "high risk",
+  riskUnknown: "risk unknown",
+});
+
 const state = {
   core: null,
   paths: null,
   providers: [],
   settings: {},
   configuredProviders: {},
+  configuredResearchSources: {},
+  configuredWebSearch: {},
   sessions: [],
   projects: [],
   attachments: [],
@@ -504,6 +642,25 @@ const state = {
   terminalFit: null,
   terminalDataDispose: null,
   terminalDataListenerReady: false,
+  sshDataDispose: null,
+  sshDataListenerReady: false,
+  ssh: {
+    id: null,
+    connected: false,
+    monitorRunning: false,
+  },
+  research: {
+    tab: "card",
+    query: "",
+    results: [],
+    sources: [],
+    selected: null,
+    graph: null,
+    audit: null,
+    risk: null,
+    ideas: [],
+    exportedReportPath: null,
+  },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -536,6 +693,7 @@ const el = {
   sidebarResizeHandle: $("sidebarResizeHandle"),
   workspaceButton: $("workspaceButton"),
   workspaceValue: $("workspaceValue"),
+  serverMonitorButton: $("serverMonitorButton"),
   workspaceStatus: $("workspaceStatus"),
   workspaceStatusTitle: $("workspaceStatusTitle"),
   workspaceStatusDetail: $("workspaceStatusDetail"),
@@ -577,6 +735,14 @@ const el = {
   webSearchOn: $("webSearchOn"),
   webSearchOff: $("webSearchOff"),
   webSearchMaxResultsInput: $("webSearchMaxResultsInput"),
+  webBraveInput: $("webBraveInput"),
+  webTavilyInput: $("webTavilyInput"),
+  webSerperInput: $("webSerperInput"),
+  webSearxngInput: $("webSearxngInput"),
+  webBraveHelp: $("webBraveHelp"),
+  webTavilyHelp: $("webTavilyHelp"),
+  webSerperHelp: $("webSerperHelp"),
+  webSearxngHelp: $("webSearxngHelp"),
   cacheStatusValue: $("cacheStatusValue"),
   cacheDetailsButton: $("cacheDetailsButton"),
   settingsDataRootValue: $("settingsDataRootValue"),
@@ -604,6 +770,55 @@ const el = {
   terminalRestartButton: $("terminalRestartButton"),
   terminalCloseButton: $("terminalCloseButton"),
   terminalContainer: $("terminalContainer"),
+  researchWorkbench: $("researchWorkbench"),
+  researchQueryInput: $("researchQueryInput"),
+  researchSearchButton: $("researchSearchButton"),
+  researchSearchStatus: $("researchSearchStatus"),
+  researchSourceStatus: $("researchSourceStatus"),
+  researchSourcesList: $("researchSourcesList"),
+  researchResults: $("researchResults"),
+  paperCardPanel: $("paperCardPanel"),
+  paperEvidencePanel: $("paperEvidencePanel"),
+  reloadGraphButton: $("reloadGraphButton"),
+  paperGraphCanvas: $("paperGraphCanvas"),
+  repoAuditInput: $("repoAuditInput"),
+  repoAuditButton: $("repoAuditButton"),
+  trickScoreButton: $("trickScoreButton"),
+  exportReportButton: $("exportReportButton"),
+  repoAuditStatus: $("repoAuditStatus"),
+  repoAuditReport: $("repoAuditReport"),
+  trickScoreReport: $("trickScoreReport"),
+  ideaFieldInput: $("ideaFieldInput"),
+  ideaMethodInput: $("ideaMethodInput"),
+  ideaVenueInput: $("ideaVenueInput"),
+  ideaPainInput: $("ideaPainInput"),
+  ideaConstraintsInput: $("ideaConstraintsInput"),
+  ideaForgeButton: $("ideaForgeButton"),
+  ideaForgeStatus: $("ideaForgeStatus"),
+  ideaForgeResults: $("ideaForgeResults"),
+  serverMonitorPanel: $("serverMonitorPanel"),
+  sshHostInput: $("sshHostInput"),
+  sshPortInput: $("sshPortInput"),
+  sshUserInput: $("sshUserInput"),
+  sshPasswordInput: $("sshPasswordInput"),
+  sshConnectButton: $("sshConnectButton"),
+  sshDisconnectButton: $("sshDisconnectButton"),
+  sshCommandInput: $("sshCommandInput"),
+  sshSendCommandButton: $("sshSendCommandButton"),
+  sshMonitorCommandInput: $("sshMonitorCommandInput"),
+  sshMonitorIntervalInput: $("sshMonitorIntervalInput"),
+  sshStartMonitorButton: $("sshStartMonitorButton"),
+  sshStopMonitorButton: $("sshStopMonitorButton"),
+  sshOutput: $("sshOutput"),
+  openResearchSettingsButton: $("openResearchSettingsButton"),
+  researchOpenAlexInput: $("researchOpenAlexInput"),
+  researchSemanticScholarInput: $("researchSemanticScholarInput"),
+  researchGithubInput: $("researchGithubInput"),
+  researchCrossrefMailtoInput: $("researchCrossrefMailtoInput"),
+  openAlexKeyHelp: $("openAlexKeyHelp"),
+  semanticScholarKeyHelp: $("semanticScholarKeyHelp"),
+  githubTokenHelp: $("githubTokenHelp"),
+  crossrefMailtoHelp: $("crossrefMailtoHelp"),
 };
 
 boot().catch((error) => {
@@ -623,6 +838,7 @@ async function boot() {
   await loadInitialData();
   await loadSessions();
   setupTerminalDataListener();
+  setupSshDataListener();
   setupUpdateStatusListener();
   updateSendButton();
 }
@@ -637,7 +853,15 @@ function configureMarkdown() {
 
 async function loadBrandIcon() {
   try {
-    const url = await window.deepx.getAssetUrl("deepx-assets/icon.png");
+    let url = null;
+    for (const asset of ["YR.png", "rainy-research-assets/icon.png", "deepx-assets/icon.png"]) {
+      try {
+        url = await window.deepx.getAssetUrl(asset);
+        break;
+      } catch {
+        url = null;
+      }
+    }
     if (url && el.brandIcon) {
       el.brandIcon.src = url;
     }
@@ -661,6 +885,8 @@ async function loadInitialData() {
   state.providers = providersPayload.providers || health.providers || [];
   state.settings = config.settings || {};
   state.configuredProviders = config.configuredProviders || {};
+  state.configuredResearchSources = config.configuredResearchSources || {};
+  state.configuredWebSearch = config.configuredWebSearch || {};
   normalizeLegacySettings();
   applySettingsToState();
   populateProviders();
@@ -670,6 +896,14 @@ async function loadInitialData() {
   renderPermissionMenu();
   renderEffortMenu();
   updateProviderStatus();
+  updateResearchSourceStatus();
+  renderResearchSources();
+  renderResearchResults();
+  renderPaperCard();
+  renderPaperGraph();
+  renderRepoAudit();
+  renderTrickScore();
+  renderIdeaResults();
   updateWorkspaceLabel();
   renderProjects();
   updateCacheStatus();
@@ -688,10 +922,16 @@ async function loadInitialData() {
 
 function normalizeLegacySettings() {
   if (state.settings.appearanceTheme === LEGACY_THEME_DARK) {
-    state.settings.appearanceTheme = "deepx-default";
+    state.settings.appearanceTheme = "rainy-research-default";
   }
   if (state.settings.appearanceTheme === LEGACY_THEME_LIGHT) {
-    state.settings.appearanceTheme = "deepx-light";
+    state.settings.appearanceTheme = "rainy-research-light";
+  }
+  if (state.settings.appearanceTheme === "deepx-default") {
+    state.settings.appearanceTheme = "rainy-research-default";
+  }
+  if (state.settings.appearanceTheme === "deepx-light") {
+    state.settings.appearanceTheme = "rainy-research-light";
   }
 }
 
@@ -713,6 +953,7 @@ function bindEvents() {
   el.sidebarToggleButton.addEventListener("click", toggleSidebar);
   el.sidebarResizeHandle.addEventListener("pointerdown", startSidebarResize);
   el.workspaceButton.addEventListener("click", selectWorkspace);
+  el.serverMonitorButton.addEventListener("click", toggleServerMonitorPanel);
   el.newSessionButton.addEventListener("click", newSession);
   el.addContextButton.addEventListener("click", addContextFiles);
   el.settingsButton.addEventListener("click", () => showSettings("general"));
@@ -775,9 +1016,21 @@ function bindEvents() {
   el.terminalToggleButton.addEventListener("click", () => toggleTerminal());
   el.terminalCloseButton.addEventListener("click", () => toggleTerminal(false));
   el.terminalRestartButton.addEventListener("click", restartTerminal);
+  el.sshConnectButton?.addEventListener("click", connectSsh);
+  el.sshDisconnectButton?.addEventListener("click", disconnectSsh);
+  el.sshSendCommandButton?.addEventListener("click", sendSshCommand);
+  el.sshCommandInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      sendSshCommand();
+    }
+  });
+  el.sshStartMonitorButton?.addEventListener("click", startSshMonitor);
+  el.sshStopMonitorButton?.addEventListener("click", stopSshMonitor);
   el.testButton.addEventListener("click", testConnection);
   el.saveButton.addEventListener("click", saveConfig);
   el.resetAppearanceButton.addEventListener("click", resetAppearance);
+  bindResearchEvents();
 
   [el.themeModeLight, el.themeModeDark, el.themeModeSystem].forEach((button) => {
     button.addEventListener("click", () => {
@@ -848,7 +1101,7 @@ async function api(path, options = {}) {
   }
   const baseUrl = state.core?.baseUrl;
   if (!baseUrl) {
-    throw new Error("DeepX core is not ready");
+    throw new Error(`${APP_BRAND} core is not ready`);
   }
   const response = await fetch(`${baseUrl}${path}`, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -897,6 +1150,14 @@ function applyLanguage(language) {
   updateContextLabels();
   updateCacheStatus();
   updateUpdateStatus();
+  updateResearchSourceStatus();
+  renderResearchSources();
+  renderResearchResults();
+  renderPaperCard();
+  renderPaperGraph();
+  renderRepoAudit();
+  renderTrickScore();
+  renderIdeaResults();
   renderProjects();
   renderSessions();
 }
@@ -1134,6 +1395,7 @@ function applySettingsToForm() {
   el.pointerCursorInput.checked = settings.pointerCursor !== false;
   setMotionMode(settings.motionMode || "system");
   updateApiKeyHelp();
+  updateResearchSourceStatus();
   updateWebSearchControls();
   updatePermissionButton();
   updateModelChips();
@@ -1396,6 +1658,19 @@ function updateWebSearchControls() {
   el.webSearchButton.setAttribute("aria-pressed", String(state.webSearchEnabled));
   el.webSearchOn.classList.toggle("active", state.webSearchEnabled);
   el.webSearchOff.classList.toggle("active", !state.webSearchEnabled);
+  const configured = state.configuredWebSearch || {};
+  const help = {
+    webBraveHelp: configured.brave,
+    webTavilyHelp: configured.tavily,
+    webSerperHelp: configured.serper,
+    webSearxngHelp: configured.searxng,
+  };
+  for (const [id, ok] of Object.entries(help)) {
+    const node = el[id];
+    if (!node) continue;
+    const base = t(id);
+    node.textContent = ok ? `${t("sourceConfigured")}; ${t("apiKeyOptional")}` : `${t("sourceMissing")}; ${base}`;
+  }
 }
 
 function updateModelChips() {
@@ -1416,11 +1691,655 @@ function updateContextLabels() {
 
 function updateProviderStatus() {
   const provider = currentProvider() || state.providers.find((item) => item.id === state.settings.providerId);
-  const providerLabel = provider?.displayName || provider?.id || "DeepX";
+  const providerLabel = provider?.displayName || provider?.id || APP_BRAND;
   const configured = state.configuredProviders[provider?.id || state.settings.providerId];
   el.providerStatus.textContent = configured
     ? t("statusConfigured", { provider: providerLabel })
     : t("statusMissingKey", { provider: providerLabel });
+}
+
+function showResearchTab(tab) {
+  state.research.tab = tab;
+  document.querySelectorAll("[data-research-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.researchTab === tab);
+  });
+  document.querySelectorAll("[data-research-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.researchPanel === tab);
+  });
+}
+
+function updateResearchSourceStatus() {
+  const configured = state.configuredResearchSources || {};
+  const provider = currentProvider() || state.providers.find((item) => item.id === state.settings.providerId);
+  const providerId = provider?.id || state.settings.providerId;
+  const aiConfigured = !!state.configuredProviders[providerId];
+  const sources = [
+    ["ai", t("aiAnalysis"), aiConfigured],
+    ["openalex", "开放论文库", !!configured.openalex],
+    ["semanticScholar", "语义学术库", !!configured.semanticScholar],
+    ["github", "代码仓库", !!configured.github],
+    ["crossref", "DOI 元数据", !!configured.crossref],
+  ];
+  if (el.researchSourceStatus) {
+    el.researchSourceStatus.innerHTML = "";
+    for (const [, label, ok] of sources) {
+      const pill = document.createElement("span");
+      pill.className = `status-pill ${ok ? "ok" : "warn"}`;
+      pill.textContent = `${label}: ${ok ? t("sourceConfigured") : t("sourceMissing")}`;
+      el.researchSourceStatus.appendChild(pill);
+    }
+  }
+  const help = {
+    openAlexKeyHelp: configured.openalex,
+    semanticScholarKeyHelp: configured.semanticScholar,
+    githubTokenHelp: configured.github,
+    crossrefMailtoHelp: configured.crossref,
+  };
+  for (const [id, ok] of Object.entries(help)) {
+    if (el[id]) {
+      el[id].textContent = ok ? `${t("sourceConfigured")}; ${t("apiKeyOptional")}` : `${t("sourceMissing")}; ${t("localOnlyOk")}`;
+    }
+  }
+}
+
+function sourceDisplayName(source) {
+  const key = String(source || "").toLowerCase().replace(/[\s-]+/g, "_");
+  const labels = {
+    ai: t("aiAnalysis"),
+    llm: t("aiAnalysis"),
+    local: "本地索引",
+    local_index: "本地索引",
+    arxiv: "arXiv 预印本",
+    crossref: "DOI 元数据",
+    openalex: "开放论文库",
+    semantic_scholar: "语义学术库",
+    semantic: "语义学术库",
+    github: "代码仓库",
+    github_search: "代码仓库",
+  };
+  return labels[key] || source || "来源";
+}
+
+function riskLabel(level) {
+  const normalized = String(level || "").toLowerCase();
+  if (normalized.includes("high")) return t("riskHigh");
+  if (normalized.includes("medium")) return t("riskMedium");
+  if (normalized.includes("low")) return t("riskLow");
+  return t("riskUnknown");
+}
+
+function riskMetricLabel(label) {
+  const labels = {
+    code: "代码完整度",
+    protocol: "实验协议",
+    result: "结果证据",
+    novelty: "创新风险",
+    community: "社区信号",
+    repo: "仓库可信度",
+    runtime: "运行环境",
+  };
+  return labels[label] || label;
+}
+
+function renderResearchSources() {
+  if (!el.researchSourcesList) return;
+  el.researchSourcesList.innerHTML = "";
+  const sources = state.research.sources || [];
+  if (!sources.length) return;
+  const provider = currentProvider() || state.providers.find((item) => item.id === state.settings.providerId);
+  const providerId = provider?.id || state.settings.providerId;
+  const aiConfigured = !!state.configuredProviders[providerId];
+  const displayedSources = [
+    {
+      source: "ai",
+      ok: aiConfigured,
+      fetched: state.research.results?.length || 0,
+      degraded: !aiConfigured,
+      message: aiConfigured ? "已启用 AI 分析" : "未配置模型密钥，AI 分析会降级",
+    },
+    ...sources,
+  ];
+  for (const source of displayedSources) {
+    const pill = document.createElement("span");
+    pill.className = `source-pill ${source.ok ? "ok" : "degraded"}`;
+    pill.title = source.message || "";
+    pill.textContent = `${sourceDisplayName(source.source)} ${source.fetched ?? 0}${source.degraded ? "（降级）" : ""}`;
+    el.researchSourcesList.appendChild(pill);
+  }
+}
+
+async function searchResearch() {
+  const query = el.researchQueryInput?.value.trim() || "";
+  if (!query) {
+    el.researchQueryInput?.focus();
+    return;
+  }
+  state.research.query = query;
+  el.researchSearchButton.disabled = true;
+  el.researchSearchStatus.textContent = t("researchSearching");
+  try {
+    const payload = await api("/research/search", {
+      method: "POST",
+      body: JSON.stringify({ query, maxResults: 12, useLlm: true }),
+    });
+    state.research.results = payload.results || [];
+    state.research.sources = payload.sources || [];
+    state.research.selected = state.research.results[0] || null;
+    state.research.graph = null;
+    state.research.audit = null;
+    state.research.risk = null;
+    state.research.ideas = [];
+    el.researchSearchStatus.textContent = t("researchSearchDone", { count: state.research.results.length });
+    renderResearchSources();
+    renderResearchResults();
+    renderPaperCard();
+    renderRepoAudit();
+    renderTrickScore();
+    renderIdeaResults();
+    const firstRepo = state.research.selected?.repoCandidates?.[0]?.url || "";
+    if (firstRepo && el.repoAuditInput) el.repoAuditInput.value = firstRepo;
+    if (state.research.selected?.paper?.id) {
+      void loadPaperGraph(state.research.selected.paper.id);
+    }
+  } catch (error) {
+    el.researchSearchStatus.textContent = `${t("researchSearchFailed")}: ${error.message || error}`;
+    toast(`${t("researchSearchFailed")}: ${error.message || error}`, true);
+  } finally {
+    el.researchSearchButton.disabled = false;
+  }
+}
+
+function renderResearchResults() {
+  if (!el.researchResults) return;
+  el.researchResults.innerHTML = "";
+  const results = state.research.results || [];
+  if (!results.length) {
+    const empty = document.createElement("div");
+    empty.className = "paper-card-empty";
+    empty.textContent = t("noResearchResults");
+    el.researchResults.appendChild(empty);
+    return;
+  }
+  results.forEach((result, index) => {
+    const paper = result.paper || {};
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `paper-result${state.research.selected === result ? " active" : ""}`;
+    button.addEventListener("click", () => selectResearchResult(index));
+
+    const title = document.createElement("div");
+    title.className = "paper-result-title";
+    title.textContent = paper.title || "未命名论文";
+
+    const meta = document.createElement("div");
+    meta.className = "paper-result-meta";
+    meta.textContent = [paper.year, paper.venue, (paper.authors || []).slice(0, 3).join(", ")].filter(Boolean).join(" / ");
+
+    const summary = document.createElement("div");
+    summary.className = "paper-result-summary";
+    summary.textContent = result.llmExplanation || truncateText(paper.abstract || paper.abstractText || "", 220);
+
+    const chips = document.createElement("div");
+    chips.className = "paper-result-chips";
+    chips.appendChild(paperChip(t("aiAnalysis")));
+    for (const source of result.sources || []) chips.appendChild(paperChip(sourceDisplayName(source)));
+    chips.appendChild(paperChip(`相关度 ${formatPercent(result.scores?.relevance)}`));
+    chips.appendChild(paperChip(`${riskLabel(result.riskPreview?.level)} ${formatScore(result.riskPreview?.score)}`, riskClass(result.riskPreview?.level)));
+    if (result.repoCandidates?.length) chips.appendChild(paperChip(`代码 ${result.repoCandidates.length}`));
+
+    button.append(title, meta, summary, chips);
+    el.researchResults.appendChild(button);
+  });
+}
+
+function selectResearchResult(index) {
+  const result = state.research.results[index];
+  if (!result) return;
+  state.research.selected = result;
+  state.research.graph = null;
+  state.research.audit = null;
+  state.research.risk = null;
+  renderResearchResults();
+  renderPaperCard();
+  renderPaperGraph();
+  renderRepoAudit();
+  renderTrickScore();
+  const firstRepo = result.repoCandidates?.[0]?.url || "";
+  if (firstRepo && el.repoAuditInput) el.repoAuditInput.value = firstRepo;
+  showResearchTab("card");
+  el.researchSearchStatus.textContent = t("selectedPaperStatus", { title: truncateText(result.paper?.title || "", 80) });
+  if (result.paper?.id) {
+    void loadPaperGraph(result.paper.id);
+  }
+}
+
+function renderPaperCard() {
+  if (!el.paperCardPanel) return;
+  const selected = state.research.selected;
+  el.paperCardPanel.innerHTML = "";
+  el.paperCardPanel.className = selected ? "paper-card" : "paper-card-empty";
+  el.paperEvidencePanel.innerHTML = "";
+  if (!selected) {
+    el.paperCardPanel.textContent = t("paperCardEmpty");
+    return;
+  }
+  const paper = selected.paper || {};
+  const title = document.createElement("h3");
+  title.textContent = paper.title || "未命名论文";
+  const meta = document.createElement("div");
+  meta.className = "paper-card-meta";
+  meta.textContent = [
+    paper.year,
+    paper.venue,
+    (paper.authors || []).slice(0, 6).join(", "),
+    paper.doi ? `DOI ${paper.doi}` : "",
+    paper.arxivId ? `arXiv ${paper.arxivId}` : "",
+  ].filter(Boolean).join(" / ");
+  const explanation = document.createElement("p");
+  explanation.textContent = selected.llmExplanation || "";
+  const abstract = document.createElement("p");
+  abstract.textContent = truncateText(paper.abstract || paper.abstractText || "", 900);
+  const chips = document.createElement("div");
+  chips.className = "paper-card-chips";
+  chips.appendChild(paperChip(t("aiAnalysis")));
+  for (const source of selected.sources || []) chips.appendChild(paperChip(sourceDisplayName(source)));
+  chips.appendChild(paperChip(`引用 ${paper.citationCount ?? 0}`));
+  chips.appendChild(paperChip(`复现价值 ${formatPercent(selected.scores?.reproValue)}`));
+  chips.appendChild(paperChip(`${riskLabel(selected.riskPreview?.level)} ${formatScore(selected.riskPreview?.score)}`, riskClass(selected.riskPreview?.level)));
+  el.paperCardPanel.append(title, meta, chips, explanation, abstract);
+
+  const evidence = [
+    ...(selected.dedupEvidence || []),
+    ...(selected.riskPreview?.evidence || []),
+    ...(selected.repoCandidates || []).flatMap((repo) => repo.evidence || []),
+  ];
+  renderEvidenceList(el.paperEvidencePanel, evidence, selected.repoCandidates || []);
+}
+
+function renderEvidenceList(container, evidence, repos = []) {
+  if (!container) return;
+  container.innerHTML = "";
+  for (const repo of repos.slice(0, 4)) {
+    const item = document.createElement("div");
+    item.className = "evidence-item";
+    item.textContent = `${repo.url} / 官方匹配 ${formatScore(repo.officialScore)}`;
+    container.appendChild(item);
+  }
+  for (const line of evidence.slice(0, 12)) {
+    const item = document.createElement("div");
+    item.className = "evidence-item";
+    item.textContent = line;
+    container.appendChild(item);
+  }
+}
+
+async function loadPaperGraph(paperId) {
+  if (!paperId) return;
+  el.paperGraphCanvas.textContent = t("graphLoading");
+  try {
+    const graph = await api(`/research/papers/${encodeURIComponent(paperId)}/graph`);
+    state.research.graph = graph;
+    renderPaperGraph();
+  } catch (error) {
+    state.research.graph = { nodes: [], edges: [], error: error.message || String(error) };
+    renderPaperGraph();
+  }
+}
+
+function renderPaperGraph() {
+  if (!el.paperGraphCanvas) return;
+  el.paperGraphCanvas.innerHTML = "";
+  const graph = state.research.graph;
+  if (!graph) {
+    el.paperGraphCanvas.textContent = state.research.selected ? t("graphLoading") : t("graphEmpty");
+    return;
+  }
+  if (graph.error) {
+    el.paperGraphCanvas.textContent = graph.error;
+    return;
+  }
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  if (!nodes.length) {
+    el.paperGraphCanvas.textContent = t("graphEmpty");
+    return;
+  }
+  el.paperGraphCanvas.appendChild(graphSvg(nodes, edges));
+  for (const edge of edges.slice(0, 16)) {
+    const row = document.createElement("div");
+    row.className = "graph-node-row";
+    const kind = document.createElement("span");
+    kind.className = "graph-node-type";
+    kind.textContent = edgeTypeLabel(edge.edgeType);
+    const detail = document.createElement("strong");
+    detail.textContent = `${nodeLabel(nodes, edge.source)} -> ${nodeLabel(nodes, edge.target)}: ${edge.evidence || ""}`;
+    row.append(kind, detail);
+    el.paperGraphCanvas.appendChild(row);
+  }
+}
+
+function graphSvg(nodes, edges) {
+  const width = 720;
+  const height = 360;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "论文关系图");
+  svg.style.width = "100%";
+  svg.style.minHeight = "280px";
+  svg.style.border = "1px solid var(--border)";
+  svg.style.borderRadius = "8px";
+  svg.style.background = "var(--surface-0)";
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) * 0.34;
+  const positions = new Map();
+  nodes.slice(0, 18).forEach((node, index) => {
+    if (index === 0 || node.nodeType === "Paper") {
+      positions.set(node.id, index === 0 ? [cx, cy] : pointOnCircle(cx, cy, radius, index, nodes.length));
+    } else {
+      positions.set(node.id, pointOnCircle(cx, cy, radius, index, nodes.length));
+    }
+  });
+  for (const edge of edges.slice(0, 28)) {
+    const from = positions.get(edge.source);
+    const to = positions.get(edge.target);
+    if (!from || !to) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", from[0]);
+    line.setAttribute("y1", from[1]);
+    line.setAttribute("x2", to[0]);
+    line.setAttribute("y2", to[1]);
+    line.setAttribute("stroke", "var(--border-strong)");
+    line.setAttribute("stroke-width", String(Math.max(1, Number(edge.confidence || 0.4) * 2.5)));
+    svg.appendChild(line);
+  }
+  for (const node of nodes.slice(0, 18)) {
+    const [x, y] = positions.get(node.id) || [cx, cy];
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    const isPaper = node.nodeType === "Paper";
+    circle.setAttribute("cx", x);
+    circle.setAttribute("cy", y);
+    circle.setAttribute("r", isPaper ? "22" : "17");
+    circle.setAttribute("fill", isPaper ? "var(--accent)" : "var(--surface-2)");
+    circle.setAttribute("stroke", "var(--muted-strong)");
+    circle.setAttribute("stroke-width", "1.2");
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("x", x);
+    text.setAttribute("y", y + (isPaper ? 38 : 31));
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("fill", "var(--app-fg)");
+    text.setAttribute("font-size", "11");
+    text.textContent = truncateText(node.label || node.id, 28);
+    group.append(circle, text);
+    svg.appendChild(group);
+  }
+  return svg;
+}
+
+function pointOnCircle(cx, cy, radius, index, total) {
+  const angle = (Math.PI * 2 * index) / Math.max(2, total) - Math.PI / 2;
+  return [cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius];
+}
+
+function nodeLabel(nodes, id) {
+  return nodes.find((node) => node.id === id)?.label || id;
+}
+
+function edgeTypeLabel(type) {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized.includes("citation")) return "引用";
+  if (normalized.includes("code")) return "代码";
+  if (normalized.includes("dataset")) return "数据集";
+  if (normalized.includes("method")) return "方法";
+  if (normalized.includes("module")) return "模块";
+  if (normalized.includes("similar")) return "相似";
+  return "关系";
+}
+
+async function auditSelectedRepo() {
+  const raw = el.repoAuditInput?.value.trim() || state.research.selected?.repoCandidates?.[0]?.url || "";
+  if (!raw) {
+    el.repoAuditInput?.focus();
+    return;
+  }
+  el.repoAuditButton.disabled = true;
+  el.repoAuditStatus.textContent = t("auditRunning");
+  try {
+    const body = /^https?:\/\//i.test(raw)
+      ? { repoUrl: raw, paperId: state.research.selected?.paper?.id }
+      : { localPath: raw, paperId: state.research.selected?.paper?.id };
+    const payload = await api("/research/repos/audit", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    state.research.audit = payload.audit || null;
+    state.research.risk = null;
+    el.repoAuditStatus.textContent = t("auditDone");
+    renderRepoAudit();
+    renderTrickScore();
+    showResearchTab("audit");
+  } catch (error) {
+    el.repoAuditStatus.textContent = `${t("auditFailed")}: ${error.message || error}`;
+    toast(`${t("auditFailed")}: ${error.message || error}`, true);
+  } finally {
+    el.repoAuditButton.disabled = false;
+  }
+}
+
+function renderRepoAudit() {
+  if (!el.repoAuditReport) return;
+  el.repoAuditReport.innerHTML = "";
+  const audit = state.research.audit;
+  if (!audit) return;
+  const sections = [
+    ["仓库", [`${audit.owner || ""}/${audit.name || ""}`, audit.repoUrl || ""], []],
+    ["评分", [
+      `官方匹配 ${formatScore(audit.officialnessScore)}`,
+      `代码完整度 ${formatScore(audit.codeCompletenessScore)}`,
+      `复现可行性 ${formatScore(audit.reproducibilityScore)}`,
+      audit.minimumRunCommand ? `最小运行命令: ${audit.minimumRunCommand}` : "",
+    ], []],
+    ["缺失项", audit.missingPieces || [], []],
+    ["可能失败点", audit.likelyFailurePoints || [], []],
+    ["建议修复", audit.recommendedFixes || [], []],
+    ["证据", audit.evidence || [], []],
+    ["已检查文件", (audit.filesSeen || []).slice(0, 18), []],
+    ["问题信号", audit.issueSignals || [], []],
+  ];
+  for (const [title, lines] of sections) {
+    if (!lines.filter(Boolean).length) continue;
+    el.repoAuditReport.appendChild(renderSection(title, lines));
+  }
+}
+
+async function runTrickScore() {
+  const repoUrl = el.repoAuditInput?.value.trim() || state.research.selected?.repoCandidates?.[0]?.url || "";
+  el.trickScoreButton.disabled = true;
+  el.repoAuditStatus.textContent = t("riskRunning");
+  try {
+    const payload = await api("/research/trick-score", {
+      method: "POST",
+      body: JSON.stringify({
+        paperId: state.research.selected?.paper?.id,
+        repoUrl: state.research.audit ? undefined : repoUrl || undefined,
+        audit: state.research.audit || undefined,
+      }),
+    });
+    state.research.risk = payload.risk || null;
+    if (payload.audit) state.research.audit = payload.audit;
+    el.repoAuditStatus.textContent = t("riskDone");
+    renderRepoAudit();
+    renderTrickScore();
+    showResearchTab("audit");
+  } catch (error) {
+    toast(`${t("streamError")}: ${error.message || error}`, true);
+  } finally {
+    el.trickScoreButton.disabled = false;
+  }
+}
+
+function renderTrickScore() {
+  if (!el.trickScoreReport) return;
+  el.trickScoreReport.innerHTML = "";
+  const risk = state.research.risk;
+  if (!risk) return;
+  const box = document.createElement("div");
+  box.className = "risk-report-inner";
+  const title = document.createElement("h3");
+  title.textContent = `${riskLabel(risk.riskLevel)} / ${formatScore(risk.trickScore)}`;
+  const meaning = document.createElement("small");
+  meaning.textContent = risk.meaning || "";
+  const meter = document.createElement("div");
+  meter.className = "risk-meter";
+  const fill = document.createElement("span");
+  fill.style.width = `${Math.max(0, Math.min(100, Number(risk.trickScore || 0)))}%`;
+  meter.appendChild(fill);
+  box.append(title, meaning, meter);
+  for (const [label, value] of [
+    ["code", risk.codeRisk],
+    ["protocol", risk.protocolRisk],
+    ["result", risk.resultRisk],
+    ["novelty", risk.noveltyRisk],
+    ["community", risk.communityRisk],
+    ["repo", risk.repoRisk],
+    ["runtime", risk.runtimeRisk],
+  ]) {
+    const row = document.createElement("div");
+    row.className = "risk-row";
+    const name = document.createElement("small");
+    name.textContent = riskMetricLabel(label);
+    const score = document.createElement("strong");
+    score.textContent = formatScore(value);
+    row.append(name, score);
+    box.appendChild(row);
+  }
+  const evidenceBox = document.createElement("div");
+  evidenceBox.className = "evidence-drawer";
+  renderEvidenceList(evidenceBox, risk.evidence || []);
+  box.appendChild(evidenceBox);
+  el.trickScoreReport.appendChild(box);
+}
+
+async function generateIdeas() {
+  el.ideaForgeButton.disabled = true;
+  el.ideaForgeStatus.textContent = t("ideaRunning");
+  try {
+    const payload = await api("/research/ideas", {
+      method: "POST",
+      body: JSON.stringify({
+        targetField: el.ideaFieldInput?.value.trim() || undefined,
+        currentMethod: el.ideaMethodInput?.value.trim() || undefined,
+        targetVenue: el.ideaVenueInput?.value.trim() || undefined,
+        painPoints: el.ideaPainInput?.value.trim() || undefined,
+        constraints: el.ideaConstraintsInput?.value.trim() || undefined,
+        targetPaperId: state.research.selected?.paper?.id,
+      }),
+    });
+    state.research.ideas = payload.ideas || [];
+    el.ideaForgeStatus.textContent = t("ideaDone");
+    renderIdeaResults();
+  } catch (error) {
+    toast(`${t("streamError")}: ${error.message || error}`, true);
+  } finally {
+    el.ideaForgeButton.disabled = false;
+  }
+}
+
+function renderIdeaResults() {
+  if (!el.ideaForgeResults) return;
+  el.ideaForgeResults.innerHTML = "";
+  for (const idea of state.research.ideas || []) {
+    const card = document.createElement("article");
+    card.className = "idea-card";
+    const title = document.createElement("h3");
+    title.textContent = idea.ideaName || "Research idea";
+    const motivation = document.createElement("p");
+    motivation.textContent = idea.coreMotivation || "";
+    const meta = document.createElement("small");
+    meta.textContent = `confidence ${formatPercent(idea.confidence)} / risk ${idea.reviewerRisk || "unknown"} / gain ${idea.expectedGain || "unknown"}`;
+    const steps = renderSection("Implementation steps", idea.implementationSteps || []);
+    const ablation = renderSection("Ablation plan", idea.ablationPlan || []);
+    const prompt = document.createElement("pre");
+    prompt.textContent = idea.codexPrompt || "";
+    card.append(title, meta, motivation, steps, ablation, prompt);
+    el.ideaForgeResults.appendChild(card);
+  }
+}
+
+async function exportResearchReport() {
+  const payload = {
+    query: state.research.query,
+    selectedPaper: state.research.selected,
+    graph: state.research.graph,
+    audit: state.research.audit,
+    risk: state.research.risk,
+    ideas: state.research.ideas,
+  };
+  try {
+    const result = await api("/research/reports/export", {
+      method: "POST",
+      body: JSON.stringify({
+        title: state.research.selected?.paper?.title || "RainyReSearch Report",
+        kind: "rainy-research",
+        payload,
+      }),
+    });
+    state.research.exportedReportPath = result.path || null;
+    toast(t("reportExported", { path: result.path || "" }));
+  } catch (error) {
+    toast(`${t("streamError")}: ${error.message || error}`, true);
+  }
+}
+
+function renderSection(title, lines) {
+  const section = document.createElement("section");
+  section.className = "audit-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  section.appendChild(heading);
+  const list = document.createElement("ul");
+  list.className = "audit-list";
+  for (const line of (lines || []).filter(Boolean)) {
+    const item = document.createElement("li");
+    item.textContent = line;
+    list.appendChild(item);
+  }
+  section.appendChild(list);
+  return section;
+}
+
+function paperChip(text, extraClass = "") {
+  const chip = document.createElement("span");
+  chip.className = `paper-chip ${extraClass}`.trim();
+  chip.textContent = String(text || "");
+  return chip;
+}
+
+function riskClass(level) {
+  const normalized = String(level || "").toLowerCase();
+  if (normalized.includes("high")) return "risk-high";
+  if (normalized.includes("medium")) return "risk-medium";
+  if (normalized.includes("low")) return "risk-low";
+  return "";
+}
+
+function formatScore(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(Math.round(number)) : "0";
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0%";
+  return `${Math.round(number <= 1 ? number * 100 : number)}%`;
+}
+
+function truncateText(value, maxLength) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  if (raw.length <= maxLength) return raw;
+  return `${raw.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
 }
 
 async function selectWorkspace() {
@@ -1439,6 +2358,29 @@ function updateWorkspaceLabel() {
   el.workspaceValue.textContent = basename(state.workspace);
   el.workspaceValue.title = state.workspace;
   renderWorkspaceSetupState();
+}
+
+function bindResearchEvents() {
+  el.researchSearchButton?.addEventListener("click", searchResearch);
+  el.researchQueryInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchResearch();
+    }
+  });
+  document.querySelectorAll("[data-research-tab]").forEach((button) => {
+    button.addEventListener("click", () => showResearchTab(button.dataset.researchTab || "card"));
+  });
+  el.reloadGraphButton?.addEventListener("click", () => {
+    if (state.research.selected?.paper?.id) {
+      loadPaperGraph(state.research.selected.paper.id);
+    }
+  });
+  el.repoAuditButton?.addEventListener("click", auditSelectedRepo);
+  el.trickScoreButton?.addEventListener("click", runTrickScore);
+  el.exportReportButton?.addEventListener("click", exportResearchReport);
+  el.ideaForgeButton?.addEventListener("click", generateIdeas);
+  el.openResearchSettingsButton?.addEventListener("click", () => showSettings("research"));
 }
 
 function resetWorkspaceSetupState() {
@@ -1705,6 +2647,8 @@ async function saveProjectSelection(projectPath, message) {
     };
     const response = await api("/config", { method: "POST", body: JSON.stringify(payload) });
     state.settings = response.settings || state.settings;
+    state.configuredResearchSources = response.configuredResearchSources || state.configuredResearchSources;
+    state.configuredWebSearch = response.configuredWebSearch || state.configuredWebSearch;
     state.workspace = state.settings.workspacePath || projectPath;
     state.projects = normalizeProjects(state.settings.workspaceHistory || state.projects, state.workspace);
     updateWorkspaceLabel();
@@ -1983,7 +2927,7 @@ async function buildMessageWithAttachments(message, attachments) {
     ].filter(Boolean).join("\n");
   });
   const prompt = message || (state.language === "zh-CN" ? "\u8bf7\u6839\u636e\u9644\u4ef6\u5185\u5bb9\u8fdb\u884c\u5206\u6790\u3002" : "Please analyze the attached file content.");
-  return `${prompt}\n\n[DeepX \u9644\u4ef6\u4e0a\u4e0b\u6587]\n${fileBlocks.join("\n\n---\n\n")}`;
+  return `${prompt}\n\n[RainyReSearch \u9644\u4ef6\u4e0a\u4e0b\u6587]\n${fileBlocks.join("\n\n---\n\n")}`;
 }
 
 function formatUserMessageWithAttachments(message, attachments) {
@@ -2001,7 +2945,8 @@ async function buildWebContext(query) {
     }),
   });
   const lines = (payload.results || []).map((item, index) => {
-    return `${index + 1}. ${item.title}\nURL: ${item.url}\nSnippet: ${item.snippet}`;
+    const source = item.source || payload.provider || "web";
+    return `${index + 1}. ${item.title}\nSource: ${source}\nURL: ${item.url}\nSnippet: ${item.snippet}`;
   });
   return lines.length ? lines.join("\n\n") : null;
 }
@@ -2389,6 +3334,10 @@ function chatSettingsPayload() {
     temperature: numberValue(el.temperatureInput, 0.2),
     webSearchEnabled: state.webSearchEnabled,
     webSearchMaxResults: numberValue(el.webSearchMaxResultsInput, 5),
+    webBraveApiKey: el.webBraveInput?.value ? el.webBraveInput.value : undefined,
+    webTavilyApiKey: el.webTavilyInput?.value ? el.webTavilyInput.value : undefined,
+    webSerperApiKey: el.webSerperInput?.value ? el.webSerperInput.value : undefined,
+    webSearxngUrl: el.webSearxngInput?.value ? el.webSearxngInput.value : undefined,
     permissionMode: state.permissionMode,
   };
 }
@@ -2435,6 +3384,10 @@ function formPayload() {
     workspaceHistory: normalizeProjects(state.projects, state.workspace),
     sidebarWidth: state.sidebarWidth,
     sidebarCollapsed: state.sidebarCollapsed,
+    researchOpenalexApiKey: el.researchOpenAlexInput?.value ? el.researchOpenAlexInput.value : undefined,
+    researchSemanticScholarApiKey: el.researchSemanticScholarInput?.value ? el.researchSemanticScholarInput.value : undefined,
+    researchGithubToken: el.researchGithubInput?.value ? el.researchGithubInput.value : undefined,
+    researchCrossrefMailto: el.researchCrossrefMailtoInput?.value ? el.researchCrossrefMailtoInput.value : undefined,
   };
 }
 
@@ -2453,12 +3406,34 @@ async function saveConfig() {
       el.apiKeyInput.value = "";
       toast(t("apiKeySaved"));
     }
+    const researchSaved = [
+      ["openalex", "researchOpenalexApiKey", el.researchOpenAlexInput],
+      ["semanticScholar", "researchSemanticScholarApiKey", el.researchSemanticScholarInput],
+      ["github", "researchGithubToken", el.researchGithubInput],
+      ["crossref", "researchCrossrefMailto", el.researchCrossrefMailtoInput],
+    ].filter(([, key]) => payload[key]);
+    for (const [source, , input] of researchSaved) {
+      state.configuredResearchSources[source] = true;
+      if (input) input.value = "";
+    }
+    const webSaved = [
+      ["brave", "webBraveApiKey", el.webBraveInput],
+      ["tavily", "webTavilyApiKey", el.webTavilyInput],
+      ["serper", "webSerperApiKey", el.webSerperInput],
+      ["searxng", "webSearxngUrl", el.webSearxngInput],
+    ].filter(([, key]) => payload[key]);
+    for (const [source, , input] of webSaved) {
+      state.configuredWebSearch[source] = true;
+      if (input) input.value = "";
+    }
     applySettingsToState();
     applySettingsToForm();
     renderProjects();
     renderSessions();
     updateProviderStatus();
     updateApiKeyHelp();
+    updateWebSearchControls();
+    updateResearchSourceStatus();
     el.saveButton.textContent = t("saved");
     el.saveButton.classList.add("saved");
     setTimeout(() => {
@@ -2502,6 +3477,7 @@ const SETTINGS_SECTION_COPY = {
   models: ["modelAccess", "modelAccessHelp"],
   appearance: ["appearance", "appearanceHelp"],
   web: ["webSearch", "webSearchHelp"],
+  research: ["researchSources", "researchSourcesHelp"],
   cache: ["cache", "cacheHelp"],
   portable: ["portable", "portableHelp"],
 };
@@ -2641,7 +3617,7 @@ function applyPresetToForm() {
 }
 
 function resetAppearance() {
-  el.themePresetSelect.value = "deepx-default";
+  el.themePresetSelect.value = "rainy-research-default";
   setMotionMode("system");
   applyPresetToForm();
 }
@@ -2657,11 +3633,11 @@ function applyThemeModeDefaults(mode) {
   const normalized = ["light", "dark", "system"].includes(mode) ? mode : "dark";
   const dark = normalized === "dark" || (normalized === "system" && window.matchMedia?.("(prefers-color-scheme: dark)")?.matches);
   if (dark) {
-    el.themePresetSelect.value = "deepx-default";
+    el.themePresetSelect.value = "rainy-research-default";
     el.foregroundColorInput.value = "#FCFCFC";
     el.contrastInput.value = 60;
   } else {
-    el.themePresetSelect.value = "deepx-light";
+    el.themePresetSelect.value = "rainy-research-light";
     el.foregroundColorInput.value = "#0D0D0D";
     el.contrastInput.value = 45;
   }
@@ -2882,6 +3858,96 @@ function setupTerminalDataListener() {
   state.terminalDataListenerReady = true;
 }
 
+function setupSshDataListener() {
+  if (state.sshDataListenerReady || !window.deepx?.onSshData) return;
+  state.sshDataDispose = window.deepx.onSshData((payload) => {
+    if (payload?.id && state.ssh.id && payload.id !== state.ssh.id) return;
+    appendSshOutput(payload?.text || "");
+  });
+  state.sshDataListenerReady = true;
+}
+
+function toggleServerMonitorPanel() {
+  el.serverMonitorPanel?.classList.toggle("hidden");
+  el.serverMonitorPanel?.scrollIntoView({ block: "nearest" });
+}
+
+function appendSshOutput(text) {
+  if (!el.sshOutput || !text) return;
+  el.sshOutput.textContent += text;
+  const maxLength = 80_000;
+  if (el.sshOutput.textContent.length > maxLength) {
+    el.sshOutput.textContent = el.sshOutput.textContent.slice(-maxLength);
+  }
+  el.sshOutput.scrollTop = el.sshOutput.scrollHeight;
+}
+
+async function connectSsh() {
+  el.serverMonitorPanel?.classList.remove("hidden");
+  el.sshConnectButton.disabled = true;
+  try {
+    const result = await window.deepx.sshConnect({
+      host: el.sshHostInput.value.trim(),
+      port: numberValue(el.sshPortInput, 22),
+      username: el.sshUserInput.value.trim(),
+      password: el.sshPasswordInput.value,
+    });
+    state.ssh.id = result.id;
+    state.ssh.connected = true;
+    el.sshPasswordInput.value = "";
+    appendSshOutput(`[本地] 已连接 ${result.username}@${result.host}:${result.port}\n`);
+  } catch (error) {
+    appendSshOutput(`[本地] SSH 连接失败: ${error.message || error}\n`);
+    toast(`SSH 连接失败: ${error.message || error}`, true);
+  } finally {
+    el.sshConnectButton.disabled = false;
+  }
+}
+
+async function disconnectSsh() {
+  if (!state.ssh.id) return;
+  await window.deepx.sshDisconnect(state.ssh.id).catch(() => {});
+  appendSshOutput("[本地] SSH 已断开\n");
+  state.ssh.id = null;
+  state.ssh.connected = false;
+  state.ssh.monitorRunning = false;
+}
+
+async function sendSshCommand() {
+  const command = el.sshCommandInput.value.trim();
+  if (!command || !state.ssh.id) return;
+  el.sshCommandInput.value = "";
+  appendSshOutput(`\n$ ${command}\n`);
+  try {
+    await window.deepx.sshWrite({ id: state.ssh.id, data: `${command}\n` });
+  } catch (error) {
+    appendSshOutput(`[本地] 命令发送失败: ${error.message || error}\n`);
+  }
+}
+
+async function startSshMonitor() {
+  const command = el.sshMonitorCommandInput.value.trim();
+  if (!command || !state.ssh.id) return;
+  try {
+    const result = await window.deepx.sshMonitorStart({
+      id: state.ssh.id,
+      command,
+      intervalMinutes: numberValue(el.sshMonitorIntervalInput, 60),
+    });
+    state.ssh.monitorRunning = true;
+    appendSshOutput(`[本地] 已开始每 ${result.intervalMinutes} 分钟巡检: ${command}\n`);
+  } catch (error) {
+    appendSshOutput(`[本地] 启动巡检失败: ${error.message || error}\n`);
+  }
+}
+
+async function stopSshMonitor() {
+  if (!state.ssh.id) return;
+  await window.deepx.sshMonitorStop(state.ssh.id).catch(() => {});
+  state.ssh.monitorRunning = false;
+  appendSshOutput("[本地] 已停止巡检\n");
+}
+
 async function restartTerminal() {
   await stopTerminal(false);
   if (state.terminal) {
@@ -2933,9 +3999,9 @@ function normalizePermissionMode(mode) {
 }
 
 function normalizeTheme(theme) {
-  if (theme === LEGACY_THEME_DARK) return "deepx-default";
-  if (theme === LEGACY_THEME_LIGHT) return "deepx-light";
-  return THEME_PRESETS.some((item) => item.id === theme) ? theme : "deepx-default";
+  if (theme === LEGACY_THEME_DARK || theme === "deepx-default") return "rainy-research-default";
+  if (theme === LEGACY_THEME_LIGHT || theme === "deepx-light") return "rainy-research-light";
+  return THEME_PRESETS.some((item) => item.id === theme) ? theme : "rainy-research-default";
 }
 
 function normalizeDensity(density) {

@@ -1,9 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$PackageJson = Get-Content -Raw -LiteralPath (Join-Path $Root "package.json") | ConvertFrom-Json
+$AppVersion = [string]$PackageJson.version
 $Dist = Join-Path $Root "dist"
-$Out = Join-Path $Dist "DeepX-portable"
-$Zip = Join-Path $Dist "DeepX-portable.zip"
+$Out = Join-Path $Dist "RainyReSearch-portable"
+$Zip = Join-Path $Dist "RainyReSearch-portable-v$AppVersion.zip"
 
 if (Test-Path $Out) {
   $resolved = (Resolve-Path $Out).Path
@@ -15,7 +17,7 @@ if (Test-Path $Out) {
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
 $topFiles = @(
-  "DeepX.exe",
+  "RainyReSearch.exe",
   "chrome_100_percent.pak",
   "chrome_200_percent.pak",
   "d3dcompiler_47.dll",
@@ -60,8 +62,8 @@ $nativeNodes = @(Get-ChildItem -LiteralPath $unpacked -Recurse -Filter "*.node" 
 if ($nativeNodes.Count -eq 0) {
   throw "Portable output is missing unpacked native .node modules"
 }
-$iconPng = Join-Path $Out "resources\deepx-assets\icon.png"
-$iconIco = Join-Path $Out "resources\deepx-assets\icon.ico"
+$iconPng = Join-Path $Out "resources\rainy-research-assets\icon.png"
+$iconIco = Join-Path $Out "resources\rainy-research-assets\icon.ico"
 foreach ($icon in @($iconPng, $iconIco)) {
   if (!(Test-Path -LiteralPath $icon)) {
     throw "Portable output is missing icon asset: $icon"
@@ -78,6 +80,9 @@ foreach ($dir in @(
   "localappdata",
   "logs",
   "plugins",
+  "research",
+  "research\repos",
+  "research\reports",
   "sessions",
   "skills",
   "tmp"
@@ -99,7 +104,7 @@ $defaultSettings = [ordered]@{
   webSearchEnabled = $false
   webSearchMaxResults = 5
   appearanceMode = "dark"
-  appearanceTheme = "deepx-default"
+  appearanceTheme = "rainy-research-default"
   accentColor = "#0169cc"
   backgroundColor = "#111111"
   foregroundColor = "#FCFCFC"
@@ -116,7 +121,7 @@ $defaultSettings = [ordered]@{
   permissionMode = "default"
   workspacePath = $null
   workspaceHistory = @()
-  sidebarWidth = 300
+  sidebarWidth = 232
   sidebarCollapsed = $false
   customProvider = $null
 }
@@ -139,7 +144,6 @@ if (Test-Path -LiteralPath $secretPath) {
 
 $needles = @(
   ([string]::Concat("C:", "\Users\", "Ra1ny")),
-  ([string]::Concat("Down", "loads")),
   ([string]::Concat("~", "/.", "cod", "ex")),
   ([string]::Concat("chat", "gpt.com/", "cod", "ex/", "desktop", "-auth")),
   ([string]::Concat("login-with-chat", "gpt")),

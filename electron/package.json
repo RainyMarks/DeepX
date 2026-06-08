@@ -1,10 +1,14 @@
 {
-  "name": "deepx",
-  "productName": "DeepX",
-  "version": "0.2.4",
+  "name": "rainy-research",
+  "productName": "RainyReSearch",
+  "version": "1.0.0",
   "description": "Source-available noncommercial multi-provider coding agent shell",
   "main": "main.js",
   "author": "RainyMarks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RainyMarks/DeepX.git"
+  },
   "license": "PolyForm-Noncommercial-1.0.0",
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -12,6 +16,7 @@
     "dompurify": "^3.3.1",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.2",
-    "node-pty": "^1.0.0"
+    "node-pty": "^1.0.0",
+    "ssh2": "^1.16.0"
   }
 }

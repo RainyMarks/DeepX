@@ -6,22 +6,24 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const pty = require("node-pty");
+const { Client: SshClient } = require("ssh2");
 const packageInfo = require("./package.json");
 
-const isDev = !app.isPackaged || process.env.DEEPX_DEV === "1";
+const isDev = !app.isPackaged || process.env.RAINY_RESEARCH_DEV === "1" || process.env.DEEPX_DEV === "1";
 const appVersion = packageInfo.version || app.getVersion() || "0.0.0";
-const appRoot = process.env.DEEPX_APP_ROOT || path.dirname(process.execPath);
+const appRoot = process.env.RAINY_RESEARCH_APP_ROOT || process.env.DEEPX_APP_ROOT || path.dirname(process.execPath);
 const resourcesRoot = process.resourcesPath || path.join(appRoot, "resources");
-const dataRoot = process.env.DEEPX_HOME || path.join(appRoot, "data");
-const logPath = path.join(dataRoot, "logs", "deepx-electron.log");
+const dataRoot = process.env.RAINY_RESEARCH_HOME || process.env.DEEPX_HOME || path.join(appRoot, "data");
+const logPath = path.join(dataRoot, "logs", "rainy-research-electron.log");
 const homeRoot = path.join(dataRoot, "home");
 const realHomeRoot = process.env.USERPROFILE || os.homedir();
 const realDesktopRoot = path.join(realHomeRoot, "Desktop");
 const downloadsDirName = ["Down", "loads"].join("");
 const MAX_INLINE_FILE_BYTES = 512 * 1024;
 const UPDATE_REPOSITORY = "RainyMarks/DeepX";
-const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPOSITORY}/releases/latest`;
+const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPOSITORY}/releases?per_page=20`;
 const UPDATE_LATEST_URL = `https://github.com/${UPDATE_REPOSITORY}/releases/latest`;
+const MIN_UPDATE_VERSION = "1.0.0";
 
 for (const dir of [
   dataRoot,
@@ -29,6 +31,10 @@ for (const dir of [
   path.join(dataRoot, "config"),
   path.join(dataRoot, "sessions"),
   path.join(dataRoot, "cache-metrics"),
+  path.join(dataRoot, "research"),
+  path.join(dataRoot, "research", "indexes"),
+  path.join(dataRoot, "research", "repos"),
+  path.join(dataRoot, "research", "reports"),
   path.join(dataRoot, "plugins"),
   path.join(dataRoot, "skills"),
   path.join(dataRoot, "electron-user-data"),
@@ -44,6 +50,7 @@ for (const dir of [
 }
 
 const portableEnv = {
+  RAINY_RESEARCH_HOME: dataRoot,
   DEEPX_HOME: dataRoot,
   HOME: homeRoot,
   USERPROFILE: homeRoot,
@@ -54,8 +61,8 @@ const portableEnv = {
 };
 fs.mkdirSync(portableEnv.TMP, { recursive: true });
 
-app.setName("DeepX");
-app.setAppUserModelId("DeepX");
+app.setName("雨刃");
+app.setAppUserModelId("RainyReSearch");
 app.setPath("userData", path.join(dataRoot, "electron-user-data"));
 Menu.setApplicationMenu(null);
 
@@ -66,6 +73,7 @@ let coreReadyPromise = null;
 let terminalPty = null;
 let terminalCwd = null;
 let lastUpdateInfo = null;
+const sshSessions = new Map();
 
 function sanitizeHexColor(value, fallback) {
   const raw = String(value || "").trim();
@@ -130,7 +138,7 @@ function requestJson(url, redirects = 0) {
       {
         headers: {
           Accept: "application/vnd.github+json",
-          "User-Agent": `DeepX/${appVersion}`,
+          "User-Agent": `RainyReSearch/${appVersion}`,
         },
         timeout: 20000,
       },
@@ -180,7 +188,7 @@ function requestText(url, redirects = 0) {
       {
         headers: {
           Accept: "text/html,application/xhtml+xml",
-          "User-Agent": `DeepX/${appVersion}`,
+          "User-Agent": `RainyReSearch/${appVersion}`,
         },
         timeout: 20000,
       },
@@ -224,7 +232,7 @@ function downloadFile(url, destination, onProgress, redirects = 0) {
       url,
       {
         headers: {
-          "User-Agent": `DeepX/${appVersion}`,
+          "User-Agent": `RainyReSearch/${appVersion}`,
         },
         timeout: 30000,
       },
@@ -317,23 +325,35 @@ function portableRootFromExtracted(stageRoot) {
   ];
   for (const candidate of candidates) {
     if (
-      fs.existsSync(path.join(candidate, "DeepX.exe")) &&
+      fs.existsSync(path.join(candidate, "RainyReSearch.exe")) &&
       fs.existsSync(path.join(candidate, "resources", "app.asar"))
     ) {
       return candidate;
     }
   }
-  throw new Error("downloaded update package is not a DeepX portable build");
+  throw new Error("downloaded update package is not a RainyReSearch portable build");
 }
 
 function findUpdateAsset(release, latestVersion) {
   const assets = Array.isArray(release?.assets) ? release.assets : [];
-  const exactName = `DeepX-portable-v${latestVersion}.zip`;
+  const exactName = `RainyReSearch-portable-v${latestVersion}.zip`;
   return (
     assets.find((asset) => asset.name === exactName) ||
-    assets.find((asset) => /^DeepX-portable-v?\d+\.\d+\.\d+\.zip$/i.test(asset.name || "")) ||
-    assets.find((asset) => /^DeepX-portable.*\.zip$/i.test(asset.name || ""))
+    assets.find((asset) => /^RainyReSearch-portable-v?\d+\.\d+\.\d+\.zip$/i.test(asset.name || "")) ||
+    assets.find((asset) => /^RainyReSearch-portable.*\.zip$/i.test(asset.name || ""))
   );
+}
+
+function selectUpdateRelease(releases) {
+  const candidates = (Array.isArray(releases) ? releases : [releases])
+    .filter((release) => release && !release.draft && !release.prerelease)
+    .map((release) => ({
+      release,
+      version: normalizeVersion(release.tag_name || release.name),
+    }))
+    .filter((item) => compareVersions(item.version, MIN_UPDATE_VERSION) >= 0)
+    .sort((a, b) => compareVersions(b.version, a.version));
+  return candidates[0] || null;
 }
 
 async function latestReleaseFromPublicPage(errorKind = "network") {
@@ -347,14 +367,32 @@ async function latestReleaseFromPublicPage(errorKind = "network") {
     throw error;
   }
   const latestVersion = normalizeVersion(tag);
+  if (compareVersions(latestVersion, MIN_UPDATE_VERSION) < 0) {
+    const fallback = {
+      currentVersion: appVersion,
+      latestVersion: appVersion,
+      updateAvailable: false,
+      releaseUrl: `https://github.com/${UPDATE_REPOSITORY}/releases`,
+      assetName: "",
+      assetSize: 0,
+      publishedAt: null,
+      notes: "Ignoring pre-1.0.0 release chain.",
+      canInstall: false,
+      checkedAt: new Date().toISOString(),
+      source: "release-page",
+      errorKind: "pre-1.0.0-filtered",
+    };
+    lastUpdateInfo = fallback;
+    return fallback;
+  }
   const releaseTag = tag || `v${latestVersion}`;
-  const assetHref = result.body.match(/href="([^"]*\/releases\/download\/[^"]*DeepX-portable[^"]*\.zip)"/i)?.[1];
+  const assetHref = result.body.match(/href="([^"]*\/releases\/download\/[^"]*RainyReSearch-portable[^"]*\.zip)"/i)?.[1];
   const assetDownloadUrl = assetHref
     ? new URL(assetHref.replace(/&amp;/g, "&"), "https://github.com").toString()
-    : `https://github.com/${UPDATE_REPOSITORY}/releases/download/${releaseTag}/DeepX-portable-v${latestVersion}.zip`;
+    : `https://github.com/${UPDATE_REPOSITORY}/releases/download/${releaseTag}/RainyReSearch-portable-v${latestVersion}.zip`;
   const assetName = path.basename(decodeURIComponent(new URL(assetDownloadUrl).pathname));
   const assetFound = !!assetHref;
-  const canInstall = app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1";
+  const canInstall = app.isPackaged && process.env.RAINY_RESEARCH_DISABLE_UPDATES !== "1" && process.env.DEEPX_DISABLE_UPDATES !== "1";
   return {
     currentVersion: appVersion,
     latestVersion,
@@ -377,7 +415,27 @@ async function checkForUpdates() {
   let source = "api";
   let errorKind = null;
   try {
-    release = await requestJson(UPDATE_API_URL);
+    const releases = await requestJson(UPDATE_API_URL);
+    const selected = selectUpdateRelease(releases);
+    if (!selected) {
+      const updateInfo = {
+        currentVersion: appVersion,
+        latestVersion: appVersion,
+        updateAvailable: false,
+        releaseUrl: `https://github.com/${UPDATE_REPOSITORY}/releases`,
+        assetName: "",
+        assetSize: 0,
+        publishedAt: null,
+        notes: "No RainyReSearch release >= 1.0.0 was found.",
+        canInstall: false,
+        checkedAt: new Date().toISOString(),
+        source,
+        errorKind: "pre-1.0.0-filtered",
+      };
+      lastUpdateInfo = updateInfo;
+      return updateInfo;
+    }
+    release = selected.release;
   } catch (error) {
     const status = Number(error.statusCode || 0);
     errorKind = status === 403 || status === 429 ? "rate-limit" : "network";
@@ -402,7 +460,7 @@ async function checkForUpdates() {
     assetSize: asset.size || 0,
     publishedAt: release.published_at || null,
     notes: release.body || "",
-    canInstall: app.isPackaged && process.env.DEEPX_DISABLE_UPDATES !== "1",
+    canInstall: app.isPackaged && process.env.RAINY_RESEARCH_DISABLE_UPDATES !== "1" && process.env.DEEPX_DISABLE_UPDATES !== "1",
     checkedAt: new Date().toISOString(),
     source,
     errorKind,
@@ -422,12 +480,12 @@ param(
 $ErrorActionPreference = "Stop"
 $logDir = Join-Path $Target "data\\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$logPath = Join-Path $logDir "deepx-updater.log"
+$logPath = Join-Path $logDir "rainy-research-updater.log"
 function Write-UpdateLog([string]$Message) {
   Add-Content -LiteralPath $logPath -Encoding UTF8 -Value ("[{0}] {1}" -f (Get-Date).ToString("o"), $Message)
 }
 try {
-  Write-UpdateLog "waiting for DeepX process $ParentPid"
+  Write-UpdateLog "waiting for RainyReSearch process $ParentPid"
   Wait-Process -Id $ParentPid -Timeout 120 -ErrorAction SilentlyContinue
 } catch {}
 Start-Sleep -Milliseconds 900
@@ -440,11 +498,11 @@ Get-ChildItem -LiteralPath $Source -Force | Where-Object { $preserve -notcontain
   }
   Copy-Item -LiteralPath $_.FullName -Destination $dest -Recurse -Force
 }
-$exe = Join-Path $Target "DeepX.exe"
+$exe = Join-Path $Target "RainyReSearch.exe"
 if (!(Test-Path -LiteralPath $exe)) {
-  throw "DeepX.exe missing after update"
+  throw "RainyReSearch.exe missing after update"
 }
-Write-UpdateLog "starting updated DeepX"
+Write-UpdateLog "starting updated RainyReSearch"
 Start-Process -FilePath $exe -WorkingDirectory $Target
 `;
   fs.writeFileSync(scriptPath, script.trimStart(), "utf8");
@@ -509,12 +567,14 @@ async function downloadAndInstallUpdate() {
 }
 
 function resolveCorePath() {
-  const packaged = path.join(resourcesRoot, "deepx-core.exe");
+  const packaged = path.join(resourcesRoot, "rainy-research-core.exe");
   if (fs.existsSync(packaged)) return packaged;
-  const dev = path.resolve(__dirname, "..", "core", "target", "debug", "deepx-core.exe");
+  const dev = path.resolve(__dirname, "..", "core", "target", "debug", "rainy-research-core.exe");
   if (fs.existsSync(dev)) return dev;
-  const release = path.resolve(__dirname, "..", "core", "target", "release", "deepx-core.exe");
+  const release = path.resolve(__dirname, "..", "core", "target", "release", "rainy-research-core.exe");
   if (fs.existsSync(release)) return release;
+  const legacy = path.join(resourcesRoot, "deepx-core.exe");
+  if (fs.existsSync(legacy)) return legacy;
   return packaged;
 }
 
@@ -556,12 +616,58 @@ function sendTerminal(payload) {
   }
 }
 
+function sendSsh(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("deepx:ssh-data", payload);
+  }
+}
+
+function normalizeSshOptions(options = {}) {
+  const host = String(options.host || "").trim();
+  const username = String(options.username || "").trim();
+  const password = String(options.password || "");
+  const privateKey = String(options.privateKey || "").trim();
+  const port = Math.max(1, Math.min(65535, Number(options.port) || 22));
+  if (!host) throw new Error("SSH host is required");
+  if (!username) throw new Error("SSH username is required");
+  return { host, port, username, password, privateKey };
+}
+
+function closeSshSession(id) {
+  const session = sshSessions.get(id);
+  if (!session) return;
+  if (session.monitorTimer) clearInterval(session.monitorTimer);
+  try {
+    session.stream?.end();
+  } catch {}
+  try {
+    session.client?.end();
+  } catch {}
+  sshSessions.delete(id);
+}
+
+function runSshMonitorCommand(id, command) {
+  const session = sshSessions.get(id);
+  if (!session || !command) return;
+  const startedAt = new Date().toISOString();
+  sendSsh({ id, stream: "monitor", text: `\r\n[monitor ${startedAt}] ${command}\r\n` });
+  session.client.exec(command, (err, channel) => {
+    if (err) {
+      sendSsh({ id, stream: "stderr", text: `[monitor error] ${err.message}\r\n` });
+      return;
+    }
+    channel.on("data", (data) => sendSsh({ id, stream: "monitor", text: data.toString("utf8") }));
+    channel.stderr.on("data", (data) => sendSsh({ id, stream: "stderr", text: data.toString("utf8") }));
+    channel.on("close", (code) => sendSsh({ id, stream: "monitor", text: `\r\n[monitor exit ${code}]\r\n` }));
+  });
+}
+
 function startCore() {
   if (coreReadyPromise) return coreReadyPromise;
   coreReadyPromise = new Promise((resolve, reject) => {
     const corePath = resolveCorePath();
     if (!fs.existsSync(corePath)) {
-      reject(new Error(`deepx-core.exe not found at ${corePath}`));
+      reject(new Error(`rainy-research-core.exe not found at ${corePath}`));
       return;
     }
 
@@ -616,20 +722,26 @@ function startCore() {
       log(`core exited code=${code} signal=${signal}`);
       coreProcess = null;
       coreReadyPromise = null;
-      if (!resolved) reject(new Error(`deepx-core exited before ready (${code ?? signal})`));
+      if (!resolved) reject(new Error(`rainy-research-core exited before ready (${code ?? signal})`));
     });
   });
   return coreReadyPromise;
 }
 
 async function createWindow() {
-  const iconPath = path.join(resourcesRoot, "deepx-assets", "icon.png");
+  let iconPath = path.join(resourcesRoot, "YR.png");
+  if (!fs.existsSync(iconPath)) {
+    iconPath = path.join(resourcesRoot, "rainy-research-assets", "icon.png");
+  }
+  if (!fs.existsSync(iconPath)) {
+    iconPath = path.join(resourcesRoot, "deepx-assets", "icon.png");
+  }
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 860,
     minWidth: 1020,
     minHeight: 680,
-    title: "DeepX",
+    title: "雨刃",
     backgroundColor: "#080808",
     autoHideMenuBar: true,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
@@ -840,12 +952,101 @@ ipcMain.handle("deepx:terminal-stop", async () => {
   return { ok: true };
 });
 
+ipcMain.handle("deepx:ssh-connect", async (_event, options = {}) => {
+  const normalized = normalizeSshOptions(options);
+  const id = `ssh-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const client = new SshClient();
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      try {
+        client.end();
+      } catch {}
+      reject(error);
+    };
+    client
+      .on("ready", () => {
+        client.shell({ term: "xterm-256color", cols: 120, rows: 32 }, (err, stream) => {
+          if (err) {
+            fail(err);
+            return;
+          }
+          stream.on("data", (data) => sendSsh({ id, stream: "stdout", text: data.toString("utf8") }));
+          stream.stderr?.on?.("data", (data) => sendSsh({ id, stream: "stderr", text: data.toString("utf8") }));
+          stream.on("close", () => {
+            sendSsh({ id, stream: "system", text: "\r\n[SSH shell closed]\r\n" });
+            closeSshSession(id);
+          });
+          sshSessions.set(id, {
+            id,
+            client,
+            stream,
+            host: normalized.host,
+            username: normalized.username,
+            monitorTimer: null,
+          });
+          settled = true;
+          sendSsh({ id, stream: "system", text: `[SSH connected] ${normalized.username}@${normalized.host}:${normalized.port}\r\n` });
+          resolve({ ok: true, id, host: normalized.host, username: normalized.username, port: normalized.port });
+        });
+      })
+      .on("error", fail)
+      .on("end", () => sendSsh({ id, stream: "system", text: "\r\n[SSH disconnected]\r\n" }))
+      .connect({
+        host: normalized.host,
+        port: normalized.port,
+        username: normalized.username,
+        password: normalized.password || undefined,
+        privateKey: normalized.privateKey || undefined,
+        readyTimeout: 30000,
+        keepaliveInterval: 15000,
+      });
+  });
+});
+
+ipcMain.handle("deepx:ssh-write", async (_event, payload = {}) => {
+  const id = String(payload.id || "");
+  const session = sshSessions.get(id);
+  if (!session?.stream) throw new Error("SSH session is not connected");
+  session.stream.write(String(payload.data || ""));
+  return { ok: true };
+});
+
+ipcMain.handle("deepx:ssh-disconnect", async (_event, id) => {
+  closeSshSession(String(id || ""));
+  return { ok: true };
+});
+
+ipcMain.handle("deepx:ssh-monitor-start", async (_event, payload = {}) => {
+  const id = String(payload.id || "");
+  const command = String(payload.command || "").trim();
+  const intervalMinutes = Math.max(1, Math.min(1440, Number(payload.intervalMinutes) || 60));
+  const session = sshSessions.get(id);
+  if (!session) throw new Error("SSH session is not connected");
+  if (!command) throw new Error("monitor command is required");
+  if (session.monitorTimer) clearInterval(session.monitorTimer);
+  runSshMonitorCommand(id, command);
+  session.monitorTimer = setInterval(() => runSshMonitorCommand(id, command), intervalMinutes * 60 * 1000);
+  return { ok: true, intervalMinutes };
+});
+
+ipcMain.handle("deepx:ssh-monitor-stop", async (_event, id) => {
+  const session = sshSessions.get(String(id || ""));
+  if (session?.monitorTimer) {
+    clearInterval(session.monitorTimer);
+    session.monitorTimer = null;
+  }
+  return { ok: true };
+});
+
 app.whenReady().then(async () => {
   try {
     await startCore();
   } catch (err) {
     log(`startup failed: ${err.message}`);
-    dialog.showErrorBox("DeepX failed to start", err.message);
+    dialog.showErrorBox("雨刃启动失败", err.message);
   }
   await createWindow();
 });
@@ -862,5 +1063,8 @@ app.on("before-quit", () => {
   if (coreProcess) {
     coreProcess.kill();
     coreProcess = null;
+  }
+  for (const id of [...sshSessions.keys()]) {
+    closeSshSession(id);
   }
 });

@@ -12,10 +12,12 @@ electron/node_modules/
 resources/app.asar
 resources/app.asar.unpacked/
 resources/deepx-core.exe
+resources/rainy-research-core.exe
 resources/node.exe
 resources/node_repl.exe
 resources/rg
 resources/DeepX.png
+resources/rainy-research-assets/
 resources/codex-notification.wav
 
 # Legacy renderer copies at repository root. The real renderer lives in electron/renderer/.
@@ -25,6 +27,7 @@ resources/codex-notification.wav
 
 # Packaged Electron runtime at repository root
 DeepX.exe
+RainyReSearch.exe
 chrome_*.pak
 icudtl.dat
 LICENSES.chromium.html

@@ -25,8 +25,10 @@ use tokio::time::{timeout, Duration};
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
 
+mod research;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const DEFAULT_SYSTEM_PROMPT: &str = "You are DeepX, a local coding and reasoning agent. \
+const DEFAULT_SYSTEM_PROMPT: &str = "You are RainyReSearch, a local research reproducibility and coding agent. \
 Keep responses concise, preserve user intent, and do not claim external actions unless they were executed.";
 const MAX_AGENT_TOOL_ROUNDS: usize = 6;
 const MAX_WORKSPACE_TREE_ENTRIES: usize = 160;
@@ -76,6 +78,12 @@ async fn main() -> Result<()> {
         .route("/config", get(config_get).post(config_save))
         .route("/test-connection", post(test_connection))
         .route("/web-search", post(web_search))
+        .route("/research/search", post(research::research_search))
+        .route("/research/papers/:id/graph", get(research::research_paper_graph))
+        .route("/research/repos/audit", post(research::research_repo_audit))
+        .route("/research/trick-score", post(research::research_trick_score))
+        .route("/research/ideas", post(research::research_ideas))
+        .route("/research/reports/export", post(research::research_export_report))
         .route("/runtime/info", get(runtime_info))
         .route("/runtime/tools", get(runtime_tools))
         .route("/workspace/prepare", post(workspace_prepare))
@@ -109,7 +117,7 @@ async fn main() -> Result<()> {
 
     axum::serve(listener, app)
         .await
-        .context("deepx-core server stopped unexpectedly")?;
+        .context("rainy-research-core server stopped unexpectedly")?;
     Ok(())
 }
 
@@ -128,6 +136,12 @@ fn parse_port_arg() -> u16 {
 }
 
 fn resolve_data_root() -> Result<PathBuf> {
+    if let Ok(raw) = env::var("RAINY_RESEARCH_HOME") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
     if let Ok(raw) = env::var("DEEPX_HOME") {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
@@ -165,6 +179,7 @@ fn ensure_data_dirs(root: &Path) -> Result<()> {
         fs::create_dir_all(root.join(name))
             .with_context(|| format!("failed to create data directory {name}"))?;
     }
+    research::ensure_research_dirs(root)?;
     Ok(())
 }
 
@@ -181,13 +196,17 @@ async fn runtime_info(State(state): State<AppState>) -> Result<Json<Value>, ApiE
     let settings = load_settings(&state.data_root).map_err(ApiError::internal)?;
     let workspace = workspace_root(&settings);
     Ok(Json(json!({
-        "name": "DeepX Agent Runtime",
+        "name": "RainyReSearch Agent Runtime",
         "version": VERSION,
-        "protocol": "deepx-core-http-sse-v1",
+        "protocol": "rainy-research-core-http-sse-v1",
         "capabilities": {
             "agentLoop": true,
             "toolCalls": true,
             "workspaceTools": workspace.is_some(),
+            "researchSearch": true,
+            "researchAudit": true,
+            "researchGraph": true,
+            "researchIdeaForge": true,
             "fileRead": true,
             "fileWrite": permission_allows_write(&settings),
             "shell": permission_allows_shell(&settings, "pwd"),
@@ -292,10 +311,14 @@ async fn config_get(State(state): State<AppState>) -> Result<Json<Value>, ApiErr
             (p.id, has_key)
         })
         .collect();
+    let configured_research_sources = research_source_configured(&secrets.research_sources);
+    let configured_web_search = web_search_configured(&secrets.web_search);
 
     Ok(Json(json!({
         "settings": settings,
         "configuredProviders": configured,
+        "configuredResearchSources": configured_research_sources,
+        "configuredWebSearch": configured_web_search,
     })))
 }
 
@@ -338,6 +361,26 @@ async fn config_save(
     }
     if let Some(max_results) = req.web_search_max_results {
         settings.web_search_max_results = max_results.clamp(1, 8);
+    }
+    if let Some(value) = req.web_brave_api_key {
+        if !value.trim().is_empty() {
+            secrets.web_search.brave_api_key = value;
+        }
+    }
+    if let Some(value) = req.web_tavily_api_key {
+        if !value.trim().is_empty() {
+            secrets.web_search.tavily_api_key = value;
+        }
+    }
+    if let Some(value) = req.web_serper_api_key {
+        if !value.trim().is_empty() {
+            secrets.web_search.serper_api_key = value;
+        }
+    }
+    if let Some(value) = req.web_searxng_url {
+        if !value.trim().is_empty() {
+            secrets.web_search.searxng_url = value;
+        }
     }
     if let Some(mode) = req.appearance_mode {
         settings.appearance_mode = normalize_appearance_mode(&mode).to_string();
@@ -394,7 +437,7 @@ async fn config_save(
         settings.workspace_history = history;
     }
     if let Some(width) = req.sidebar_width {
-        settings.sidebar_width = width.clamp(220, 420);
+        settings.sidebar_width = width.clamp(180, 360);
     }
     if let Some(collapsed) = req.sidebar_collapsed {
         settings.sidebar_collapsed = collapsed;
@@ -404,6 +447,26 @@ async fn config_save(
     }
     if let Some(custom) = req.custom_provider {
         settings.custom_provider = Some(custom);
+    }
+    if let Some(value) = req.research_openalex_api_key {
+        if !value.trim().is_empty() {
+            secrets.research_sources.openalex_api_key = value;
+        }
+    }
+    if let Some(value) = req.research_semantic_scholar_api_key {
+        if !value.trim().is_empty() {
+            secrets.research_sources.semantic_scholar_api_key = value;
+        }
+    }
+    if let Some(value) = req.research_github_token {
+        if !value.trim().is_empty() {
+            secrets.research_sources.github_token = value;
+        }
+    }
+    if let Some(value) = req.research_crossref_mailto {
+        if !value.trim().is_empty() {
+            secrets.research_sources.crossref_mailto = value;
+        }
     }
 
     normalize_settings_for_provider(&mut settings);
@@ -429,7 +492,12 @@ async fn config_save(
 
     save_settings(&state.data_root, &settings).map_err(ApiError::internal)?;
     save_secrets(&state.data_root, &secrets).map_err(ApiError::internal)?;
-    Ok(Json(json!({ "ok": true, "settings": settings })))
+    Ok(Json(json!({
+        "ok": true,
+        "settings": settings,
+        "configuredWebSearch": web_search_configured(&secrets.web_search),
+        "configuredResearchSources": research_source_configured(&secrets.research_sources),
+    })))
 }
 
 fn normalize_settings_for_provider(settings: &mut Settings) {
@@ -579,35 +647,16 @@ async fn web_search(
     if query.is_empty() {
         return Err(ApiError::bad_request("web search query is empty"));
     }
-    let max_results = req.max_results.unwrap_or(5).clamp(1, 8);
-    let url = reqwest::Url::parse_with_params(
-        "https://api.duckduckgo.com/",
-        &[
-            ("q", query),
-            ("format", "json"),
-            ("no_html", "1"),
-            ("skip_disambig", "1"),
-        ],
-    )
-    .map_err(|err| ApiError::internal(anyhow!("failed to build search URL: {err}")))?;
-
-    let value: Value = state
-        .http
-        .get(url)
-        .send()
+    let max_results = req.max_results.unwrap_or(5).clamp(1, 12) as usize;
+    let secrets = load_secrets(&state.data_root).map_err(ApiError::internal)?;
+    let outcome = run_web_search(&state.http, &secrets.web_search, query, max_results)
         .await
-        .map_err(|err| ApiError::upstream(format!("web search request failed: {err}")))?
-        .error_for_status()
-        .map_err(|err| ApiError::upstream(format!("web search returned error: {err}")))?
-        .json()
-        .await
-        .map_err(|err| ApiError::upstream(format!("web search response decode failed: {err}")))?;
-
-    let results = extract_duckduckgo_results(&value, max_results as usize);
+        .map_err(|err| ApiError::upstream(format!("web search failed: {err}")))?;
     Ok(Json(json!({
-        "provider": "duckduckgo-instant-answer",
+        "provider": outcome.provider,
+        "attempted": outcome.attempted,
         "query": query,
-        "results": results,
+        "results": outcome.results,
     })))
 }
 
@@ -774,7 +823,7 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
     let mut messages = vec![prefix_message];
     if context_budget.truncated_messages > 0 {
         messages.push(ChatMessage::system(format!(
-            "Context truncated: DeepX omitted {} older message(s) to fit the configured context window of {} tokens. Continue from the remaining visible conversation.",
+            "Context truncated: RainyReSearch omitted {} older message(s) to fit the configured context window of {} tokens. Continue from the remaining visible conversation.",
             context_budget.truncated_messages, settings.context_window
         )));
     }
@@ -1628,7 +1677,7 @@ fn default_appearance_mode() -> String {
 }
 
 fn default_appearance_theme() -> String {
-    "deepx-default".into()
+    "rainy-research-default".into()
 }
 
 fn default_accent_color() -> String {
@@ -1689,7 +1738,7 @@ fn default_language() -> String {
 }
 
 fn default_sidebar_width() -> u64 {
-    300
+    232
 }
 
 fn normalize_language(value: &str) -> &str {
@@ -1711,13 +1760,15 @@ fn normalize_theme(value: &str) -> String {
     let legacy_dark = ["cod", "ex"].concat();
     let legacy_light = format!("{legacy_dark}-light");
     if value == legacy_dark.as_str() {
-        return "deepx-default".into();
+        return "rainy-research-default".into();
     }
     if value == legacy_light.as_str() {
-        return "deepx-light".into();
+        return "rainy-research-light".into();
     }
     match value {
-        "deepx-default" | "deepx-light" | "graphite" | "midnight" | "paper" => value.into(),
+        "deepx-default" => "rainy-research-default".into(),
+        "deepx-light" => "rainy-research-light".into(),
+        "rainy-research-default" | "rainy-research-light" | "graphite" | "midnight" | "paper" => value.into(),
         _ => default_appearance_theme(),
     }
 }
@@ -1803,7 +1854,12 @@ struct CustomProvider {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Secrets {
+    #[serde(default)]
     providers: BTreeMap<String, ProviderSecret>,
+    #[serde(default)]
+    research_sources: ResearchSecrets,
+    #[serde(default)]
+    web_search: WebSearchSecrets,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -1811,6 +1867,32 @@ struct Secrets {
 struct ProviderSecret {
     api_key: String,
     auth_header_name: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResearchSecrets {
+    #[serde(default)]
+    openalex_api_key: String,
+    #[serde(default)]
+    semantic_scholar_api_key: String,
+    #[serde(default)]
+    github_token: String,
+    #[serde(default)]
+    crossref_mailto: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSearchSecrets {
+    #[serde(default)]
+    brave_api_key: String,
+    #[serde(default)]
+    tavily_api_key: String,
+    #[serde(default)]
+    serper_api_key: String,
+    #[serde(default)]
+    searxng_url: String,
 }
 
 fn load_settings(root: &Path) -> Result<Settings> {
@@ -1878,7 +1960,7 @@ fn normalize_loaded_settings(settings: &mut Settings) {
     settings.density = normalize_density(&settings.density).to_string();
     settings.contrast = settings.contrast.clamp(35, 85);
     settings.permission_mode = normalize_permission_mode(&settings.permission_mode).to_string();
-    settings.sidebar_width = settings.sidebar_width.clamp(220, 420);
+    settings.sidebar_width = settings.sidebar_width.clamp(180, 360);
     settings.context_window = settings.context_window.max(1024);
     settings.workspace_history =
         normalize_workspace_history(&settings.workspace_path, &settings.workspace_history);
@@ -1897,6 +1979,34 @@ fn load_secrets(root: &Path) -> Result<Secrets> {
 fn save_secrets(root: &Path, secrets: &Secrets) -> Result<()> {
     let path = root.join("secrets.local.json");
     write_json_pretty(&path, secrets)
+}
+
+fn research_source_configured(secrets: &ResearchSecrets) -> BTreeMap<String, bool> {
+    BTreeMap::from([
+        (
+            "openalex".into(),
+            !secrets.openalex_api_key.trim().is_empty(),
+        ),
+        (
+            "semanticScholar".into(),
+            !secrets.semantic_scholar_api_key.trim().is_empty(),
+        ),
+        ("github".into(), !secrets.github_token.trim().is_empty()),
+        (
+            "crossref".into(),
+            !secrets.crossref_mailto.trim().is_empty(),
+        ),
+    ])
+}
+
+fn web_search_configured(secrets: &WebSearchSecrets) -> BTreeMap<String, bool> {
+    BTreeMap::from([
+        ("brave".into(), !secrets.brave_api_key.trim().is_empty()),
+        ("tavily".into(), !secrets.tavily_api_key.trim().is_empty()),
+        ("serper".into(), !secrets.serper_api_key.trim().is_empty()),
+        ("searxng".into(), !secrets.searxng_url.trim().is_empty()),
+        ("fallback".into(), true),
+    ])
 }
 
 fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -2002,6 +2112,14 @@ struct SaveConfigRequest {
     sidebar_width: Option<u64>,
     sidebar_collapsed: Option<bool>,
     custom_provider: Option<CustomProvider>,
+    research_openalex_api_key: Option<String>,
+    research_semantic_scholar_api_key: Option<String>,
+    research_github_token: Option<String>,
+    research_crossref_mailto: Option<String>,
+    web_brave_api_key: Option<String>,
+    web_tavily_api_key: Option<String>,
+    web_serper_api_key: Option<String>,
+    web_searxng_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2027,6 +2145,16 @@ struct WebSearchResult {
     title: String,
     url: String,
     snippet: String,
+    source: String,
+    score: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSearchOutcome {
+    provider: String,
+    attempted: Vec<String>,
+    results: Vec<WebSearchResult>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2354,7 +2482,7 @@ fn build_prefix_for_turn(
     let effective_effort =
         provider_reasoning_effort(&provider.id, &thinking, &settings.reasoning_effort);
     facts.insert("schemaVersion", json!(1));
-    facts.insert("agent", json!("DeepX"));
+    facts.insert("agent", json!("RainyReSearch"));
     facts.insert("providerId", json!(provider.id));
     facts.insert("model", json!(settings.model));
     facts.insert("contextWindow", json!(settings.context_window));
@@ -2374,7 +2502,7 @@ fn build_prefix_for_turn(
     facts.insert("supportsStreaming", json!(provider.supports_streaming));
     facts.insert("permissionMode", json!(settings.permission_mode));
     facts.insert("webSearchEnabled", json!(settings.web_search_enabled));
-    facts.insert("webSearchProvider", json!("duckduckgo-instant-answer"));
+    facts.insert("webSearchProvider", json!("brave/tavily/serper/searxng/fallback"));
     facts.insert(
         "workspaceContextMode",
         json!(if include_project_instructions {
@@ -3264,7 +3392,7 @@ async fn run_agent_turn(
                 .await;
             }
             let output =
-                execute_agent_tool(data_root, session_id, &call.settings, &tool_call).await;
+                execute_agent_tool(http, data_root, session_id, &call.settings, &tool_call).await;
             let tool_ok = output.get("ok").and_then(Value::as_bool).unwrap_or(false);
             let tool_summary = truncate(
                 output.get("summary").and_then(Value::as_str).unwrap_or(""),
@@ -3408,7 +3536,7 @@ fn load_project_instructions(settings: &Settings) -> Option<ProjectInstructions>
         return None;
     }
     let content = format!(
-        "Project instructions loaded from workspace instruction files. Apply them to matching workspace paths unless they conflict with user instructions or DeepX safety rules. More deeply nested instruction files are more specific.\n\n{}",
+        "Project instructions loaded from workspace instruction files. Apply them to matching workspace paths unless they conflict with user instructions or RainyReSearch safety rules. More deeply nested instruction files are more specific.\n\n{}",
         sections.join("\n\n")
     );
     let hash = sha256_hex(content.as_bytes());
@@ -3753,6 +3881,24 @@ fn workspace_tool_definitions(settings: &Settings) -> Value {
         }),
     ];
 
+    if settings.web_search_enabled {
+        tools.push(json!({
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Search the public web with configured search APIs (Brave/Tavily/Serper/SearXNG) and fallback engines. Use for current papers, docs, errors, APIs, and external facts.",
+                "parameters": {
+                    "type": "object",
+                    "required": ["query"],
+                    "properties": {
+                        "query": { "type": "string" },
+                        "maxResults": { "type": "integer", "minimum": 1, "maximum": 12, "default": 5 }
+                    }
+                }
+            }
+        }));
+    }
+
     if permission_allows_write(settings) {
         tools.push(json!({
             "type": "function",
@@ -3813,6 +3959,7 @@ fn workspace_tool_definitions(settings: &Settings) -> Value {
 }
 
 async fn execute_agent_tool(
+    http: &reqwest::Client,
     data_root: &Path,
     session_id: &str,
     settings: &Settings,
@@ -3831,6 +3978,7 @@ async fn execute_agent_tool(
         "read_file" => tool_read_file(settings, &call.arguments),
         "file_info" => tool_file_info(settings, &call.arguments),
         "search_files" => tool_search_files(settings, &call.arguments),
+        "web_search" => tool_web_search(http, data_root, &call.arguments).await,
         "grep_workspace" => tool_grep_workspace(settings, &call.arguments),
         "edit_file" => tool_edit_file(settings, &call.arguments),
         "write_file" => tool_write_file(settings, &call.arguments),
@@ -3886,7 +4034,7 @@ fn workspace_context_from_profile(
         profile.tree.clone()
     };
     format!(
-        "Current workspace is available to DeepX tools. Root: {}\nPermission mode: {}\n{}\nUse tools to inspect files instead of saying you cannot access the workspace. Default and auto-review permission modes expose only read-only tools; full-access exposes workspace write and shell tools. Top-level tree:\n{}",
+        "Current workspace is available to RainyReSearch tools. Root: {}\nPermission mode: {}\n{}\nUse tools to inspect files instead of saying you cannot access the workspace. Default and auto-review permission modes expose only read-only tools; full-access exposes workspace write and shell tools. Top-level tree:\n{}",
         root.display(),
         settings.permission_mode,
         profile.instruction_note,
@@ -4407,6 +4555,29 @@ fn tool_search_files(settings: &Settings, args: &Value) -> Result<Value, String>
     )
 }
 
+async fn tool_web_search(
+    http: &reqwest::Client,
+    data_root: &Path,
+    args: &Value,
+) -> Result<Value, String> {
+    let query = arg_str(args, "query", "").trim().to_string();
+    if query.is_empty() {
+        return Err("query is required".into());
+    }
+    let max_results = arg_usize(args, "maxResults", 5, 1, 12);
+    let secrets = load_secrets(data_root).map_err(|err| err.to_string())?;
+    let outcome = run_web_search(http, &secrets.web_search, &query, max_results)
+        .await
+        .map_err(|err| err.to_string())?;
+    Ok(json!({
+        "ok": true,
+        "summary": format!("{} web results via {}", outcome.results.len(), outcome.provider),
+        "provider": outcome.provider,
+        "attempted": outcome.attempted,
+        "results": outcome.results,
+    }))
+}
+
 fn tool_grep_workspace(settings: &Settings, args: &Value) -> Result<Value, String> {
     let (root, start) = resolve_existing_workspace_path(settings, arg_str(args, "path", "."))?;
     let query = arg_str(args, "query", "");
@@ -4673,6 +4844,348 @@ fn normalize_usage(u: &Value) -> NormalizedUsage {
     }
 }
 
+async fn run_web_search(
+    http: &reqwest::Client,
+    secrets: &WebSearchSecrets,
+    query: &str,
+    max_results: usize,
+) -> Result<WebSearchOutcome> {
+    let mut attempted = Vec::new();
+    let mut results = Vec::new();
+
+    if !secrets.searxng_url.trim().is_empty() {
+        attempted.push("searxng".to_string());
+        if let Ok(items) = fetch_searxng_search(http, &secrets.searxng_url, query, max_results).await {
+            append_web_results(&mut results, items, max_results);
+        }
+    }
+    if !secrets.brave_api_key.trim().is_empty() {
+        attempted.push("brave".to_string());
+        if let Ok(items) = fetch_brave_search(http, &secrets.brave_api_key, query, max_results).await {
+            append_web_results(&mut results, items, max_results);
+        }
+    }
+    if !secrets.tavily_api_key.trim().is_empty() {
+        attempted.push("tavily".to_string());
+        if let Ok(items) = fetch_tavily_search(http, &secrets.tavily_api_key, query, max_results).await {
+            append_web_results(&mut results, items, max_results);
+        }
+    }
+    if !secrets.serper_api_key.trim().is_empty() {
+        attempted.push("serper".to_string());
+        if let Ok(items) = fetch_serper_search(http, &secrets.serper_api_key, query, max_results).await {
+            append_web_results(&mut results, items, max_results);
+        }
+    }
+
+    if results.len() < max_results {
+        attempted.push("bing-rss".to_string());
+        if let Ok(items) = fetch_bing_rss_search(http, query, max_results).await {
+            append_web_results(&mut results, items, max_results);
+        }
+    }
+    if results.len() < max_results {
+        attempted.push("duckduckgo-instant-answer".to_string());
+        if let Ok(items) = fetch_duckduckgo_instant(http, query, max_results).await {
+            append_web_results(&mut results, items, max_results);
+        }
+    }
+
+    let provider = if results.is_empty() {
+        attempted.join("+")
+    } else {
+        let mut providers = Vec::new();
+        for item in &results {
+            if !providers.iter().any(|name| name == &item.source) {
+                providers.push(item.source.clone());
+            }
+        }
+        providers.join("+")
+    };
+    Ok(WebSearchOutcome {
+        provider,
+        attempted,
+        results,
+    })
+}
+
+fn append_web_results(target: &mut Vec<WebSearchResult>, items: Vec<WebSearchResult>, max_results: usize) {
+    for item in items {
+        if target.len() >= max_results {
+            return;
+        }
+        if item.url.trim().is_empty()
+            || target
+                .iter()
+                .any(|existing| normalize_result_url(&existing.url) == normalize_result_url(&item.url))
+        {
+            continue;
+        }
+        target.push(item);
+    }
+}
+
+fn normalize_result_url(url: &str) -> String {
+    url.trim()
+        .trim_end_matches('/')
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .to_ascii_lowercase()
+}
+
+async fn fetch_brave_search(
+    http: &reqwest::Client,
+    api_key: &str,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<WebSearchResult>> {
+    let count = max_results.clamp(1, 20).to_string();
+    let value: Value = http
+        .get("https://api.search.brave.com/res/v1/web/search")
+        .query(&[("q", query), ("count", count.as_str())])
+        .header("Accept", "application/json")
+        .header("X-Subscription-Token", api_key.trim())
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let mut results = Vec::new();
+    for item in value
+        .get("web")
+        .and_then(|web| web.get("results"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let title = item.get("title").and_then(Value::as_str).unwrap_or("").trim();
+        let url = item.get("url").and_then(Value::as_str).unwrap_or("").trim();
+        if title.is_empty() || url.is_empty() {
+            continue;
+        }
+        results.push(WebSearchResult {
+            title: strip_html(title),
+            url: url.into(),
+            snippet: strip_html(item.get("description").and_then(Value::as_str).unwrap_or("")),
+            source: "brave".into(),
+            score: item.get("page_age").and_then(Value::as_f64).unwrap_or(0.86),
+        });
+    }
+    Ok(results)
+}
+
+async fn fetch_tavily_search(
+    http: &reqwest::Client,
+    api_key: &str,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<WebSearchResult>> {
+    let value: Value = http
+        .post("https://api.tavily.com/search")
+        .json(&json!({
+            "api_key": api_key.trim(),
+            "query": query,
+            "search_depth": "advanced",
+            "max_results": max_results.clamp(1, 20),
+            "include_answer": false,
+            "include_raw_content": false
+        }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(value
+        .get("results")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let title = item.get("title").and_then(Value::as_str).unwrap_or("").trim();
+            let url = item.get("url").and_then(Value::as_str).unwrap_or("").trim();
+            if title.is_empty() || url.is_empty() {
+                return None;
+            }
+            Some(WebSearchResult {
+                title: strip_html(title),
+                url: url.into(),
+                snippet: strip_html(item.get("content").and_then(Value::as_str).unwrap_or("")),
+                source: "tavily".into(),
+                score: item.get("score").and_then(Value::as_f64).unwrap_or(0.84),
+            })
+        })
+        .collect())
+}
+
+async fn fetch_serper_search(
+    http: &reqwest::Client,
+    api_key: &str,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<WebSearchResult>> {
+    let value: Value = http
+        .post("https://google.serper.dev/search")
+        .header("X-API-KEY", api_key.trim())
+        .header(CONTENT_TYPE, "application/json")
+        .json(&json!({ "q": query, "num": max_results.clamp(1, 20) }))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(value
+        .get("organic")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let title = item.get("title").and_then(Value::as_str).unwrap_or("").trim();
+            let url = item.get("link").and_then(Value::as_str).unwrap_or("").trim();
+            if title.is_empty() || url.is_empty() {
+                return None;
+            }
+            Some(WebSearchResult {
+                title: strip_html(title),
+                url: url.into(),
+                snippet: strip_html(item.get("snippet").and_then(Value::as_str).unwrap_or("")),
+                source: "serper".into(),
+                score: 0.82,
+            })
+        })
+        .collect())
+}
+
+async fn fetch_searxng_search(
+    http: &reqwest::Client,
+    base_url: &str,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<WebSearchResult>> {
+    let base = base_url.trim().trim_end_matches('/');
+    let endpoint = if base.ends_with("/search") {
+        base.to_string()
+    } else {
+        format!("{base}/search")
+    };
+    let url = reqwest::Url::parse_with_params(
+        &endpoint,
+        &[
+            ("q", query),
+            ("format", "json"),
+            ("language", "auto"),
+            ("safesearch", "0"),
+        ],
+    )?;
+    let value: Value = http
+        .get(url)
+        .header("Accept", "application/json")
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(value
+        .get("results")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(max_results)
+        .filter_map(|item| {
+            let title = item.get("title").and_then(Value::as_str).unwrap_or("").trim();
+            let url = item.get("url").and_then(Value::as_str).unwrap_or("").trim();
+            if title.is_empty() || url.is_empty() {
+                return None;
+            }
+            Some(WebSearchResult {
+                title: strip_html(title),
+                url: url.into(),
+                snippet: strip_html(
+                    item.get("content")
+                        .or_else(|| item.get("snippet"))
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                ),
+                source: "searxng".into(),
+                score: item.get("score").and_then(Value::as_f64).unwrap_or(0.8),
+            })
+        })
+        .collect())
+}
+
+async fn fetch_bing_rss_search(
+    http: &reqwest::Client,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<WebSearchResult>> {
+    let url = reqwest::Url::parse_with_params(
+        "https://www.bing.com/search",
+        &[("q", query), ("format", "rss")],
+    )?;
+    let body = http
+        .get(url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 RainyReSearch/1.0 research search",
+        )
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let doc = roxmltree::Document::parse(&body)?;
+    let mut results = Vec::new();
+    for item in doc.descendants().filter(|node| node.has_tag_name("item")) {
+        let title = child_text(item, "title");
+        let url = child_text(item, "link");
+        if title.is_empty() || url.is_empty() {
+            continue;
+        }
+        results.push(WebSearchResult {
+            title,
+            url,
+            snippet: child_text(item, "description"),
+            source: "bing-rss".into(),
+            score: 0.68,
+        });
+        if results.len() >= max_results {
+            break;
+        }
+    }
+    Ok(results)
+}
+
+fn child_text(node: roxmltree::Node<'_, '_>, tag: &str) -> String {
+    node.children()
+        .find(|child| child.has_tag_name(tag))
+        .and_then(|child| child.text())
+        .map(strip_html)
+        .unwrap_or_default()
+}
+
+async fn fetch_duckduckgo_instant(
+    http: &reqwest::Client,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<WebSearchResult>> {
+    let url = reqwest::Url::parse_with_params(
+        "https://api.duckduckgo.com/",
+        &[
+            ("q", query),
+            ("format", "json"),
+            ("no_html", "1"),
+            ("skip_disambig", "1"),
+        ],
+    )?;
+    let value: Value = http
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(extract_duckduckgo_results(&value, max_results))
+}
+
 fn extract_duckduckgo_results(value: &Value, max_results: usize) -> Vec<WebSearchResult> {
     let mut results = Vec::new();
     let abstract_text = value
@@ -4699,6 +5212,8 @@ fn extract_duckduckgo_results(value: &Value, max_results: usize) -> Vec<WebSearc
             },
             url: abstract_url.into(),
             snippet: abstract_text.into(),
+            source: "duckduckgo-instant-answer".into(),
+            score: 0.42,
         });
     }
 
@@ -4746,8 +5261,34 @@ fn collect_duckduckgo_topics(
             title,
             url: url.into(),
             snippet: text.into(),
+            source: "duckduckgo-instant-answer".into(),
+            score: 0.4,
         });
     }
+}
+
+fn strip_html(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut in_tag = false;
+    for ch in value.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    decode_basic_entities(out.trim())
+}
+
+fn decode_basic_entities(value: &str) -> String {
+    value
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
 }
 
 fn get_u64(value: &Value, key: &str) -> u64 {

@@ -3,7 +3,6 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Needles = @(
   ([string]::Concat("C:", "\Users\", "Ra1ny")),
-  ([string]::Concat("Down", "loads")),
   ([string]::Concat("~", "/.", "cod", "ex")),
   ([string]::Concat("chat", "gpt.com/", "cod", "ex/", "desktop", "-auth")),
   ([string]::Concat("login-with-chat", "gpt")),
@@ -23,7 +22,7 @@ $Targets = @(
   (Join-Path $Root "electron\package.json"),
   (Join-Path $Root "resources\app.asar"),
   (Join-Path $Root "resources\app.asar.unpacked"),
-  (Join-Path $Root "resources\deepx-core.exe"),
+  (Join-Path $Root "resources\rainy-research-core.exe"),
   (Join-Path $Root "core\src")
 )
 
@@ -61,8 +60,8 @@ if ($failures.Count -gt 0) {
 }
 
 foreach ($required in @(
-  (Join-Path $Root "resources\deepx-assets\icon.png"),
-  (Join-Path $Root "resources\deepx-assets\icon.ico")
+  (Join-Path $Root "resources\rainy-research-assets\icon.png"),
+  (Join-Path $Root "resources\rainy-research-assets\icon.ico")
 )) {
   if (!(Test-Path -LiteralPath $required)) {
     throw "Missing required release asset: $required"

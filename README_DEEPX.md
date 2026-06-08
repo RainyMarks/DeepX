@@ -1,39 +1,48 @@
-# DeepX Portable
+# 雨刃 / RainyReSearch Portable
 
-DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。用户自己填写模型 API key；配置、会话、日志、缓存指标和本地密钥默认都保存在应用目录的 `data/` 下。
+雨刃（RainyReSearch）`1.0.0` 是面向科研复现的本地 Agent 工作台。旧 `0.x` release 链不再作为当前版本线；`1.0.0` 从 RainyReSearch 重新开始。
 
-## 运行
+## 使用
 
 1. 解压 portable zip。
-2. 运行 `DeepX.exe`。
-3. 在“设置 -> 模型”里填写自己的 API key。
-4. 保存后测试连接。
+2. 运行 `RainyReSearch.exe`。
+3. 在 `设置 -> 模型` 填写自己的模型 API key。
+4. 在 `设置 -> 科研源` 按需填写 OpenAlex、Semantic Scholar、GitHub、Crossref 配置。
+5. 在 `设置 -> 联网搜索` 按需填写 Brave、Tavily、Serper 或 SearXNG，让 Agent 获得更强的网页搜索能力。
 
-发行包默认不包含 `data/secrets.local.json`，也不包含任何个人 API key。
+本机配置、会话、日志、缓存指标、研究数据库和密钥默认都保存在应用目录的 `data/` 下。`data/secrets.local.json` 不应提交或打包进公开发行包。
 
-## 更新
-
-在“设置 -> 常规 -> 应用更新”里可以检查 GitHub Release，并直接下载、安装新的 portable 包。
-
-更新只替换程序文件，不覆盖 `data/` 目录；已有配置、会话和 API key 会保留。
-
-## 目录
+## 主要目录
 
 ```text
-resources/                 Electron 资源、deepx-core.exe、图标、原生依赖
-data/config/               设置
-data/sessions/             会话
-data/logs/                 日志
-data/plugins/              插件
-data/skills/               技能
-data/cache-metrics/        缓存与用量指标
-data/secrets.local.json    用户本机 API key，发行包不包含
+RainyReSearch.exe
+resources/
+  app.asar
+  app.asar.unpacked/
+  rainy-research-core.exe
+  rainy-research-assets/
+data/
+  config/
+  sessions/
+  cache-metrics/
+  research/
+    research.db
+    search-history.jsonl
+    repos/
+    reports/
 ```
 
-## 声明
+## 1.0.0 核心模块
 
-DeepX 是独立项目，不是 DeepSeek 官方项目，也不是 OpenAI/Codex 官方项目。
+- 论文雷达：AI 搭配多源论文搜索、去重和情报卡。
+- 代码分析：GitHub 或本地 repo 复现审计。
+- 关系图：引用、代码、方法、数据集和模块关系图。
+- TrickScore：复现/可信性风险评分，不代表造假概率。
+- 选题生成：在左侧 AI 研究助手中生成带来源、风险和实现步骤的研究方案。
+- 服务器监控：通过 SSH 连接远端服务器，执行命令并定时巡检训练进度、GPU、磁盘和日志。
+
+RainyReSearch 是独立项目，不是 DeepSeek 官方项目，也不是 OpenAI/Codex 官方项目。
 
 ## License
 
-DeepX 使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景中分发；未经授权不得用于商业目的。
+RainyReSearch 使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景中分发；未经授权不得用于商业目的。

@@ -1,89 +1,67 @@
-# DeepX
+# 雨刃 / RainyReSearch
 
-<p align="center">
-  <img src="docs/images/deepx-logo.png" alt="DeepX logo" width="160" />
-</p>
+雨刃（RainyReSearch）`1.0.0` 是面向科研复现与研究开发的本地 Agent 工作台。当前版本从 `1.0.0` 重新开始，旧 `0.x` release 链只作为历史产物保留，不参与当前更新线。
 
-<p align="center">
-  <img src="docs/images/deepx-showcase.png" alt="DeepX showcase" />
-</p>
+核心目标不是做一个通用聊天壳，而是把论文搜索、AI 研究对话、代码复现、服务器监控、论文情报卡、关系图和代码分析放进一个可落地的科研闭环里。它保留多 provider、用户自填 API key、工作区、终端、权限模式、缓存指标和本地 JSONL trace 能力。
 
-DeepX 是一个源码公开、非商业许可的本地 AI coding agent 桌面版。它把多模型 API 接入、项目工作区、对话、缓存指标、终端、本地文件 Agent 能力和应用内更新放在一个 Windows portable 应用里，用户自己填写 API key 即可使用。本项目100%由CodeX开发。
+## 1.0.0 模块
 
-## 动机
+- 论文雷达：默认由 AI 搭配 OpenAlex、Semantic Scholar、Crossref、arXiv、GitHub 和强联网搜索一起检索；只记录用户搜索历史，不把所有文献灌进本地数据库。
+- 代码分析：审计 GitHub repo 或本地 repo 的 README、依赖、train/eval/inference、dataset、checkpoint、config、硬编码路径和 issue 信号。
+- TrickScore：输出复现/可信性风险，不输出“造假概率”，每个判断都保留 evidence。
+- 关系图：构建论文、代码、方法、数据集和技术模块关系图。
+- 选题生成：在左侧 AI 研究助手中生成研究方案、消融计划和可交给 Agent 的开发任务。
+- 服务器监控：左侧提供 SSH 连接、远端命令和定时巡检入口，可用于论文训练进度、GPU、磁盘和日志监控。
 
-我喜欢 Codex 桌面端的 UI 设计和以项目为中心的工作流，所以做了一个独立的 DeepX：界面方向强调高密度、项目工作区、底部输入框和本地 agent 体验；模型接入、配置目录、后端 core 和发行包都由 DeepX 自己维护。
+ResultForge 暂不在 `1.0.0` UI 暴露，后续版本再补完整模块。
 
-DeepX 不是 DeepSeek 官方项目，也不是 OpenAI/Codex 官方项目。本项目与 DeepSeek 官方、OpenAI 官方均无隶属、背书或合作关系。
+## 配置与数据
 
-## 特性
+首次启动后进入 `设置 -> 模型` 填写自己的模型 API key。科研源可在 `设置 -> 科研源` 填写：
 
-- DeepSeek 优先的多服务商配置：DeepSeek、MiMo、GLM、Qwen、Kimi、StepFun、MiniMax，以及自定义 OpenAI-compatible provider。
-- 用户本机 API key 存在 `data/secrets.local.json`，发行包默认不包含任何密钥。
-- Portable Windows 发行版：应用运行时、配置、会话、日志、插件、skills、缓存指标都放在 DeepX 目录内。
-- 项目式工作区：每个项目保留独立上下文和会话入口。
-- 权限模式可选：默认权限、自动审查、完全访问权限、自定义配置。首版默认只读；写文件和 shell 只在完全访问权限下开放。
-- Cache-first 上下文策略：稳定 prefix、prefix hash、cache hit/miss、命中率和费用估算。
-- 本地终端面板：使用 PowerShell PTY，默认 cwd 为当前工作区。
-- Markdown/GFM 渲染和本地代码高亮。
-- 应用内检查更新：在主界面内联提示新版本，可下载并安装，更新时保留 `data/`、会话和 API key。
+- OpenAlex API key
+- Semantic Scholar API key
+- GitHub token
+- Crossref mailto
 
-## 下载与运行
+强联网搜索可在 `设置 -> 联网搜索` 填写 Brave、Tavily、Serper 或 SearXNG。没有 key 时会明确降级，仍可使用 arXiv、Crossref 公开能力和公开搜索兜底。密钥保存在本机 `data/secrets.local.json`，不会进入发行包。
 
-从 GitHub Releases 下载最新的 `DeepX-portable-v*.zip`：
+研究数据独立保存在：
 
-https://github.com/RainyMarks/DeepX/releases
-
-解压后运行 `DeepX.exe`。首次启动后进入“设置 -> 模型”，填写自己的 API key，点击保存并测试连接。不要把 `data/secrets.local.json` 提交到 GitHub。
-
-后续可以在“设置 -> 常规 -> 应用更新”中检查新版本。应用内更新只替换程序文件，不覆盖 `data/` 目录。
-
-## 源码构建
-
-需要 Windows、PowerShell、Rust、Node.js、npm 和 Python。构建脚本会下载 Electron Windows runtime，生成 `DeepX.exe`，打包 `resources/app.asar`，并生成 portable zip。
-
-```powershell
-npm run package
-npm run zip
+```text
+data/research/
+  research.db
+  search-history.jsonl
+  repos/
+  reports/
 ```
 
-常用检查：
+旧聊天会话仍可读取；研究数据不会覆盖旧会话目录。
+
+## 本地开发
+
+需要 Windows、PowerShell、Rust、Node.js、npm 和 Python。
 
 ```powershell
-node --check .\electron\main.js
-node --check .\electron\preload.js
-node --check .\electron\renderer\app.js
-cargo test --manifest-path .\core\Cargo.toml
+cargo test --manifest-path core/Cargo.toml
+node --check electron/main.js electron/preload.js electron/renderer/app.js
+npm run package
+npm run zip
 npm run check:self-contained
 ```
 
-## 目录结构
+发行产物：
 
-```text
-core/                         Rust sidecar，provider、会话、工作区工具和 SSE
-electron/                     Electron main/preload/renderer
-resources/deepx-assets/       DeepX 图标资源
-scripts/                      打包、图标生成和自包含检查脚本
-data/                         本地运行态，默认不提交
-releases/                     本地保留的 portable 发行包
-```
+- `RainyReSearch.exe`
+- `resources/rainy-research-core.exe`
+- `resources/app.asar`
+- `resources/rainy-research-assets/`
+- `dist/RainyReSearch-portable-v1.0.0.zip`
 
 ## 安全边界
 
-DeepX 的本地文件工具强制限制在用户选择的工作区内，并默认只读。发行包不应包含：
-
-- API key、token、cookie、`.env`
-- `data/secrets.local.json`
-- 个人绝对路径
-- 第三方账号登录入口
-- 原始本机用户目录依赖
-
-## 致谢
-
-- Reasonix：cache-first agent 思路给了 DeepX 很多启发。
-- DeepSeek-GUI：本地桌面模型接入和交互实践给了 DeepX 参考。
-- Claude Code、Codex CLI、aider、Cline、Roo Code 等公开文档：为本地 agent loop、工具权限、项目指令和上下文管理提供了设计参考。
+RainyReSearch 的本地文件工具默认限制在用户选择的工作区内，发行包不包含本机密钥、历史会话、缓存指标、绝对用户路径或上游 shell-only 文件。
 
 ## License
 
-DeepX 使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景中分发；未经授权不得用于商业目的。
+本项目使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景中分发；未经授权不得用于商业目的。
