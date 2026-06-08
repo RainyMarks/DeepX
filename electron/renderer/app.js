@@ -9,7 +9,7 @@ const SIDEBAR_MAX = 360;
 const SIDEBAR_DEFAULT = 232;
 const RESEARCH_SPLIT_MIN = 380;
 const RESEARCH_SPLIT_MAX = 920;
-const RESEARCH_SPLIT_DEFAULT = 620;
+const RESEARCH_SPLIT_DEFAULT = 560;
 const LEGACY_THEME_DARK = ["cod", "ex"].join("");
 const LEGACY_THEME_LIGHT = `${LEGACY_THEME_DARK}-light`;
 
@@ -833,6 +833,7 @@ boot().catch((error) => {
 
 async function boot() {
   configureMarkdown();
+  promoteSidebarToToolbar();
   applyLanguage("zh-CN");
   bindEvents();
   await loadBrandIcon();
@@ -940,6 +941,14 @@ function normalizeLegacySettings() {
   }
 }
 
+function promoteSidebarToToolbar() {
+  const sidebar = document.querySelector(".sidebar");
+  const toolbar = document.querySelector(".thread-toolbar");
+  if (!sidebar || !toolbar || toolbar.contains(sidebar)) return;
+  sidebar.classList.add("topbar-nav");
+  toolbar.insertBefore(sidebar, toolbar.firstChild);
+}
+
 function applySettingsToState() {
   state.language = normalizeLanguage(state.settings.language);
   state.thinkingEnabled = state.settings.thinkingEnabled !== false;
@@ -948,7 +957,7 @@ function applySettingsToState() {
   state.workspace = state.settings.workspacePath || null;
   state.projects = normalizeProjects(state.settings.workspaceHistory || [], state.workspace);
   state.sidebarWidth = clampInt(state.settings.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT);
-  state.sidebarCollapsed = !!state.settings.sidebarCollapsed;
+  state.sidebarCollapsed = false;
   state.researchSplitWidth = readResearchSplitWidth();
   resetWorkspaceSetupState();
   document.documentElement.lang = state.language;
@@ -3555,8 +3564,7 @@ function closeAllPopovers() {
 }
 
 function toggleSidebar() {
-  state.sidebarCollapsed = !state.sidebarCollapsed;
-  applySidebarState(true);
+  newSession();
 }
 
 function applySidebarState(save) {
@@ -3607,7 +3615,7 @@ function readResearchSplitWidth() {
 function clampResearchSplitWidth(value) {
   const surfaceWidth = el.mainSurface?.clientWidth || window.innerWidth || 1200;
   const rightMinimum = 460;
-  const handleWidth = 10;
+  const handleWidth = 18;
   const dynamicMax = Math.max(RESEARCH_SPLIT_MIN, surfaceWidth - rightMinimum - handleWidth - 24);
   const max = Math.min(RESEARCH_SPLIT_MAX, dynamicMax);
   return clampInt(value, RESEARCH_SPLIT_MIN, max, RESEARCH_SPLIT_DEFAULT);
