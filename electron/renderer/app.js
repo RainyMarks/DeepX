@@ -244,6 +244,7 @@ const I18N = {
     permissionCustomHelp: "按本地配置文件里的权限策略运行；未配置时按默认只读策略。",
     webSearchRunning: "正在搜索网络",
     sending: "正在发送",
+    streaming: "正在生成",
     toolRunning: "正在使用 {name}",
     toolDone: "{name} 完成",
     toolFailed: "{name} 失败",
@@ -421,6 +422,7 @@ const I18N = {
     permissionCustomHelp: "Use the local config permission policy; defaults to read-only when no policy exists.",
     webSearchRunning: "Searching the web",
     sending: "Sending",
+    streaming: "Generating",
     toolRunning: "Using {name}",
     toolDone: "{name} done",
     toolFailed: "{name} failed",
@@ -1844,6 +1846,7 @@ function appendMessage({ role, content = "", reasoning, metric, checkpointId = n
     usage: null,
     tools: [],
     renderTimer: null,
+    streamStarted: false,
   };
   updateCheckpointButton();
 
@@ -1883,12 +1886,19 @@ function appendMessage({ role, content = "", reasoning, metric, checkpointId = n
 
   const controller = Object.assign(item, {
     appendContent(text) {
+      if (text) this.markStreaming();
       messageState.rawContent += text;
       scheduleRender();
     },
     appendReasoning(text) {
+      if (text) this.markStreaming();
       messageState.rawReasoning += text;
       scheduleRender();
+    },
+    markStreaming() {
+      if (role !== "assistant" || messageState.streamStarted) return;
+      messageState.streamStarted = true;
+      this.setStatus(t("streaming"));
     },
     setMetric(next) {
       if (next) {

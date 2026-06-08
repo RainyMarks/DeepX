@@ -2421,6 +2421,22 @@ struct ParsedStreamDelta {
     content: String,
     reasoning: String,
     usage: Option<NormalizedUsage>,
+    tool_call_deltas: Vec<StreamToolCallDelta>,
+}
+
+#[derive(Default)]
+struct StreamToolCallDelta {
+    index: usize,
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
+}
+
+#[derive(Default)]
+struct StreamingToolCallAccumulator {
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
 }
 
 async fn call_model(http: &reqwest::Client, call: ModelCall) -> Result<ModelResult, ApiError> {
@@ -2498,6 +2514,7 @@ async fn stream_model_and_emit(
     let mut content = String::new();
     let mut reasoning = String::new();
     let mut usage = NormalizedUsage::default();
+    let mut tool_calls = BTreeMap::<usize, StreamingToolCallAccumulator>::new();
 
     while let Some(chunk) = stream.next().await {
         let bytes =
@@ -2515,7 +2532,7 @@ async fn stream_model_and_emit(
                     content,
                     reasoning: non_empty(reasoning),
                     usage,
-                    tool_calls: Vec::new(),
+                    tool_calls: finish_stream_tool_calls(tool_calls),
                     tool_trace: Vec::new(),
                 });
             }
@@ -2523,6 +2540,9 @@ async fn stream_model_and_emit(
                 ApiError::upstream(format!("provider stream JSON decode failed: {err}"))
             })?;
             let delta = parse_stream_delta(&value);
+            for tool_delta in delta.tool_call_deltas {
+                apply_stream_tool_delta(tool_delta, &mut tool_calls);
+            }
             if !delta.reasoning.is_empty() {
                 reasoning.push_str(&delta.reasoning);
                 send_sse(tx, "reasoning.delta", json!({ "text": delta.reasoning })).await;
@@ -2542,7 +2562,7 @@ async fn stream_model_and_emit(
         content,
         reasoning: non_empty(reasoning),
         usage,
-        tool_calls: Vec::new(),
+        tool_calls: finish_stream_tool_calls(tool_calls),
         tool_trace: Vec::new(),
     })
 }
@@ -2810,6 +2830,7 @@ async fn parse_sse_response(resp: reqwest::Response) -> Result<ModelResult, ApiE
     let mut content = String::new();
     let mut reasoning = String::new();
     let mut usage = NormalizedUsage::default();
+    let mut tool_calls = BTreeMap::<usize, StreamingToolCallAccumulator>::new();
 
     while let Some(chunk) = stream.next().await {
         let bytes =
@@ -2827,14 +2848,20 @@ async fn parse_sse_response(resp: reqwest::Response) -> Result<ModelResult, ApiE
                     content,
                     reasoning: non_empty(reasoning),
                     usage,
-                    tool_calls: Vec::new(),
+                    tool_calls: finish_stream_tool_calls(tool_calls),
                     tool_trace: Vec::new(),
                 });
             }
             let value: Value = serde_json::from_str(data).map_err(|err| {
                 ApiError::upstream(format!("provider stream JSON decode failed: {err}"))
             })?;
-            merge_stream_delta(&value, &mut content, &mut reasoning, &mut usage);
+            merge_stream_delta(
+                &value,
+                &mut content,
+                &mut reasoning,
+                &mut usage,
+                &mut tool_calls,
+            );
         }
     }
 
@@ -2842,7 +2869,7 @@ async fn parse_sse_response(resp: reqwest::Response) -> Result<ModelResult, ApiE
         content,
         reasoning: non_empty(reasoning),
         usage,
-        tool_calls: Vec::new(),
+        tool_calls: finish_stream_tool_calls(tool_calls),
         tool_trace: Vec::new(),
     })
 }
@@ -2852,10 +2879,14 @@ fn merge_stream_delta(
     content: &mut String,
     reasoning: &mut String,
     usage: &mut NormalizedUsage,
+    tool_calls: &mut BTreeMap<usize, StreamingToolCallAccumulator>,
 ) {
     let delta = parse_stream_delta(value);
     if let Some(u) = delta.usage {
         *usage = u;
+    }
+    for tool_delta in delta.tool_call_deltas {
+        apply_stream_tool_delta(tool_delta, tool_calls);
     }
     reasoning.push_str(&delta.reasoning);
     content.push_str(&delta.content);
@@ -2878,22 +2909,95 @@ fn parse_stream_delta(value: &Value) -> ParsedStreamDelta {
     else {
         return parsed;
     };
-    if let Some(text) = delta.get("reasoning_content").and_then(Value::as_str) {
-        parsed.reasoning.push_str(text);
-    }
-    if let Some(details) = delta.get("reasoning_details").and_then(Value::as_array) {
-        for detail in details {
-            if let Some(text) = detail.get("text").and_then(Value::as_str) {
-                parsed.reasoning.push_str(text);
-            }
-        }
-    }
+    append_reasoning_field(delta, &mut parsed.reasoning);
     if let Some(text) = delta.get("content").and_then(Value::as_str) {
         let (r, c) = split_think_tags(text);
         parsed.reasoning.push_str(&r);
         parsed.content.push_str(&c);
     }
+    if let Some(items) = delta.get("tool_calls").and_then(Value::as_array) {
+        for (fallback_index, item) in items.iter().enumerate() {
+            let function = item.get("function").unwrap_or(&Value::Null);
+            parsed.tool_call_deltas.push(StreamToolCallDelta {
+                index: item
+                    .get("index")
+                    .and_then(Value::as_u64)
+                    .map(|value| value as usize)
+                    .unwrap_or(fallback_index),
+                id: item
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned),
+                name: function
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned),
+                arguments: function
+                    .get("arguments")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+            });
+        }
+    }
+    if let Some(function) = delta.get("function_call") {
+        parsed.tool_call_deltas.push(StreamToolCallDelta {
+            index: 0,
+            id: None,
+            name: function
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
+            arguments: function
+                .get("arguments")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+        });
+    }
     parsed
+}
+
+fn apply_stream_tool_delta(
+    delta: StreamToolCallDelta,
+    tool_calls: &mut BTreeMap<usize, StreamingToolCallAccumulator>,
+) {
+    let entry = tool_calls.entry(delta.index).or_default();
+    if let Some(id) = delta.id {
+        entry.id = Some(id);
+    }
+    if let Some(name) = delta.name {
+        entry.name = Some(name);
+    }
+    entry.arguments.push_str(&delta.arguments);
+}
+
+fn finish_stream_tool_calls(
+    tool_calls: BTreeMap<usize, StreamingToolCallAccumulator>,
+) -> Vec<ToolCallRequest> {
+    tool_calls
+        .into_iter()
+        .filter_map(|(_, item)| {
+            let name = item.name?;
+            let raw_arguments = item.arguments.trim();
+            let arguments = if raw_arguments.is_empty() {
+                json!({})
+            } else {
+                serde_json::from_str::<Value>(raw_arguments)
+                    .unwrap_or_else(|_| json!({ "raw": raw_arguments }))
+            };
+            Some(ToolCallRequest {
+                id: item
+                    .id
+                    .unwrap_or_else(|| format!("call_{}", Uuid::new_v4().simple())),
+                name,
+                arguments,
+            })
+        })
+        .collect()
 }
 
 fn parse_non_stream_response(value: &Value) -> ModelResult {
@@ -2906,19 +3010,9 @@ fn parse_non_stream_response(value: &Value) -> ModelResult {
         .unwrap_or(Value::Null);
     let raw_content = message.get("content").and_then(Value::as_str).unwrap_or("");
     let (tag_reasoning, content) = split_think_tags(raw_content);
-    let mut reasoning = message
-        .get("reasoning_content")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
+    let mut reasoning = String::new();
+    append_reasoning_field(&message, &mut reasoning);
     reasoning.push_str(&tag_reasoning);
-    if let Some(details) = message.get("reasoning_details").and_then(Value::as_array) {
-        for detail in details {
-            if let Some(text) = detail.get("text").and_then(Value::as_str) {
-                reasoning.push_str(text);
-            }
-        }
-    }
     let usage = value.get("usage").map(normalize_usage).unwrap_or_default();
     let tool_calls = parse_tool_calls(&message);
     ModelResult {
@@ -2927,6 +3021,43 @@ fn parse_non_stream_response(value: &Value) -> ModelResult {
         usage,
         tool_calls,
         tool_trace: Vec::new(),
+    }
+}
+
+fn append_reasoning_field(value: &Value, output: &mut String) {
+    for key in [
+        "reasoning_content",
+        "reasoningContent",
+        "reasoning",
+        "thinking",
+        "thinking_content",
+        "thinkingContent",
+    ] {
+        if let Some(text) = value.get(key).and_then(Value::as_str) {
+            output.push_str(text);
+        }
+    }
+    if let Some(details) = value.get("reasoning_details").and_then(Value::as_array) {
+        append_reasoning_details(details, output);
+    }
+    if let Some(details) = value.get("reasoningDetails").and_then(Value::as_array) {
+        append_reasoning_details(details, output);
+    }
+}
+
+fn append_reasoning_details(details: &[Value], output: &mut String) {
+    for detail in details {
+        for key in ["text", "content", "summary", "delta"] {
+            if let Some(text) = detail.get(key).and_then(Value::as_str) {
+                output.push_str(text);
+            }
+        }
+        if let Some(nested) = detail.get("summary").and_then(Value::as_array) {
+            append_reasoning_details(nested, output);
+        }
+        if let Some(nested) = detail.get("children").and_then(Value::as_array) {
+            append_reasoning_details(nested, output);
+        }
     }
 }
 
@@ -2988,22 +3119,20 @@ async fn run_agent_turn(
     for round in 0..MAX_AGENT_TOOL_ROUNDS {
         let step_call = ModelCall {
             messages: messages.clone(),
-            stream: false,
+            stream: tx.is_some(),
             tools_enabled: true,
             ..call.clone()
         };
-        let mut result = call_model(http, step_call).await?;
+        let mut result = if let Some(tx) = tx {
+            stream_model_and_emit(http, step_call, tx).await?
+        } else {
+            call_model(http, step_call).await?
+        };
         add_usage(&mut usage, &result.usage);
         if result.tool_calls.is_empty() {
             result.usage = usage;
             result.tool_trace = tool_trace;
             if let Some(tx) = tx {
-                if let Some(reasoning) = &result.reasoning {
-                    send_sse(tx, "reasoning.delta", json!({ "text": reasoning })).await;
-                }
-                if !result.content.is_empty() {
-                    send_sse(tx, "message.delta", json!({ "text": result.content })).await;
-                }
                 send_sse(tx, "usage", json!({ "usage": result.usage })).await;
             }
             return Ok(result);
@@ -4885,6 +5014,66 @@ mod tests {
         let (r, c) = split_think_tags("hello <think>hidden</think> world");
         assert_eq!(r, "hidden");
         assert_eq!(c, "hello  world");
+    }
+
+    #[test]
+    fn streaming_tool_call_deltas_are_accumulated() {
+        let first = json!({
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "id": "call_read",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"path\":\""
+                        }
+                    }]
+                }
+            }]
+        });
+        let second = json!({
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "function": {
+                            "arguments": "README.md\"}"
+                        }
+                    }]
+                }
+            }]
+        });
+        let mut calls = BTreeMap::<usize, StreamingToolCallAccumulator>::new();
+        for delta in parse_stream_delta(&first).tool_call_deltas {
+            apply_stream_tool_delta(delta, &mut calls);
+        }
+        for delta in parse_stream_delta(&second).tool_call_deltas {
+            apply_stream_tool_delta(delta, &mut calls);
+        }
+        let finished = finish_stream_tool_calls(calls);
+        assert_eq!(finished.len(), 1);
+        assert_eq!(finished[0].id, "call_read");
+        assert_eq!(finished[0].name, "read_file");
+        assert_eq!(finished[0].arguments["path"], "README.md");
+    }
+
+    #[test]
+    fn streaming_reasoning_accepts_compatible_field_names() {
+        let value = json!({
+            "choices": [{
+                "delta": {
+                    "reasoning": "first ",
+                    "reasoning_details": [
+                        { "summary": "second " },
+                        { "delta": "third" }
+                    ]
+                }
+            }]
+        });
+        let parsed = parse_stream_delta(&value);
+        assert_eq!(parsed.reasoning, "first second third");
     }
 
     #[test]
