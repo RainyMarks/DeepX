@@ -69,6 +69,15 @@ foreach ($required in @(
   }
 }
 
+foreach ($forbidden in @(
+  (Join-Path $Root ([string]::Concat("resources\node", "_repl.exe"))),
+  (Join-Path $Root ([string]::Concat("resources\cod", "ex-notification.wav")))
+)) {
+  if (Test-Path -LiteralPath $forbidden) {
+    throw "Forbidden legacy resource must not be present: $forbidden"
+  }
+}
+
 $Unpacked = Join-Path $Root "resources\app.asar.unpacked"
 if (Test-Path -LiteralPath $Unpacked) {
   $nativeNodes = @(Get-ChildItem -LiteralPath $Unpacked -Recurse -Filter "*.node" -ErrorAction SilentlyContinue)

@@ -325,6 +325,9 @@ async fn config_save(
     if let Some(enabled) = req.pointer_cursor {
         settings.pointer_cursor = enabled;
     }
+    if let Some(mode) = req.motion_mode {
+        settings.motion_mode = normalize_motion_mode(&mode).to_string();
+    }
     if let Some(mode) = req.permission_mode {
         settings.permission_mode = normalize_permission_mode(&mode).to_string();
     }
@@ -1502,6 +1505,8 @@ struct Settings {
     contrast: u64,
     #[serde(default = "default_pointer_cursor")]
     pointer_cursor: bool,
+    #[serde(default = "default_motion_mode")]
+    motion_mode: String,
     #[serde(default = "default_permission_mode")]
     permission_mode: String,
     #[serde(default)]
@@ -1544,6 +1549,7 @@ impl Default for Settings {
             translucent_sidebar: false,
             contrast: default_contrast(),
             pointer_cursor: default_pointer_cursor(),
+            motion_mode: default_motion_mode(),
             permission_mode: default_permission_mode(),
             workspace_path: None,
             workspace_history: Vec::new(),
@@ -1611,6 +1617,10 @@ fn default_pointer_cursor() -> bool {
     true
 }
 
+fn default_motion_mode() -> String {
+    "system".into()
+}
+
 fn default_permission_mode() -> String {
     "default".into()
 }
@@ -1658,6 +1668,14 @@ fn normalize_density(value: &str) -> &str {
         "compact" => "compact",
         "spacious" => "spacious",
         _ => "comfortable",
+    }
+}
+
+fn normalize_motion_mode(value: &str) -> &str {
+    match value {
+        "on" => "on",
+        "off" => "off",
+        _ => "system",
     }
 }
 
@@ -1918,6 +1936,7 @@ struct SaveConfigRequest {
     translucent_sidebar: Option<bool>,
     contrast: Option<u64>,
     pointer_cursor: Option<bool>,
+    motion_mode: Option<String>,
     permission_mode: Option<String>,
     workspace_path: Option<String>,
     workspace_history: Option<Vec<String>>,

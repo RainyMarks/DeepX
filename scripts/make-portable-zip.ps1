@@ -45,6 +45,13 @@ foreach ($file in $topFiles) {
 Copy-Item -Recurse -Force (Join-Path $Root "locales") (Join-Path $Out "locales")
 Copy-Item -Recurse -Force (Join-Path $Root "resources") (Join-Path $Out "resources")
 
+foreach ($legacyResource in @(
+  ([string]::Concat("node", "_repl.exe")),
+  ([string]::Concat("cod", "ex-notification.wav"))
+)) {
+  Remove-Item -Force -LiteralPath (Join-Path (Join-Path $Out "resources") $legacyResource) -ErrorAction SilentlyContinue
+}
+
 $unpacked = Join-Path $Out "resources\app.asar.unpacked"
 if (!(Test-Path -LiteralPath $unpacked)) {
   throw "Portable output is missing resources\app.asar.unpacked"
@@ -105,6 +112,7 @@ $defaultSettings = [ordered]@{
   translucentSidebar = $false
   contrast = 60
   pointerCursor = $true
+  motionMode = "system"
   permissionMode = "default"
   workspacePath = $null
   workspaceHistory = @()

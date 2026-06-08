@@ -63,6 +63,10 @@
   --radius-2xl: 28px;
   --radius-shell: 30px;
   --composer-shadow: var(--shadow);
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-slow: 260ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 * {
@@ -112,6 +116,21 @@ html[data-density="spacious"] {
   --density-tool-padding: 10px;
 }
 
+html[data-motion="off"] {
+  --motion-fast: 1ms;
+  --motion-normal: 1ms;
+  --motion-slow: 1ms;
+}
+
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 1ms !important;
+}
+
 button,
 input,
 select,
@@ -121,6 +140,61 @@ textarea {
 
 button {
   color: inherit;
+}
+
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes streamCursor {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0.18;
+  }
 }
 
 button,
@@ -148,6 +222,33 @@ svg {
   stroke-linecap: round;
   stroke-linejoin: round;
   flex: 0 0 auto;
+}
+
+.sidebar-action,
+.workspace-row,
+.session-item,
+.composer-icon,
+.chip-button,
+.send-button,
+.secondary-button,
+.primary-button,
+.settings-back,
+.settings-close-icon,
+.settings-row,
+input,
+select,
+.popover-item,
+.attachment-chip button,
+.copy-button,
+.checkpoint-button {
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease),
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease),
+    filter var(--motion-fast) var(--motion-ease);
 }
 
 .deepx-shell {
@@ -421,6 +522,7 @@ html[data-translucent-sidebar="true"] .sidebar {
   border-radius: var(--radius-xl);
   background: var(--surface-2);
   color: var(--app-fg);
+  animation: popoverIn var(--motion-slow) var(--motion-ease);
 }
 
 .update-banner strong {
@@ -749,10 +851,15 @@ html[data-translucent-sidebar="true"] .sidebar {
   background: var(--composer-bg);
   box-shadow: var(--composer-shadow);
   pointer-events: auto;
+  transition:
+    border-color var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
 }
 
 .composer-surface:focus-within {
   border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
 #messageInput {
@@ -819,6 +926,7 @@ html[data-translucent-sidebar="true"] .sidebar {
 .composer.drag-over .composer-surface {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
+  transform: translateY(-2px);
 }
 
 .composer-bar {
@@ -888,6 +996,7 @@ html[data-translucent-sidebar="true"] .sidebar {
 
 .send-button:hover {
   filter: brightness(1.04);
+  transform: translateY(-1px);
 }
 
 .send-button:disabled {
@@ -906,6 +1015,11 @@ html[data-translucent-sidebar="true"] .sidebar {
   color: var(--popover-fg);
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35);
   overflow: hidden;
+  transform-origin: bottom center;
+}
+
+.popover:not(.hidden) {
+  animation: popoverIn var(--motion-normal) var(--motion-ease);
 }
 
 .popover.hidden {
@@ -1099,6 +1213,8 @@ html[data-translucent-sidebar="true"] .sidebar {
   z-index: 50;
   background: var(--settings-bg);
   color: var(--settings-fg);
+  font-family: var(--font-ui);
+  font-size: var(--ui-font-size);
 }
 
 .modal-overlay.hidden {
@@ -1150,6 +1266,8 @@ html[data-theme="light"] .settings-close-icon:hover {
   height: 100%;
   overflow: hidden;
   background: var(--settings-bg);
+  font-family: var(--font-ui);
+  font-size: var(--ui-font-size);
 }
 
 .settings-header {
@@ -1169,7 +1287,7 @@ html[data-theme="light"] .settings-header {
 .settings-header h1 {
   margin: 0;
   color: var(--settings-fg);
-  font-size: 26px;
+  font-size: calc(var(--ui-font-size) + 12px);
   font-weight: 680;
 }
 
@@ -1216,10 +1334,14 @@ html[data-theme="light"] .settings-header {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+.settings-section.active {
+  animation: messageIn var(--motion-normal) var(--motion-ease);
+}
+
 .settings-section h2 {
   margin: 0;
   color: var(--settings-fg);
-  font-size: 24px;
+  font-size: calc(var(--ui-font-size) + 10px);
   font-weight: 680;
 }
 
@@ -1256,6 +1378,10 @@ html[data-theme="light"] .settings-row {
   border-bottom-color: #eeeeee;
 }
 
+.settings-row:hover {
+  background: color-mix(in srgb, var(--settings-fg) 3%, transparent);
+}
+
 .settings-row:last-child {
   border-bottom: 0;
 }
@@ -1263,7 +1389,7 @@ html[data-theme="light"] .settings-row {
 .settings-row strong {
   display: block;
   color: var(--settings-fg);
-  font-size: 15px;
+  font-size: var(--ui-font-size);
   font-weight: 620;
 }
 
@@ -1271,7 +1397,7 @@ html[data-theme="light"] .settings-row {
   display: block;
   margin-top: 4px;
   color: var(--settings-muted);
-  font-size: 13px;
+  font-size: max(12px, calc(var(--ui-font-size) - 1px));
   line-height: 1.4;
 }
 
@@ -1300,6 +1426,7 @@ select {
   background: rgba(255, 255, 255, 0.06);
   color: var(--settings-fg);
   padding: 0 12px;
+  font-size: var(--ui-font-size);
   outline: 0;
   color-scheme: dark;
 }
@@ -1378,7 +1505,7 @@ code,
   max-width: 100%;
   color: var(--settings-muted);
   font-family: var(--font-code);
-  font-size: 12px;
+  font-size: var(--code-font-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1406,7 +1533,7 @@ html[data-theme="light"] .theme-card {
 
 .theme-card-head strong {
   display: block;
-  font-size: 16px;
+  font-size: var(--ui-font-size);
 }
 
 .theme-card-head small {
@@ -1440,6 +1567,15 @@ html[data-theme="light"] .segmented {
 
 .segmented.small button {
   min-width: 48px;
+  justify-content: center;
+}
+
+.motion-segmented {
+  justify-self: end;
+}
+
+.motion-segmented button {
+  min-width: 56px;
   justify-content: center;
 }
 
@@ -1646,6 +1782,7 @@ body.resizing-sidebar * {
   display: grid;
   gap: 8px;
   font-size: var(--ui-font-size);
+  animation: messageIn var(--motion-normal) var(--motion-ease);
 }
 
 .message.user {
@@ -1712,6 +1849,7 @@ body.resizing-sidebar * {
 .message.user .message-body {
   max-width: min(44rem, 100%);
   white-space: pre-wrap;
+  animation: bubbleIn var(--motion-normal) var(--motion-ease);
 }
 
 .message.assistant .message-body {
@@ -1720,6 +1858,18 @@ body.resizing-sidebar * {
 
 .message-body.markdown {
   white-space: normal;
+}
+
+.message.assistant.pending .message-body.markdown::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.1em;
+  margin-left: 3px;
+  border-radius: 999px;
+  background: var(--muted-strong);
+  vertical-align: -0.18em;
+  animation: streamCursor 900ms steps(1, end) infinite;
 }
 
 .message-body.markdown :first-child {
@@ -1859,6 +2009,7 @@ body.resizing-sidebar * {
   border-radius: var(--radius-lg);
   background: var(--surface-2);
   padding: var(--density-tool-padding);
+  animation: messageIn var(--motion-normal) var(--motion-ease);
 }
 
 .tool-call-title {
@@ -1889,6 +2040,10 @@ body.resizing-sidebar * {
 
 .tool-call-panel[open] .tool-call-title::before {
   transform: rotate(90deg);
+}
+
+.tool-call-panel[open] .tool-call-list {
+  animation: messageIn var(--motion-normal) var(--motion-ease);
 }
 
 .tool-call-title span {
@@ -2111,6 +2266,7 @@ html[data-theme="light"] .message-body.markdown pre {
   box-shadow: var(--shadow);
   font-size: 13px;
   line-height: 1.45;
+  animation: toastIn var(--motion-normal) var(--motion-ease);
 }
 
 .toast.error {

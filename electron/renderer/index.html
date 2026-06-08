@@ -279,11 +279,17 @@
                       <input id="codeFontInput" type="text" spellcheck="false" />
                     </label>
                     <label class="settings-row">
-                      <span><strong data-i18n="uiFontSize">UI size</strong></span>
+                      <span>
+                        <strong data-i18n="uiFontSize">UI size</strong>
+                        <small data-i18n="uiFontSizeHelp">Adjust the base size used by interface text.</small>
+                      </span>
                       <input id="uiFontSizeInput" type="number" min="12" max="18" step="1" />
                     </label>
                     <label class="settings-row">
-                      <span><strong data-i18n="codeFontSize">Code size</strong></span>
+                      <span>
+                        <strong data-i18n="codeFontSize">Code size</strong>
+                        <small data-i18n="codeFontSizeHelp">Adjust code, terminal, and reasoning text size.</small>
+                      </span>
                       <input id="codeFontSizeInput" type="number" min="10" max="16" step="1" />
                     </label>
                     <label class="settings-row">
@@ -309,6 +315,17 @@
                       </span>
                       <input id="pointerCursorInput" type="checkbox" />
                     </label>
+                    <div class="settings-row">
+                      <span>
+                        <strong data-i18n="motionEffects">Motion effects</strong>
+                        <small data-i18n="motionEffectsHelp">Control interface transitions and streaming cursor animation.</small>
+                      </span>
+                      <div class="segmented small motion-segmented">
+                        <button type="button" data-motion-mode="system"><span data-i18n="system">System</span></button>
+                        <button type="button" data-motion-mode="on"><span data-i18n="on">On</span></button>
+                        <button type="button" data-motion-mode="off"><span data-i18n="off">Off</span></button>
+                      </div>
+                    </div>
                     <div class="settings-row">
                       <span>
                         <strong data-i18n="restoreAppearance">Restore defaults</strong>

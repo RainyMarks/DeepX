@@ -248,6 +248,8 @@ foreach ($rel in @(
   ([string]::Concat("resources\", "cod", "ex-command-runner.exe")),
   ([string]::Concat("resources\", "cod", "ex-windows-sandbox-setup.exe")),
   ([string]::Concat("resources\", "cod", "ex-resources")),
+  ([string]::Concat("resources\", "node", "_repl.exe")),
+  ([string]::Concat("resources\", "cod", "ex-notification.wav")),
   "resources\native",
   "resources\plugins"
 )) {

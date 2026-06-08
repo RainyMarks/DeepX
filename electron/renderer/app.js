@@ -158,7 +158,9 @@ const I18N = {
     uiFont: "UI 字体",
     codeFont: "代码字体",
     uiFontSize: "UI 字号",
+    uiFontSizeHelp: "调整界面文本使用的基础字号。",
     codeFontSize: "代码字号",
+    codeFontSizeHelp: "调整代码块、终端和思考内容的字号。",
     density: "密度",
     densityCompact: "紧凑",
     densityComfortable: "标准",
@@ -167,6 +169,8 @@ const I18N = {
     contrast: "对比度",
     pointerCursor: "使用指针光标",
     pointerCursorHelp: "悬停交互元素时切换为指针光标。",
+    motionEffects: "动态效果",
+    motionEffectsHelp: "控制界面过渡、弹层和流式光标动画。",
     restoreAppearance: "恢复外观默认值",
     restoreAppearanceHelp: "只重置外观控制项。",
     restore: "恢复",
@@ -331,7 +335,9 @@ const I18N = {
     uiFont: "UI font",
     codeFont: "Code font",
     uiFontSize: "UI size",
+    uiFontSizeHelp: "Adjust the base size used by interface text.",
     codeFontSize: "Code size",
+    codeFontSizeHelp: "Adjust code blocks, terminal, and reasoning text size.",
     density: "Density",
     densityCompact: "Compact",
     densityComfortable: "Comfortable",
@@ -340,6 +346,8 @@ const I18N = {
     contrast: "Contrast",
     pointerCursor: "Use pointer cursor",
     pointerCursorHelp: "Switch to pointer cursor over interactive elements.",
+    motionEffects: "Motion effects",
+    motionEffectsHelp: "Control interface transitions, popovers, and streaming cursor animation.",
     restoreAppearance: "Restore defaults",
     restoreAppearanceHelp: "Reset appearance controls only.",
     restore: "Restore",
@@ -562,6 +570,7 @@ const el = {
   translucentSidebarInput: $("translucentSidebarInput"),
   contrastInput: $("contrastInput"),
   pointerCursorInput: $("pointerCursorInput"),
+  motionModeButtons: [...document.querySelectorAll("[data-motion-mode]")],
   resetAppearanceButton: $("resetAppearanceButton"),
   testButton: $("testButton"),
   saveButton: $("saveButton"),
@@ -758,6 +767,12 @@ function bindEvents() {
     input.addEventListener("input", applyAppearanceFromForm);
     input.addEventListener("change", applyAppearanceFromForm);
   });
+  el.motionModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setMotionMode(button.dataset.motionMode);
+      applyAppearanceFromForm();
+    });
+  });
   el.themePresetSelect.addEventListener("change", applyPresetToForm);
   document.addEventListener("dragover", handleFileDragOver, true);
   document.addEventListener("drop", handleFileDrop, true);
@@ -769,6 +784,9 @@ function bindEvents() {
       applyThemeModeDefaults("system");
       applyAppearanceFromForm();
     }
+  });
+  window.matchMedia?.("(prefers-reduced-motion: reduce)")?.addEventListener?.("change", () => {
+    if (selectedMotionMode() === "system") applyAppearanceFromForm();
   });
 
   document.addEventListener("click", (event) => {
@@ -1080,6 +1098,7 @@ function applySettingsToForm() {
   el.translucentSidebarInput.checked = !!settings.translucentSidebar;
   el.contrastInput.value = clampInt(settings.contrast, 35, 85, 60);
   el.pointerCursorInput.checked = settings.pointerCursor !== false;
+  setMotionMode(settings.motionMode || "system");
   updateApiKeyHelp();
   updateWebSearchControls();
   updatePermissionButton();
@@ -2142,6 +2161,7 @@ function formPayload() {
     translucentSidebar: el.translucentSidebarInput.checked,
     contrast: numberValue(el.contrastInput, 60),
     pointerCursor: el.pointerCursorInput.checked,
+    motionMode: selectedMotionMode(),
     permissionMode: state.permissionMode,
     workspacePath: state.workspace || undefined,
     workspaceHistory: normalizeProjects(state.projects, state.workspace),
@@ -2340,6 +2360,7 @@ function applyPresetToForm() {
 
 function resetAppearance() {
   el.themePresetSelect.value = "deepx-default";
+  setMotionMode("system");
   applyPresetToForm();
 }
 
@@ -2368,6 +2389,17 @@ function selectedThemeMode() {
   return document.querySelector(".segmented [data-theme-mode].active")?.dataset.themeMode || "dark";
 }
 
+function setMotionMode(mode) {
+  const normalized = normalizeMotionMode(mode);
+  el.motionModeButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.motionMode === normalized);
+  });
+}
+
+function selectedMotionMode() {
+  return document.querySelector("[data-motion-mode].active")?.dataset.motionMode || "system";
+}
+
 function applyAppearanceFromSettings() {
   applySettingsToForm();
   applyAppearanceFromForm();
@@ -2385,6 +2417,9 @@ function applyAppearanceFromForm() {
   const uiFontSize = clampInt(el.uiFontSizeInput.value, 12, 18, DEFAULT_UI_FONT_SIZE);
   const codeFontSize = clampInt(el.codeFontSizeInput.value, 10, 16, DEFAULT_CODE_FONT_SIZE);
   const density = normalizeDensity(el.densitySelect.value);
+  const motionMode = normalizeMotionMode(selectedMotionMode());
+  const prefersReducedMotion = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  const motionEnabled = motionMode === "on" || (motionMode === "system" && !prefersReducedMotion);
   const surface0 = mixColor(bg, fg, dark ? 0.03 : 0.02);
   const surface1 = mixColor(bg, fg, dark ? 0.06 : 0.035);
   const surface2 = mixColor(bg, fg, dark ? 0.1 : 0.07);
@@ -2448,6 +2483,8 @@ function applyAppearanceFromForm() {
   root.dataset.theme = dark ? "dark" : "light";
   root.dataset.translucentSidebar = String(el.translucentSidebarInput.checked);
   root.dataset.pointerCursor = String(el.pointerCursorInput.checked);
+  root.dataset.motion = motionEnabled ? "on" : "off";
+  root.dataset.motionMode = motionMode;
   root.style.setProperty("--composer-height", `${density === "compact" ? 146 : density === "spacious" ? 190 : 168}px`);
   root.style.setProperty("--thread-width", `${Math.round(68 + (contrast - 60) * 0.12)}rem`);
   if (window.deepx?.setWindowTheme) {
@@ -2621,6 +2658,10 @@ function normalizeTheme(theme) {
 
 function normalizeDensity(density) {
   return ["compact", "comfortable", "spacious"].includes(density) ? density : "comfortable";
+}
+
+function normalizeMotionMode(mode) {
+  return ["system", "on", "off"].includes(mode) ? mode : "system";
 }
 
 function normalizeFont(value, fallback) {
