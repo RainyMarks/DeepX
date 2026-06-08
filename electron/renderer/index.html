@@ -33,6 +33,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7l2 2h7v11H4z"></path><path d="M4 7V5h7l2 2"></path></svg>
           <span id="workspaceValue" data-i18n="noWorkspace">No workspace selected</span>
         </button>
+        <div id="workspaceStatus" class="workspace-status hidden" role="status" aria-live="polite">
+          <strong id="workspaceStatusTitle"></strong>
+          <span id="workspaceStatusDetail"></span>
+        </div>
 
         <section class="project-section">
           <div class="section-label" data-i18n="projects">Projects</div>
@@ -140,8 +144,38 @@
       <section id="settingsOverlay" class="modal-overlay hidden" aria-label="Settings">
         <div class="settings-modal">
           <div class="settings-page">
-            <header class="settings-header">
+            <aside class="settings-side" aria-label="Settings navigation">
               <button id="closeSettingsButton" class="settings-back" type="button" data-i18n="backToApp">Back to app</button>
+              <nav class="settings-nav">
+                <button class="settings-nav-item active" type="button" data-settings-target="general">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  <span data-i18n="general">General</span>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-target="models">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="2"></rect><path d="M8 10h8"></path><path d="M8 14h5"></path></svg>
+                  <span data-i18n="modelAccess">Models</span>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-target="appearance">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M4.93 19.07l1.41-1.41"></path><path d="M17.66 6.34l1.41-1.41"></path></svg>
+                  <span data-i18n="appearance">Appearance</span>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-target="web">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9"></path><path d="M12 3c-2.4 2.6-3.6 5.6-3.6 9s1.2 6.4 3.6 9"></path></svg>
+                  <span data-i18n="webSearch">Web search</span>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-target="cache">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg>
+                  <span data-i18n="cache">Cache & usage</span>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-target="portable">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 7V5h6v2"></path></svg>
+                  <span data-i18n="portable">Environment</span>
+                </button>
+              </nav>
+            </aside>
+
+            <div class="settings-main">
+            <header class="settings-header">
               <div>
                 <h1 id="settingsTitle" data-i18n="settings">Settings</h1>
                 <p id="settingsSubtitle" data-i18n="settingsSubtitle">Configuration is stored in DeepX/data.</p>
@@ -403,6 +437,7 @@
                 <button id="saveButton" class="primary-button" type="button" data-i18n="save">Save</button>
               </div>
             </footer>
+            </div>
           </div>
         </div>
       </section>

@@ -116,6 +116,11 @@ const I18N = {
     terminalStarted: "终端已启动",
     terminalStopped: "终端已停止",
     preparing: "正在准备 DeepX",
+    workspacePreparing: "正在设置工作区",
+    workspacePreparingDetail: "正在扫描目录树、AGENTS.md 和工具上下文",
+    workspaceReady: "工作区已就绪",
+    workspaceReadyDetail: "{treeEntries} 个目录项 · 说明: {instructions}",
+    workspaceSetupFailed: "工作区设置失败",
     messagePlaceholder: "向 DeepX 发送消息",
     addContext: "添加文件",
     fileAttached: "已添加 {count} 个文件",
@@ -294,6 +299,11 @@ const I18N = {
     terminalStarted: "Terminal started",
     terminalStopped: "Terminal stopped",
     preparing: "Preparing DeepX",
+    workspacePreparing: "Setting up workspace",
+    workspacePreparingDetail: "Scanning the tree, AGENTS.md, and tool context",
+    workspaceReady: "Workspace ready",
+    workspaceReadyDetail: "{treeEntries} tree entries · instructions: {instructions}",
+    workspaceSetupFailed: "Workspace setup failed",
     messagePlaceholder: "Message DeepX",
     addContext: "Add files",
     fileAttached: "Added {count} file(s)",
@@ -476,6 +486,15 @@ const state = {
   sidebarWidth: SIDEBAR_DEFAULT,
   sidebarCollapsed: false,
   resizeSidebar: null,
+  workspaceSetup: {
+    status: "idle",
+    workspacePath: null,
+    title: "",
+    detail: "",
+  },
+  workspaceSetupPromise: null,
+  workspaceSetupTimer: null,
+  workspaceSetupHideTimer: null,
   messageDraft: null,
   terminalOpen: false,
   terminalStarted: false,
@@ -517,6 +536,9 @@ const el = {
   sidebarResizeHandle: $("sidebarResizeHandle"),
   workspaceButton: $("workspaceButton"),
   workspaceValue: $("workspaceValue"),
+  workspaceStatus: $("workspaceStatus"),
+  workspaceStatusTitle: $("workspaceStatusTitle"),
+  workspaceStatusDetail: $("workspaceStatusDetail"),
   projectList: $("projectList"),
   newSessionButton: $("newSessionButton"),
   sessionList: $("sessionList"),
@@ -653,6 +675,12 @@ async function loadInitialData() {
   updateCacheStatus();
   updateLanguageOptions();
   updateContextLabels();
+  if (state.workspace) {
+    void ensureWorkspacePrepared({ immediate: false }).catch((error) => {
+      console.warn("Workspace preparation failed", error);
+      return null;
+    });
+  }
   if (!state.configuredProviders[state.settings.providerId]) {
     showSettings("models");
   }
@@ -676,6 +704,7 @@ function applySettingsToState() {
   state.projects = normalizeProjects(state.settings.workspaceHistory || [], state.workspace);
   state.sidebarWidth = clampInt(state.settings.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT);
   state.sidebarCollapsed = !!state.settings.sidebarCollapsed;
+  resetWorkspaceSetupState();
   document.documentElement.lang = state.language;
   applySidebarState(false);
 }
@@ -698,6 +727,9 @@ function bindEvents() {
   });
   el.closeSettingsButton.addEventListener("click", hideSettings);
   el.closeSettingsIconButton.addEventListener("click", hideSettings);
+  document.querySelectorAll("[data-settings-target]").forEach((button) => {
+    button.addEventListener("click", () => showSettings(button.dataset.settingsTarget || "general"));
+  });
   el.cacheDetailsButton.addEventListener("click", hideSettings);
   el.composer.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1401,10 +1433,215 @@ async function selectWorkspace() {
 function updateWorkspaceLabel() {
   if (!state.workspace) {
     el.workspaceValue.textContent = t("noWorkspace");
+    renderWorkspaceSetupState();
     return;
   }
   el.workspaceValue.textContent = basename(state.workspace);
   el.workspaceValue.title = state.workspace;
+  renderWorkspaceSetupState();
+}
+
+function resetWorkspaceSetupState() {
+  clearWorkspaceSetupTimers();
+  state.workspaceSetup = {
+    status: "idle",
+    workspacePath: state.workspace || null,
+    title: "",
+    detail: "",
+  };
+  renderWorkspaceSetupState();
+}
+
+function clearWorkspaceSetupTimers() {
+  if (state.workspaceSetupTimer) {
+    clearTimeout(state.workspaceSetupTimer);
+    state.workspaceSetupTimer = null;
+  }
+  if (state.workspaceSetupHideTimer) {
+    clearTimeout(state.workspaceSetupHideTimer);
+    state.workspaceSetupHideTimer = null;
+  }
+}
+
+function renderWorkspaceSetupState() {
+  if (!el.workspaceStatus) return;
+  const { status, workspacePath, title, detail } = state.workspaceSetup || {};
+  const visible = !!workspacePath && status && status !== "idle";
+  el.workspaceStatus.classList.toggle("hidden", !visible);
+  el.workspaceStatus.classList.toggle("preparing", status === "preparing");
+  el.workspaceStatus.classList.toggle("ready", status === "ready" || status === "cached");
+  el.workspaceStatus.classList.toggle("error", status === "error");
+  el.workspaceStatusTitle.textContent = title || "";
+  el.workspaceStatusDetail.textContent = detail || "";
+}
+
+function scheduleWorkspaceSetupHide(delay = 1400, workspacePath = state.workspaceSetup.workspacePath) {
+  if (!workspacePath) return;
+  if (state.workspaceSetupHideTimer) {
+    clearTimeout(state.workspaceSetupHideTimer);
+  }
+  state.workspaceSetupHideTimer = setTimeout(() => {
+    if (!samePath(state.workspaceSetup.workspacePath, workspacePath)) return;
+    resetWorkspaceSetupState();
+  }, delay);
+}
+
+function setWorkspaceSetupState(next, options = {}) {
+  const merged = { ...state.workspaceSetup, ...next };
+  state.workspaceSetup = merged;
+  renderWorkspaceSetupState();
+  if (options.autoHide) {
+    scheduleWorkspaceSetupHide(options.autoHideDelay || 1400, merged.workspacePath);
+  }
+}
+
+async function ensureWorkspacePrepared({ force = false, immediate = false } = {}) {
+  const workspacePath = state.workspace || state.settings.workspacePath || null;
+  if (!workspacePath) {
+    resetWorkspaceSetupState();
+    return null;
+  }
+  if (state.workspaceSetupPromise && samePath(state.workspaceSetup.workspacePath, workspacePath) && !force) {
+    return state.workspaceSetupPromise;
+  }
+
+  clearWorkspaceSetupTimers();
+  state.workspaceSetup = {
+    status: "preparing",
+    workspacePath,
+    title: t("workspacePreparing"),
+    detail: t("workspacePreparingDetail"),
+  };
+
+  const showPreparing = () => renderWorkspaceSetupState();
+  if (immediate) {
+    showPreparing();
+  } else {
+    state.workspaceSetupTimer = setTimeout(() => {
+      if (samePath(state.workspaceSetup.workspacePath, workspacePath) && state.workspaceSetup.status === "preparing") {
+        showPreparing();
+      }
+    }, 220);
+  }
+
+  const promise = api("/workspace/prepare", {
+    method: "POST",
+    body: JSON.stringify({ force, workspacePath }),
+  })
+    .then((payload) => {
+      if (!samePath(state.workspaceSetup.workspacePath, workspacePath)) return payload;
+      const title = payload?.status === "cached" ? t("workspaceReady") : t("workspaceReady");
+      const detail = payload?.detail || payload?.summary || t("workspaceReadyDetail", {
+        treeEntries: payload?.treeEntries ?? 0,
+        instructions: payload?.instructionFiles?.length ? payload.instructionFiles.join(", ") : "no AGENTS.md",
+      });
+      setWorkspaceSetupState(
+        {
+          status: payload?.status === "cached" ? "cached" : "ready",
+          workspacePath,
+          title,
+          detail,
+        },
+        { autoHide: true, autoHideDelay: 1100 }
+      );
+      return payload;
+    })
+    .catch((error) => {
+      if (samePath(state.workspaceSetup.workspacePath, workspacePath)) {
+        setWorkspaceSetupState(
+          {
+            status: "error",
+            workspacePath,
+            title: t("workspaceSetupFailed"),
+            detail: error.message || String(error),
+          },
+          { autoHide: false }
+        );
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (state.workspaceSetupPromise === promise) {
+        clearWorkspaceSetupTimers();
+        state.workspaceSetupPromise = null;
+      }
+    });
+
+  state.workspaceSetupPromise = promise;
+  return promise;
+}
+
+function shouldWaitForWorkspacePreparation(message, attachments) {
+  if (!state.workspace) return false;
+  if (!message || !message.trim()) return false;
+  return !isLightweightChatMessage(message);
+}
+
+function containsWorkspaceIntent(message) {
+  const normalized = String(message || "").toLowerCase();
+  return [
+    "文件",
+    "目录",
+    "工作区",
+    "项目",
+    "代码",
+    "读取",
+    "查看",
+    "搜索",
+    "修改",
+    "写入",
+    "运行",
+    "执行",
+    "终端",
+    "命令",
+    "报错",
+    "错误",
+    "bug",
+    "file",
+    "folder",
+    "directory",
+    "workspace",
+    "project",
+    "code",
+    "read",
+    "search",
+    "edit",
+    "write",
+    "run",
+    "terminal",
+    "shell",
+    "error",
+    "git",
+    "cargo",
+    "npm",
+    "pnpm",
+    "package.json",
+    "cargo.toml",
+    "readme",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+function isLightweightChatMessage(message) {
+  const compact = String(message || "")
+    .trim()
+    .replace(/^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu, "");
+  if (!compact) return true;
+  if (compact.length > 48) return false;
+  const lower = compact.toLowerCase();
+  if (/^\d+$/.test(lower)) return true;
+  if (containsWorkspaceIntent(lower)) return false;
+  return [
+    "你好",
+    "hi",
+    "hello",
+    "hey",
+    "test",
+    "ping",
+    "ok",
+    "okay",
+    "thanks",
+    "thank you",
+  ].some((phrase) => lower === phrase || lower.startsWith(`${phrase} `));
 }
 
 function normalizeProjects(paths, current) {
@@ -1472,7 +1709,12 @@ async function saveProjectSelection(projectPath, message) {
     state.projects = normalizeProjects(state.settings.workspaceHistory || state.projects, state.workspace);
     updateWorkspaceLabel();
     renderProjects();
+    const prepPromise = ensureWorkspacePrepared({ immediate: true, force: true }).catch((error) => {
+      console.warn("Workspace preparation failed", error);
+      return null;
+    });
     await loadSessions();
+    await prepPromise;
     toast(message || t("workspaceSaved"));
   } catch (error) {
     toast(`${t("saveFailed")}: ${error.message}`, true);
@@ -1536,6 +1778,10 @@ async function loadSession(id) {
     state.projects = normalizeProjects(state.projects, state.workspace);
     updateWorkspaceLabel();
     renderProjects();
+    void ensureWorkspacePrepared({ immediate: false }).catch((error) => {
+      console.warn("Workspace preparation failed", error);
+      return null;
+    });
   }
   state.lastMetric = session.metrics?.[session.metrics.length - 1] || null;
   el.threadTitle.textContent = session.title || t("newChat");
@@ -1566,11 +1812,23 @@ async function sendMessage() {
   autoresizeComposer();
   let assistant = null;
   try {
+    const waitForWorkspace = shouldWaitForWorkspacePreparation(message, attachments);
+    const workspacePreparation = waitForWorkspace
+      ? ensureWorkspacePrepared({ immediate: false }).catch((error) => {
+          console.warn("Workspace preparation failed", error);
+          toast(`${t("workspaceSetupFailed")}: ${error.message || error}`, true);
+          return null;
+        })
+      : null;
     const outbound = await buildMessageWithAttachments(message, attachments);
     const userDisplay = formatUserMessageWithAttachments(message, attachments);
     appendMessage({ role: "user", content: userDisplay });
     assistant = appendMessage({ role: "assistant", content: "", pending: true });
     if (wasPinned) scrollTranscript(true);
+    if (workspacePreparation) {
+      assistant.setStatus(t("workspacePreparing"));
+      await workspacePreparation;
+    }
     let webContext = null;
     if (state.webSearchEnabled) {
       assistant.setStatus(t("webSearchRunning"));
@@ -2239,20 +2497,34 @@ async function testConnection() {
   }
 }
 
+const SETTINGS_SECTION_COPY = {
+  general: ["general", "generalHelp"],
+  models: ["modelAccess", "modelAccessHelp"],
+  appearance: ["appearance", "appearanceHelp"],
+  web: ["webSearch", "webSearchHelp"],
+  cache: ["cache", "cacheHelp"],
+  portable: ["portable", "portableHelp"],
+};
+
 function showSettings(section = state.settingsSection) {
   state.settingsSection = section;
   el.settingsOverlay.classList.remove("hidden");
-  el.settingsTitle.textContent = t("settings");
+  const copy = SETTINGS_SECTION_COPY[section] || SETTINGS_SECTION_COPY.general;
+  el.settingsTitle.textContent = t(copy[0]);
+  el.settingsSubtitle.textContent = t(copy[1]);
+  document.querySelectorAll("[data-settings-target]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.settingsTarget === section);
+  });
   document.querySelectorAll("[data-settings-section]").forEach((panel) => {
     panel.classList.remove("active");
   });
   const target = document.querySelector(`[data-settings-section="${section}"]`);
   target?.classList.add("active");
   requestAnimationFrame(() => {
-    const page = document.querySelector(".settings-page");
-    if (!target || !page) return;
-    const offset = target.offsetTop - 128;
-    page.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
+    const content = document.querySelector(".settings-content");
+    if (!target || !content) return;
+    const offset = target.offsetTop - 42;
+    content.scrollTo({ top: Math.max(0, offset), behavior: "smooth" });
   });
 }
 
@@ -2465,7 +2737,7 @@ function applyAppearanceFromForm() {
   root.style.setProperty("--density-scale", density === "compact" ? "0.86" : density === "spacious" ? "1.16" : "1");
   root.dataset.density = density;
   root.style.setProperty("--settings-bg", bg);
-  root.style.setProperty("--settings-sidebar", dark ? surface0 : "#eef8f0");
+  root.style.setProperty("--settings-sidebar", dark ? surface0 : "#f4f6f7");
   root.style.setProperty("--settings-row", surface1);
   root.style.setProperty("--settings-card", surface2);
   root.style.setProperty("--settings-fg", fg);

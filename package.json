@@ -1,7 +1,7 @@
 {
   "name": "deepx-desktop",
   "productName": "DeepX",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Source-available noncommercial multi-provider coding agent desktop shell",
   "main": "electron/main.js",
   "author": "RainyMarks",

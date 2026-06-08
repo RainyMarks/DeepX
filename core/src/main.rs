@@ -44,6 +44,7 @@ const MAX_PROJECT_INSTRUCTION_FILE_BYTES: u64 = 64 * 1024;
 const MAX_PROJECT_INSTRUCTION_TOTAL_BYTES: usize = 96 * 1024;
 const MAX_PROJECT_INSTRUCTION_SCAN_DEPTH: usize = 5;
 const MAX_PROJECT_INSTRUCTION_CANDIDATES: usize = 80;
+const WORKSPACE_CACHE_SCHEMA_VERSION: u64 = 1;
 const DEFAULT_SHELL_TIMEOUT_SECONDS: u64 = 30;
 const MAX_CHECKPOINT_FILES: usize = 5_000;
 const MAX_CHECKPOINT_FILE_BYTES: u64 = 1024 * 1024;
@@ -77,6 +78,7 @@ async fn main() -> Result<()> {
         .route("/web-search", post(web_search))
         .route("/runtime/info", get(runtime_info))
         .route("/runtime/tools", get(runtime_tools))
+        .route("/workspace/prepare", post(workspace_prepare))
         .route("/chat", post(chat))
         .route("/chat/stream", post(chat_stream))
         .route("/sessions", get(sessions))
@@ -153,6 +155,7 @@ fn ensure_data_dirs(root: &Path) -> Result<()> {
         "plugins",
         "skills",
         "cache-metrics",
+        "workspace-cache",
         "checkpoints",
         "electron-user-data",
         "home",
@@ -217,6 +220,59 @@ async fn runtime_tools(State(state): State<AppState>) -> Result<Json<Value>, Api
         "toolCatalogFingerprint": fingerprint,
         "permissionMode": settings.permission_mode,
         "tools": tools
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspacePrepareRequest {
+    force: Option<bool>,
+    workspace_path: Option<String>,
+}
+
+async fn workspace_prepare(
+    State(state): State<AppState>,
+    Json(req): Json<WorkspacePrepareRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let settings = load_settings(&state.data_root).map_err(ApiError::internal)?;
+    let override_root = req
+        .workspace_path
+        .as_deref()
+        .and_then(|value| workspace_path_override(value).ok());
+    let Some(root) = workspace_root_for_prepare(&settings, override_root.as_deref()) else {
+        return Ok(Json(json!({
+            "ok": true,
+            "workspacePath": null,
+            "cached": false,
+            "prepared": false,
+            "status": "no-workspace",
+            "summary": "No workspace selected"
+        })));
+    };
+    let profile = prepare_workspace_profile(
+        &state.data_root,
+        &settings,
+        Some(&root),
+        req.force.unwrap_or(false),
+    )
+        .map_err(ApiError::internal)?;
+    Ok(Json(json!({
+        "ok": true,
+        "workspacePath": root.to_string_lossy().to_string(),
+        "cached": !profile.prepared_now,
+        "prepared": true,
+        "status": if profile.prepared_now { "prepared" } else { "cached" },
+        "preparedAt": profile.profile.prepared_at,
+        "treeEntries": profile.profile.tree_entries,
+        "treeDepth": profile.profile.tree_depth,
+        "instructionFiles": profile.profile.instruction_files,
+        "instructionHash": profile.profile.instruction_hash,
+        "summary": if profile.prepared_now {
+            "Workspace prepared"
+        } else {
+            "Workspace cache reused"
+        },
+        "detail": workspace_preparation_summary(&profile.profile)
     })))
 }
 async fn providers() -> Json<Value> {
@@ -703,7 +759,7 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
         )));
     }
     if workspace_agent_enabled {
-        if let Some(workspace_context) = build_workspace_turn_context(&settings) {
+        if let Some(workspace_context) = build_workspace_turn_context(data_root, &settings) {
             turn_context.push(ChatMessage::system(workspace_context));
         }
     }
@@ -2256,6 +2312,26 @@ struct ProjectInstructions {
     files: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceProfile {
+    schema_version: u64,
+    workspace_path: String,
+    prepared_at: DateTime<Utc>,
+    tree_depth: usize,
+    tree_entries: usize,
+    tree: Vec<String>,
+    instruction_files: Vec<String>,
+    instruction_hash: String,
+    instruction_note: String,
+}
+
+#[derive(Debug, Clone)]
+struct PreparedWorkspaceProfile {
+    profile: WorkspaceProfile,
+    prepared_now: bool,
+}
+
 fn write_metric_file(root: &Path, metric: &TurnMetric) -> Result<()> {
     let path = root
         .join("cache-metrics")
@@ -3779,11 +3855,104 @@ fn tool_has_side_effect(name: &str) -> bool {
     matches!(name, "edit_file" | "write_file" | "run_shell_command")
 }
 
-fn build_workspace_turn_context(settings: &Settings) -> Option<String> {
+fn build_workspace_turn_context(data_root: &Path, settings: &Settings) -> Option<String> {
     let root = workspace_root(settings)?;
+    let profile = prepare_workspace_profile(data_root, settings, Some(&root), false).ok()?;
+    Some(workspace_context_from_profile(&root, settings, &profile.profile))
+}
+
+fn workspace_path_override(raw: &str) -> Result<PathBuf> {
+    let path = PathBuf::from(raw.trim());
+    let canonical = fs::canonicalize(path).with_context(|| "failed to resolve workspace path")?;
+    if canonical.is_dir() {
+        Ok(canonical)
+    } else {
+        Err(anyhow!("workspace path is not a directory"))
+    }
+}
+
+fn workspace_root_for_prepare(settings: &Settings, override_root: Option<&Path>) -> Option<PathBuf> {
+    override_root.map(|path| path.to_path_buf()).or_else(|| workspace_root(settings))
+}
+
+fn workspace_context_from_profile(
+    root: &Path,
+    settings: &Settings,
+    profile: &WorkspaceProfile,
+) -> String {
+    let tree = if profile.tree.is_empty() {
+        vec!["<workspace tree unavailable>".to_string()]
+    } else {
+        profile.tree.clone()
+    };
+    format!(
+        "Current workspace is available to DeepX tools. Root: {}\nPermission mode: {}\n{}\nUse tools to inspect files instead of saying you cannot access the workspace. Default and auto-review permission modes expose only read-only tools; full-access exposes workspace write and shell tools. Top-level tree:\n{}",
+        root.display(),
+        settings.permission_mode,
+        profile.instruction_note,
+        tree.join("\n")
+    )
+}
+
+fn workspace_cache_root(data_root: &Path) -> PathBuf {
+    data_root.join("workspace-cache")
+}
+
+fn workspace_cache_key(root: &Path) -> String {
+    sha256_hex(root.to_string_lossy().as_bytes())
+}
+
+fn workspace_cache_path(data_root: &Path, root: &Path) -> PathBuf {
+    workspace_cache_root(data_root).join(format!("{}.json", workspace_cache_key(root)))
+}
+
+fn load_workspace_profile(data_root: &Path, root: &Path) -> Result<Option<WorkspaceProfile>> {
+    let path = workspace_cache_path(data_root, root);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let body = raw.trim_start_matches('\u{feff}');
+    let profile = match serde_json::from_str::<WorkspaceProfile>(body) {
+        Ok(profile) if profile.schema_version == WORKSPACE_CACHE_SCHEMA_VERSION => profile,
+        _ => return Ok(None),
+    };
+    Ok(Some(profile))
+}
+
+fn save_workspace_profile(
+    data_root: &Path,
+    root: &Path,
+    profile: &WorkspaceProfile,
+) -> Result<()> {
+    let path = workspace_cache_path(data_root, root);
+    write_json_pretty(&path, profile)
+}
+
+fn prepare_workspace_profile(
+    data_root: &Path,
+    settings: &Settings,
+    root_override: Option<&Path>,
+    force: bool,
+) -> Result<PreparedWorkspaceProfile> {
+    let root = root_override
+        .map(|path| path.to_path_buf())
+        .or_else(|| workspace_root(settings))
+        .ok_or_else(|| anyhow!("no workspace selected"))?;
+    if !force {
+        if let Some(profile) = load_workspace_profile(data_root, &root)? {
+            return Ok(PreparedWorkspaceProfile {
+                profile,
+                prepared_now: false,
+            });
+        }
+    }
     let tree = collect_workspace_tree(&root, &root, 2, MAX_WORKSPACE_TREE_ENTRIES)
         .unwrap_or_else(|error| vec![format!("<workspace tree unavailable: {error}>")]);
-    let instruction_note = load_project_instructions(settings)
+    let instructions = load_project_instructions(settings);
+    let instruction_note = instructions
+        .as_ref()
         .map(|instructions| {
             format!(
                 "Project instructions loaded in stable context: {} (hash {}).",
@@ -3792,13 +3961,50 @@ fn build_workspace_turn_context(settings: &Settings) -> Option<String> {
             )
         })
         .unwrap_or_else(|| "No AGENTS.md project instructions were found.".to_string());
-    Some(format!(
-        "Current workspace is available to DeepX tools. Root: {}\nPermission mode: {}\n{}\nUse tools to inspect files instead of saying you cannot access the workspace. Default and auto-review permission modes expose only read-only tools; full-access exposes workspace write and shell tools. Top-level tree:\n{}",
-        root.display(),
-        settings.permission_mode,
+    let profile = WorkspaceProfile {
+        schema_version: WORKSPACE_CACHE_SCHEMA_VERSION,
+        workspace_path: root.to_string_lossy().to_string(),
+        prepared_at: Utc::now(),
+        tree_depth: 2,
+        tree_entries: tree.len(),
+        tree,
+        instruction_files: instructions.as_ref().map(|i| i.files.clone()).unwrap_or_default(),
+        instruction_hash: instructions
+            .as_ref()
+            .map(|i| i.hash.clone())
+            .unwrap_or_default(),
         instruction_note,
-        tree.join("\n")
-    ))
+    };
+    save_workspace_profile(data_root, &root, &profile)?;
+    Ok(PreparedWorkspaceProfile {
+        profile,
+        prepared_now: true,
+    })
+}
+
+#[allow(dead_code)]
+fn workspace_preparation_detail(profile: &WorkspaceProfile) -> String {
+    let instructions = if profile.instruction_files.is_empty() {
+        "no AGENTS.md".to_string()
+    } else {
+        profile.instruction_files.join(", ")
+    };
+    format!(
+        "{} tree entries · instructions: {}",
+        profile.tree_entries, instructions
+    )
+}
+
+fn workspace_preparation_summary(profile: &WorkspaceProfile) -> String {
+    let instructions = if profile.instruction_files.is_empty() {
+        "no AGENTS.md".to_string()
+    } else {
+        profile.instruction_files.join(", ")
+    };
+    format!(
+        "{} tree entries · instructions: {}",
+        profile.tree_entries, instructions
+    )
 }
 
 fn workspace_root(settings: &Settings) -> Option<PathBuf> {
