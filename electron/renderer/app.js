@@ -7,6 +7,9 @@ const APP_ENGLISH_NAME = "RainyReSearch";
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 360;
 const SIDEBAR_DEFAULT = 232;
+const RESEARCH_SPLIT_MIN = 380;
+const RESEARCH_SPLIT_MAX = 920;
+const RESEARCH_SPLIT_DEFAULT = 620;
 const LEGACY_THEME_DARK = ["cod", "ex"].join("");
 const LEGACY_THEME_LIGHT = `${LEGACY_THEME_DARK}-light`;
 
@@ -624,6 +627,8 @@ const state = {
   sidebarWidth: SIDEBAR_DEFAULT,
   sidebarCollapsed: false,
   resizeSidebar: null,
+  researchSplitWidth: RESEARCH_SPLIT_DEFAULT,
+  resizeResearchSplit: null,
   workspaceSetup: {
     status: "idle",
     workspacePath: null,
@@ -771,6 +776,7 @@ const el = {
   terminalCloseButton: $("terminalCloseButton"),
   terminalContainer: $("terminalContainer"),
   researchWorkbench: $("researchWorkbench"),
+  researchSplitHandle: $("researchSplitHandle"),
   researchQueryInput: $("researchQueryInput"),
   researchSearchButton: $("researchSearchButton"),
   researchSearchStatus: $("researchSearchStatus"),
@@ -810,7 +816,6 @@ const el = {
   sshStartMonitorButton: $("sshStartMonitorButton"),
   sshStopMonitorButton: $("sshStopMonitorButton"),
   sshOutput: $("sshOutput"),
-  openResearchSettingsButton: $("openResearchSettingsButton"),
   researchOpenAlexInput: $("researchOpenAlexInput"),
   researchSemanticScholarInput: $("researchSemanticScholarInput"),
   researchGithubInput: $("researchGithubInput"),
@@ -944,14 +949,17 @@ function applySettingsToState() {
   state.projects = normalizeProjects(state.settings.workspaceHistory || [], state.workspace);
   state.sidebarWidth = clampInt(state.settings.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT);
   state.sidebarCollapsed = !!state.settings.sidebarCollapsed;
+  state.researchSplitWidth = readResearchSplitWidth();
   resetWorkspaceSetupState();
   document.documentElement.lang = state.language;
   applySidebarState(false);
+  applyResearchSplitWidth(state.researchSplitWidth);
 }
 
 function bindEvents() {
   el.sidebarToggleButton.addEventListener("click", toggleSidebar);
   el.sidebarResizeHandle.addEventListener("pointerdown", startSidebarResize);
+  el.researchSplitHandle?.addEventListener("pointerdown", startResearchSplitResize);
   el.workspaceButton.addEventListener("click", selectWorkspace);
   el.serverMonitorButton.addEventListener("click", toggleServerMonitorPanel);
   el.newSessionButton.addEventListener("click", newSession);
@@ -1027,6 +1035,7 @@ function bindEvents() {
   });
   el.sshStartMonitorButton?.addEventListener("click", startSshMonitor);
   el.sshStopMonitorButton?.addEventListener("click", stopSshMonitor);
+  window.addEventListener("resize", () => applyResearchSplitWidth(state.researchSplitWidth));
   el.testButton.addEventListener("click", testConnection);
   el.saveButton.addEventListener("click", saveConfig);
   el.resetAppearanceButton.addEventListener("click", resetAppearance);
@@ -2380,7 +2389,6 @@ function bindResearchEvents() {
   el.trickScoreButton?.addEventListener("click", runTrickScore);
   el.exportReportButton?.addEventListener("click", exportResearchReport);
   el.ideaForgeButton?.addEventListener("click", generateIdeas);
-  el.openResearchSettingsButton?.addEventListener("click", () => showSettings("research"));
 }
 
 function resetWorkspaceSetupState() {
@@ -3586,6 +3594,60 @@ function stopSidebarResize() {
   document.body.classList.remove("resizing-sidebar");
   window.removeEventListener("pointermove", onSidebarResize);
   saveLayoutSettings();
+}
+
+function readResearchSplitWidth() {
+  try {
+    return clampResearchSplitWidth(window.localStorage.getItem("rainyResearchSplitWidth"));
+  } catch {
+    return RESEARCH_SPLIT_DEFAULT;
+  }
+}
+
+function clampResearchSplitWidth(value) {
+  const surfaceWidth = el.mainSurface?.clientWidth || window.innerWidth || 1200;
+  const rightMinimum = 460;
+  const handleWidth = 10;
+  const dynamicMax = Math.max(RESEARCH_SPLIT_MIN, surfaceWidth - rightMinimum - handleWidth - 24);
+  const max = Math.min(RESEARCH_SPLIT_MAX, dynamicMax);
+  return clampInt(value, RESEARCH_SPLIT_MIN, max, RESEARCH_SPLIT_DEFAULT);
+}
+
+function applyResearchSplitWidth(width) {
+  const next = clampResearchSplitWidth(width);
+  state.researchSplitWidth = next;
+  document.documentElement.style.setProperty("--research-left-width", `${next}px`);
+}
+
+function startResearchSplitResize(event) {
+  event.preventDefault();
+  state.resizeResearchSplit = {
+    startX: event.clientX,
+    startWidth: state.researchSplitWidth,
+  };
+  document.body.classList.add("resizing-research");
+  window.addEventListener("pointermove", onResearchSplitResize);
+  window.addEventListener("pointerup", stopResearchSplitResize, { once: true });
+  window.addEventListener("pointercancel", stopResearchSplitResize, { once: true });
+}
+
+function onResearchSplitResize(event) {
+  if (!state.resizeResearchSplit) return;
+  applyResearchSplitWidth(state.resizeResearchSplit.startWidth + event.clientX - state.resizeResearchSplit.startX);
+}
+
+function stopResearchSplitResize() {
+  if (!state.resizeResearchSplit) return;
+  state.resizeResearchSplit = null;
+  document.body.classList.remove("resizing-research");
+  window.removeEventListener("pointermove", onResearchSplitResize);
+  window.removeEventListener("pointerup", stopResearchSplitResize);
+  window.removeEventListener("pointercancel", stopResearchSplitResize);
+  try {
+    window.localStorage.setItem("rainyResearchSplitWidth", String(state.researchSplitWidth));
+  } catch (error) {
+    console.warn("Failed to save research split width", error);
+  }
 }
 
 async function saveLayoutSettings() {

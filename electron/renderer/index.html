@@ -110,44 +110,9 @@
                 <div class="research-agent-head">
                   <div>
                     <strong>AI 研究助手</strong>
-                    <span>搜索、追问和选题都在这里完成</span>
+                    <span>查论文、做复现、生成选题、配置教程和服务器巡检都直接问雨刃。</span>
                   </div>
-                  <button id="openResearchSettingsButton" class="secondary-button" type="button" data-i18n="openResearchSettings">配置教程</button>
                 </div>
-                <details class="research-guide-inline">
-                  <summary>如何配置论文源和 AI</summary>
-                  <ol>
-                    <li>先在“设置 -> 模型”填写 DeepSeek 或其他模型的 API Key，AI 会默认参与搜索解释和追问。</li>
-                    <li>GitHub Token 填到“代码仓库 Token”，用于找代码和做代码分析。</li>
-                    <li>Semantic Scholar、OpenAlex 和 Crossref 可选；没填时雨刃会自动降级，不阻塞搜索。</li>
-                    <li>arXiv 不需要 Key。</li>
-                  </ol>
-                </details>
-                <div class="agent-idea-form" aria-label="选题生成">
-                  <label>
-                    <span>研究领域</span>
-                    <input id="ideaFieldInput" type="text" spellcheck="false" />
-                  </label>
-                  <label>
-                    <span>当前方法</span>
-                    <input id="ideaMethodInput" type="text" spellcheck="false" />
-                  </label>
-                  <label>
-                    <span>目标会议</span>
-                    <input id="ideaVenueInput" type="text" spellcheck="false" />
-                  </label>
-                  <label>
-                    <span>主要痛点</span>
-                    <textarea id="ideaPainInput" rows="2"></textarea>
-                  </label>
-                  <label>
-                    <span>约束条件</span>
-                    <textarea id="ideaConstraintsInput" rows="2"></textarea>
-                  </label>
-                  <button id="ideaForgeButton" class="secondary-button" type="button" data-i18n="generateIdeas">生成方案</button>
-                </div>
-                <div id="ideaForgeStatus" class="research-status" role="status" aria-live="polite"></div>
-                <div id="ideaForgeResults" class="idea-results"></div>
                 <section id="serverMonitorPanel" class="server-monitor-panel hidden" aria-label="服务器监控">
                   <div class="server-monitor-head">
                     <div>
@@ -214,6 +179,8 @@
                 </form>
               </section>
             </section>
+
+            <div id="researchSplitHandle" class="research-split-handle" role="separator" aria-orientation="vertical" aria-label="调整左右宽度"></div>
 
             <section class="research-panel research-detail" aria-label="科研详情">
               <div class="research-tabs" role="tablist" aria-label="科研模块">
