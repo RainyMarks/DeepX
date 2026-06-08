@@ -676,15 +676,10 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
             metrics: Vec::new(),
         }
     };
-    let checkpoint_id = if permission_allows_write(&settings) {
-        create_workspace_checkpoint(data_root, &settings, &session_id)
-            .ok()
-            .flatten()
-    } else {
-        None
-    };
+    let workspace_agent_enabled = should_use_workspace_agent(&settings, &user_message);
+    let checkpoint_id = None;
 
-    let prefix = build_prefix(&provider, &settings);
+    let prefix = build_prefix_for_turn(&provider, &settings, workspace_agent_enabled);
     let prefix_hash = sha256_hex(prefix.as_bytes());
     let prefix_changed = session.prefix_hash != prefix_hash;
     let mut prefix_change_reasons = Vec::new();
@@ -707,8 +702,10 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
             "Web search context for the current user turn. Use it only when it is relevant, cite URLs in the final answer when relying on it, and say if the search results are insufficient.\n\n{web_context}"
         )));
     }
-    if let Some(workspace_context) = build_workspace_turn_context(&settings) {
-        turn_context.push(ChatMessage::system(workspace_context));
+    if workspace_agent_enabled {
+        if let Some(workspace_context) = build_workspace_turn_context(&settings) {
+            turn_context.push(ChatMessage::system(workspace_context));
+        }
     }
     let user_chat_message = ChatMessage::user(user_message.clone());
     let context_budget = trim_history_to_context_budget(
@@ -735,7 +732,7 @@ fn prepare_chat_turn(data_root: &Path, req: ChatRequest) -> Result<PreparedChatT
         secret,
         messages,
         stream: true,
-        tools_enabled: workspace_root(&settings).is_some(),
+        tools_enabled: workspace_agent_enabled,
     };
 
     Ok(PreparedChatTurn {
@@ -774,6 +771,12 @@ fn finish_chat_turn(
         ..
     } = prepared;
 
+    let message_checkpoint_id = checkpoint_id.or_else(|| {
+        result
+            .tool_trace
+            .iter()
+            .find_map(|entry| entry.checkpoint_id.clone())
+    });
     let now = Utc::now();
     session.provider_id = settings.provider_id.clone();
     session.model = settings.model.clone();
@@ -794,7 +797,7 @@ fn finish_chat_turn(
         role: "assistant".to_string(),
         content: result.content.clone(),
         reasoning_content: result.reasoning.clone(),
-        checkpoint_id: checkpoint_id.clone(),
+        checkpoint_id: message_checkpoint_id.clone(),
         created_at: Utc::now(),
     });
 
@@ -838,7 +841,7 @@ fn finish_chat_turn(
             &user_content,
             &result,
             &metric,
-            checkpoint_id.as_deref(),
+            message_checkpoint_id.as_deref(),
         ),
     )
     .map_err(ApiError::internal)?;
@@ -851,7 +854,7 @@ fn finish_chat_turn(
         metric,
         prefix_hash,
         prefix_changed,
-        checkpoint_id,
+        checkpoint_id: message_checkpoint_id,
     })
 }
 
@@ -2260,7 +2263,16 @@ fn write_metric_file(root: &Path, metric: &TurnMetric) -> Result<()> {
     write_json_pretty(&path, metric)
 }
 
+#[cfg(test)]
 fn build_prefix(provider: &ProviderProfile, settings: &Settings) -> String {
+    build_prefix_for_turn(provider, settings, true)
+}
+
+fn build_prefix_for_turn(
+    provider: &ProviderProfile,
+    settings: &Settings,
+    include_project_instructions: bool,
+) -> String {
     let mut facts = BTreeMap::new();
     let thinking = selected_thinking_profile(provider, &settings.model);
     let effective_effort =
@@ -2287,15 +2299,28 @@ fn build_prefix(provider: &ProviderProfile, settings: &Settings) -> String {
     facts.insert("permissionMode", json!(settings.permission_mode));
     facts.insert("webSearchEnabled", json!(settings.web_search_enabled));
     facts.insert("webSearchProvider", json!("duckduckgo-instant-answer"));
-    if let Some(project_instructions) = load_project_instructions(settings) {
-        facts.insert("projectInstructionsHash", json!(project_instructions.hash));
-        facts.insert(
-            "projectInstructionsFiles",
-            json!(project_instructions.files),
-        );
-        facts.insert("projectInstructions", json!(project_instructions.content));
+    facts.insert(
+        "workspaceContextMode",
+        json!(if include_project_instructions {
+            "agent"
+        } else {
+            "minimal"
+        }),
+    );
+    if include_project_instructions {
+        if let Some(project_instructions) = load_project_instructions(settings) {
+            facts.insert("projectInstructionsHash", json!(project_instructions.hash));
+            facts.insert(
+                "projectInstructionsFiles",
+                json!(project_instructions.files),
+            );
+            facts.insert("projectInstructions", json!(project_instructions.content));
+        } else {
+            facts.insert("projectInstructionsHash", Value::Null);
+            facts.insert("projectInstructionsFiles", json!([]));
+        }
     } else {
-        facts.insert("projectInstructionsHash", Value::Null);
+        facts.insert("projectInstructionsHash", json!("skipped-lightweight-turn"));
         facts.insert("projectInstructionsFiles", json!([]));
     }
     facts.insert("systemPrompt", json!(DEFAULT_SYSTEM_PROMPT));
@@ -3447,6 +3472,106 @@ fn serialize_tool_output_for_model(tool_name: &str, output: &Value) -> String {
         "preview": truncate(&raw, 256)
     }))
     .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"tool output truncation failed\"}".to_string())
+}
+
+fn should_use_workspace_agent(settings: &Settings, message: &str) -> bool {
+    if workspace_root(settings).is_none() {
+        return false;
+    }
+    let normalized = message.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+    if contains_workspace_intent(&normalized) {
+        return true;
+    }
+    !is_lightweight_chat_message(&normalized)
+}
+
+fn contains_workspace_intent(message: &str) -> bool {
+    [
+        "文件",
+        "文件夹",
+        "目录",
+        "工作区",
+        "项目",
+        "代码",
+        "读取",
+        "查看",
+        "搜索",
+        "修改",
+        "写入",
+        "运行",
+        "执行",
+        "终端",
+        "命令",
+        "报错",
+        "错误",
+        "bug",
+        "file",
+        "folder",
+        "directory",
+        "workspace",
+        "project",
+        "code",
+        "read",
+        "search",
+        "edit",
+        "write",
+        "run",
+        "terminal",
+        "shell",
+        "error",
+        "git",
+        "cargo",
+        "npm",
+        "pnpm",
+        "package.json",
+        "cargo.toml",
+        "readme",
+    ]
+    .iter()
+    .any(|keyword| message.contains(keyword))
+}
+
+fn is_lightweight_chat_message(message: &str) -> bool {
+    let compact = message
+        .trim_matches(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
+        .trim();
+    let char_count = compact.chars().count();
+    if char_count == 0 {
+        return true;
+    }
+    if char_count > 48 {
+        return false;
+    }
+    let compact_lower = compact.to_ascii_lowercase();
+    if compact_lower.chars().all(|c| c.is_ascii_digit()) {
+        return true;
+    }
+    [
+        "你好",
+        "您好",
+        "哈喽",
+        "在吗",
+        "嗨",
+        "谢谢",
+        "感谢",
+        "好的",
+        "可以",
+        "测试",
+        "hi",
+        "hello",
+        "hey",
+        "thanks",
+        "thank you",
+        "ok",
+        "okay",
+        "test",
+        "ping",
+    ]
+    .iter()
+    .any(|phrase| compact_lower == *phrase || compact_lower.starts_with(&format!("{phrase} ")))
 }
 
 fn workspace_tool_definitions(settings: &Settings) -> Value {
@@ -5144,6 +5269,17 @@ mod tests {
         assert!(!tool_names.iter().any(|name| name == "edit_file"));
         assert!(!tool_names.iter().any(|name| name == "write_file"));
         assert!(!tool_names.iter().any(|name| name == "run_shell_command"));
+    }
+
+    #[test]
+    fn lightweight_chat_skips_workspace_agent_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        settings.workspace_path = Some(dir.path().to_string_lossy().to_string());
+        assert!(!should_use_workspace_agent(&settings, "你好"));
+        assert!(!should_use_workspace_agent(&settings, "123"));
+        assert!(should_use_workspace_agent(&settings, "当前文件夹有什么"));
+        assert!(should_use_workspace_agent(&settings, "read package.json"));
     }
 
     #[test]
