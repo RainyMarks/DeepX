@@ -833,7 +833,6 @@ boot().catch((error) => {
 
 async function boot() {
   configureMarkdown();
-  promoteSidebarToToolbar();
   applyLanguage("zh-CN");
   bindEvents();
   await loadBrandIcon();
@@ -941,14 +940,6 @@ function normalizeLegacySettings() {
   }
 }
 
-function promoteSidebarToToolbar() {
-  const sidebar = document.querySelector(".sidebar");
-  const toolbar = document.querySelector(".thread-toolbar");
-  if (!sidebar || !toolbar || toolbar.contains(sidebar)) return;
-  sidebar.classList.add("topbar-nav");
-  toolbar.insertBefore(sidebar, toolbar.firstChild);
-}
-
 function applySettingsToState() {
   state.language = normalizeLanguage(state.settings.language);
   state.thinkingEnabled = state.settings.thinkingEnabled !== false;
@@ -957,7 +948,7 @@ function applySettingsToState() {
   state.workspace = state.settings.workspacePath || null;
   state.projects = normalizeProjects(state.settings.workspaceHistory || [], state.workspace);
   state.sidebarWidth = clampInt(state.settings.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT);
-  state.sidebarCollapsed = false;
+  state.sidebarCollapsed = !!state.settings.sidebarCollapsed;
   state.researchSplitWidth = readResearchSplitWidth();
   resetWorkspaceSetupState();
   document.documentElement.lang = state.language;
@@ -1405,8 +1396,8 @@ function applySettingsToForm() {
   el.foregroundColorInput.value = safeColor(settings.foregroundColor, dark ? "#fcfcfc" : "#0d0d0d");
   el.uiFontInput.value = settings.uiFont || DEFAULT_UI_FONT;
   el.codeFontInput.value = settings.codeFont || DEFAULT_CODE_FONT;
-  el.uiFontSizeInput.value = clampInt(settings.uiFontSize || Math.round(14 * clampInt(settings.fontScale, 90, 115, 100) / 100), 12, 18, DEFAULT_UI_FONT_SIZE);
-  el.codeFontSizeInput.value = clampInt(settings.codeFontSize || Math.round(12 * clampInt(settings.fontScale, 90, 115, 100) / 100), 10, 16, DEFAULT_CODE_FONT_SIZE);
+  el.uiFontSizeInput.value = DEFAULT_UI_FONT_SIZE;
+  el.codeFontSizeInput.value = DEFAULT_CODE_FONT_SIZE;
   el.densitySelect.value = normalizeDensity(settings.density || "comfortable");
   el.translucentSidebarInput.checked = !!settings.translucentSidebar;
   el.contrastInput.value = clampInt(settings.contrast, 35, 85, 60);
@@ -3364,8 +3355,8 @@ function formPayload() {
   const mode = selectedThemeMode();
   const dark = mode === "dark" || (mode === "system" && window.matchMedia?.("(prefers-color-scheme: dark)")?.matches);
   const preset = currentThemePreset();
-  const uiFontSize = numberValue(el.uiFontSizeInput, DEFAULT_UI_FONT_SIZE);
-  const codeFontSize = numberValue(el.codeFontSizeInput, DEFAULT_CODE_FONT_SIZE);
+  const uiFontSize = DEFAULT_UI_FONT_SIZE;
+  const codeFontSize = DEFAULT_CODE_FONT_SIZE;
   return {
     providerId: el.providerSelect.value,
     model: selectedModelId(),
@@ -3564,7 +3555,8 @@ function closeAllPopovers() {
 }
 
 function toggleSidebar() {
-  newSession();
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  applySidebarState(true);
 }
 
 function applySidebarState(save) {
@@ -3742,8 +3734,8 @@ function applyAppearanceFromForm() {
   const fg = safeColor(el.foregroundColorInput.value, dark ? "#fcfcfc" : "#0d0d0d");
   const accent = safeColor(preset.accent, "#0169cc");
   const contrast = numberValue(el.contrastInput, 60);
-  const uiFontSize = clampInt(el.uiFontSizeInput.value, 12, 18, DEFAULT_UI_FONT_SIZE);
-  const codeFontSize = clampInt(el.codeFontSizeInput.value, 10, 16, DEFAULT_CODE_FONT_SIZE);
+  const uiFontSize = DEFAULT_UI_FONT_SIZE;
+  const codeFontSize = DEFAULT_CODE_FONT_SIZE;
   const density = normalizeDensity(el.densitySelect.value);
   const motionMode = normalizeMotionMode(selectedMotionMode());
   const prefersReducedMotion = !!window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -3834,7 +3826,7 @@ function updateTerminalTheme() {
     selectionBackground: hexToRgba(styles.getPropertyValue("--accent").trim(), 0.35),
   };
   state.terminal.options.fontFamily = normalizeFont(el.codeFontInput.value, DEFAULT_CODE_FONT);
-  state.terminal.options.fontSize = numberValue(el.codeFontSizeInput, DEFAULT_CODE_FONT_SIZE);
+  state.terminal.options.fontSize = DEFAULT_CODE_FONT_SIZE;
 }
 
 async function toggleTerminal(force = null) {
@@ -3892,7 +3884,7 @@ function initTerminal() {
     convertEol: true,
     cursorBlink: true,
     fontFamily: normalizeFont(el.codeFontInput.value, DEFAULT_CODE_FONT),
-    fontSize: numberValue(el.codeFontSizeInput, DEFAULT_CODE_FONT_SIZE),
+    fontSize: DEFAULT_CODE_FONT_SIZE,
     scrollback: 10000,
     theme: {
       background: styles.getPropertyValue("--surface-1").trim(),
