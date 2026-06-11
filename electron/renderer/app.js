@@ -169,9 +169,9 @@ const I18N = {
     uiFont: "UI 字体",
     codeFont: "代码字体",
     uiFontSize: "UI 字号",
-    uiFontSizeHelp: "调整界面文本使用的基础字号。",
+    uiFontSizeHelp: "固定为 14px，保持 Codex 风格界面一致。",
     codeFontSize: "代码字号",
-    codeFontSizeHelp: "调整代码块、终端和思考内容的字号。",
+    codeFontSizeHelp: "固定为 12px，代码、终端和辅助信息统一使用。",
     density: "密度",
     densityCompact: "紧凑",
     densityComfortable: "标准",
@@ -361,9 +361,9 @@ const I18N = {
     uiFont: "UI font",
     codeFont: "Code font",
     uiFontSize: "UI size",
-    uiFontSizeHelp: "Adjust the base size used by interface text.",
+    uiFontSizeHelp: "Fixed at 14px for a consistent Codex-style interface.",
     codeFontSize: "Code size",
-    codeFontSizeHelp: "Adjust code blocks, terminal, and reasoning text size.",
+    codeFontSizeHelp: "Fixed at 12px for code, terminal, and helper text.",
     density: "Density",
     densityCompact: "Compact",
     densityComfortable: "Comfortable",
@@ -503,7 +503,6 @@ Object.assign(I18N["zh-CN"], {
   paperCard: "情报卡",
   paperGraph: "关系图",
   reproAudit: "代码分析",
-  ideaForge: "选题生成",
   researchGuide: "配置教程",
   openResearchSettings: "去填写配置",
   agentTrace: "智能体",
@@ -514,7 +513,6 @@ Object.assign(I18N["zh-CN"], {
   runAudit: "运行审计",
   runTrickScore: "风险评分",
   exportReport: "导出报告",
-  generateIdeas: "生成方案",
   agentTraceHelp: "旧会话仍可用于开发任务和论文追问。",
   researchSources: "科研源",
   researchSourcesHelp: "可选 source keys 提升覆盖率；留空不会覆盖已保存密钥。",
@@ -530,8 +528,6 @@ Object.assign(I18N["zh-CN"], {
   auditFailed: "审计失败",
   riskRunning: "正在计算复现/可信性风险",
   riskDone: "风险评分完成",
-  ideaRunning: "正在生成研究方案",
-  ideaDone: "方案生成完成",
   reportExported: "报告已导出：{path}",
   sourceConfigured: "已配置",
   sourceMissing: "未配置",
@@ -561,7 +557,6 @@ Object.assign(I18N["en-US"], {
   paperCard: "Card",
   paperGraph: "Graph",
   reproAudit: "Code analysis",
-  ideaForge: "Ideas",
   researchGuide: "Setup guide",
   openResearchSettings: "Open settings",
   agentTrace: "Agent",
@@ -572,7 +567,6 @@ Object.assign(I18N["en-US"], {
   runAudit: "Run audit",
   runTrickScore: "Risk score",
   exportReport: "Export report",
-  generateIdeas: "Generate ideas",
   agentTraceHelp: "Legacy chat sessions remain available for development tasks and paper-specific follow-up.",
   researchSources: "Research",
   researchSourcesHelp: "Optional source keys improve coverage; blank values keep existing saved secrets.",
@@ -588,8 +582,6 @@ Object.assign(I18N["en-US"], {
   auditFailed: "Audit failed",
   riskRunning: "Computing reproducibility and credibility risk",
   riskDone: "Risk score complete",
-  ideaRunning: "Generating research ideas",
-  ideaDone: "Ideas generated",
   reportExported: "Report exported: {path}",
   sourceConfigured: "configured",
   sourceMissing: "missing",
@@ -794,14 +786,6 @@ const el = {
   repoAuditStatus: $("repoAuditStatus"),
   repoAuditReport: $("repoAuditReport"),
   trickScoreReport: $("trickScoreReport"),
-  ideaFieldInput: $("ideaFieldInput"),
-  ideaMethodInput: $("ideaMethodInput"),
-  ideaVenueInput: $("ideaVenueInput"),
-  ideaPainInput: $("ideaPainInput"),
-  ideaConstraintsInput: $("ideaConstraintsInput"),
-  ideaForgeButton: $("ideaForgeButton"),
-  ideaForgeStatus: $("ideaForgeStatus"),
-  ideaForgeResults: $("ideaForgeResults"),
   serverMonitorPanel: $("serverMonitorPanel"),
   sshHostInput: $("sshHostInput"),
   sshPortInput: $("sshPortInput"),
@@ -908,7 +892,6 @@ async function loadInitialData() {
   renderPaperGraph();
   renderRepoAudit();
   renderTrickScore();
-  renderIdeaResults();
   updateWorkspaceLabel();
   renderProjects();
   updateCacheStatus();
@@ -1053,8 +1036,6 @@ function bindEvents() {
     el.foregroundColorInput,
     el.uiFontInput,
     el.codeFontInput,
-    el.uiFontSizeInput,
-    el.codeFontSizeInput,
     el.densitySelect,
     el.translucentSidebarInput,
     el.contrastInput,
@@ -1166,7 +1147,6 @@ function applyLanguage(language) {
   renderPaperGraph();
   renderRepoAudit();
   renderTrickScore();
-  renderIdeaResults();
   renderProjects();
   renderSessions();
 }
@@ -1722,19 +1702,19 @@ function updateResearchSourceStatus() {
   const provider = currentProvider() || state.providers.find((item) => item.id === state.settings.providerId);
   const providerId = provider?.id || state.settings.providerId;
   const aiConfigured = !!state.configuredProviders[providerId];
+  const configuredSourceCount = ["openalex", "semanticScholar", "github", "crossref"].filter((key) => !!configured[key]).length;
+  const sourceLabel = state.language === "en-US" ? "Paper sources" : "论文源";
+  const configuredText = state.language === "en-US" ? `${configuredSourceCount}/4 configured` : `${configuredSourceCount}/4 已配置`;
   const sources = [
-    ["ai", t("aiAnalysis"), aiConfigured],
-    ["openalex", "开放论文库", !!configured.openalex],
-    ["semanticScholar", "语义学术库", !!configured.semanticScholar],
-    ["github", "代码仓库", !!configured.github],
-    ["crossref", "DOI 元数据", !!configured.crossref],
+    [t("aiAnalysis"), aiConfigured ? t("sourceConfigured") : t("sourceMissing"), aiConfigured],
+    [sourceLabel, configuredText, configuredSourceCount > 0],
   ];
   if (el.researchSourceStatus) {
     el.researchSourceStatus.innerHTML = "";
-    for (const [, label, ok] of sources) {
+    for (const [label, value, ok] of sources) {
       const pill = document.createElement("span");
       pill.className = `status-pill ${ok ? "ok" : "warn"}`;
-      pill.textContent = `${label}: ${ok ? t("sourceConfigured") : t("sourceMissing")}`;
+      pill.textContent = `${label}: ${value}`;
       el.researchSourceStatus.appendChild(pill);
     }
   }
@@ -1767,6 +1747,43 @@ function sourceDisplayName(source) {
     github_search: "代码仓库",
   };
   return labels[key] || source || "来源";
+}
+
+function userFacingError(error, context = "request") {
+  const raw = String(error?.message || error || "").trim();
+  const lower = raw.toLowerCase();
+  const zh = state.language !== "en-US";
+  if (!raw) return zh ? "操作失败，请稍后重试。" : "The operation failed. Try again later.";
+  if (
+    lower.includes("permissiondenied") ||
+    lower.includes("access is denied") ||
+    raw.includes("拒绝访问") ||
+    lower.includes("failed to open file for write")
+  ) {
+    return zh
+      ? "本地研究数据无法写入，请检查 data/research 权限，或关闭正在占用索引文件的程序后重试。"
+      : "Local research data cannot be written. Check data/research permissions or close any process using the index files.";
+  }
+  if (lower.includes("api key") && lower.includes("not configured")) {
+    return zh
+      ? "相关来源还没有配置密钥。可以先使用可用来源，也可以到设置里的科研源教程补齐配置。"
+      : "The source key is not configured. Use available sources now, or configure it in Research sources.";
+  }
+  if (lower.includes("429") || lower.includes("rate limit")) {
+    return zh
+      ? "上游来源触发限流。请稍后重试，或在设置中配置对应 API key 提高额度。"
+      : "The upstream source is rate limited. Retry later or configure an API key for a higher quota.";
+  }
+  if (lower.includes("timeout") || lower.includes("timed out")) {
+    return zh ? "上游来源响应超时，雨刃会继续使用其他可用来源。" : "The upstream source timed out. RainyReSearch will keep using available sources.";
+  }
+  if (lower.includes("network") || lower.includes("dns") || lower.includes("connect") || lower.includes("fetch") || lower.includes("reqwest")) {
+    return zh ? "网络连接失败，请检查代理、网络或对应来源服务状态。" : "Network connection failed. Check proxy, network, or source availability.";
+  }
+  if (context === "search") {
+    return zh ? "论文搜索没有完成。请换更具体的标题、DOI、arXiv ID 或作者年份后重试。" : "Paper search did not complete. Try a more specific title, DOI, arXiv ID, or author/year.";
+  }
+  return truncateText(raw.replace(/\s+/g, " "), 180);
 }
 
 function riskLabel(level) {
@@ -1844,15 +1861,15 @@ async function searchResearch() {
     renderPaperCard();
     renderRepoAudit();
     renderTrickScore();
-    renderIdeaResults();
     const firstRepo = state.research.selected?.repoCandidates?.[0]?.url || "";
     if (firstRepo && el.repoAuditInput) el.repoAuditInput.value = firstRepo;
     if (state.research.selected?.paper?.id) {
       void loadPaperGraph(state.research.selected.paper.id);
     }
   } catch (error) {
-    el.researchSearchStatus.textContent = `${t("researchSearchFailed")}: ${error.message || error}`;
-    toast(`${t("researchSearchFailed")}: ${error.message || error}`, true);
+    const detail = userFacingError(error, "search");
+    el.researchSearchStatus.textContent = `${t("researchSearchFailed")}：${detail}`;
+    toast(`${t("researchSearchFailed")}：${detail}`, true);
   } finally {
     el.researchSearchButton.disabled = false;
   }
@@ -2108,7 +2125,7 @@ function edgeTypeLabel(type) {
 }
 
 async function auditSelectedRepo() {
-  const raw = el.repoAuditInput?.value.trim() || state.research.selected?.repoCandidates?.[0]?.url || "";
+  const raw = el.repoAuditInput?.value.trim() || state.research.selected?.repoCandidates?.[0]?.url || state.workspace || "";
   if (!raw) {
     el.repoAuditInput?.focus();
     return;
@@ -2130,8 +2147,9 @@ async function auditSelectedRepo() {
     renderTrickScore();
     showResearchTab("audit");
   } catch (error) {
-    el.repoAuditStatus.textContent = `${t("auditFailed")}: ${error.message || error}`;
-    toast(`${t("auditFailed")}: ${error.message || error}`, true);
+    const detail = userFacingError(error, "audit");
+    el.repoAuditStatus.textContent = `${t("auditFailed")}：${detail}`;
+    toast(`${t("auditFailed")}：${detail}`, true);
   } finally {
     el.repoAuditButton.disabled = false;
   }
@@ -2183,7 +2201,9 @@ async function runTrickScore() {
     renderTrickScore();
     showResearchTab("audit");
   } catch (error) {
-    toast(`${t("streamError")}: ${error.message || error}`, true);
+    const detail = userFacingError(error, "risk");
+    el.repoAuditStatus.textContent = `${t("streamError")}：${detail}`;
+    toast(`${t("streamError")}：${detail}`, true);
   } finally {
     el.trickScoreButton.disabled = false;
   }
@@ -2231,52 +2251,6 @@ function renderTrickScore() {
   el.trickScoreReport.appendChild(box);
 }
 
-async function generateIdeas() {
-  el.ideaForgeButton.disabled = true;
-  el.ideaForgeStatus.textContent = t("ideaRunning");
-  try {
-    const payload = await api("/research/ideas", {
-      method: "POST",
-      body: JSON.stringify({
-        targetField: el.ideaFieldInput?.value.trim() || undefined,
-        currentMethod: el.ideaMethodInput?.value.trim() || undefined,
-        targetVenue: el.ideaVenueInput?.value.trim() || undefined,
-        painPoints: el.ideaPainInput?.value.trim() || undefined,
-        constraints: el.ideaConstraintsInput?.value.trim() || undefined,
-        targetPaperId: state.research.selected?.paper?.id,
-      }),
-    });
-    state.research.ideas = payload.ideas || [];
-    el.ideaForgeStatus.textContent = t("ideaDone");
-    renderIdeaResults();
-  } catch (error) {
-    toast(`${t("streamError")}: ${error.message || error}`, true);
-  } finally {
-    el.ideaForgeButton.disabled = false;
-  }
-}
-
-function renderIdeaResults() {
-  if (!el.ideaForgeResults) return;
-  el.ideaForgeResults.innerHTML = "";
-  for (const idea of state.research.ideas || []) {
-    const card = document.createElement("article");
-    card.className = "idea-card";
-    const title = document.createElement("h3");
-    title.textContent = idea.ideaName || "Research idea";
-    const motivation = document.createElement("p");
-    motivation.textContent = idea.coreMotivation || "";
-    const meta = document.createElement("small");
-    meta.textContent = `confidence ${formatPercent(idea.confidence)} / risk ${idea.reviewerRisk || "unknown"} / gain ${idea.expectedGain || "unknown"}`;
-    const steps = renderSection("Implementation steps", idea.implementationSteps || []);
-    const ablation = renderSection("Ablation plan", idea.ablationPlan || []);
-    const prompt = document.createElement("pre");
-    prompt.textContent = idea.codexPrompt || "";
-    card.append(title, meta, motivation, steps, ablation, prompt);
-    el.ideaForgeResults.appendChild(card);
-  }
-}
-
 async function exportResearchReport() {
   const payload = {
     query: state.research.query,
@@ -2298,7 +2272,7 @@ async function exportResearchReport() {
     state.research.exportedReportPath = result.path || null;
     toast(t("reportExported", { path: result.path || "" }));
   } catch (error) {
-    toast(`${t("streamError")}: ${error.message || error}`, true);
+    toast(`${t("streamError")}：${userFacingError(error, "export")}`, true);
   }
 }
 
@@ -2388,7 +2362,6 @@ function bindResearchEvents() {
   el.repoAuditButton?.addEventListener("click", auditSelectedRepo);
   el.trickScoreButton?.addEventListener("click", runTrickScore);
   el.exportReportButton?.addEventListener("click", exportResearchReport);
-  el.ideaForgeButton?.addEventListener("click", generateIdeas);
 }
 
 function resetWorkspaceSetupState() {
@@ -3670,8 +3643,8 @@ function applyPresetToForm() {
   el.foregroundColorInput.value = preset.foreground;
   el.uiFontInput.value = preset.uiFont;
   el.codeFontInput.value = preset.codeFont;
-  el.uiFontSizeInput.value = preset.uiFontSize || DEFAULT_UI_FONT_SIZE;
-  el.codeFontSizeInput.value = preset.codeFontSize || DEFAULT_CODE_FONT_SIZE;
+  el.uiFontSizeInput.value = DEFAULT_UI_FONT_SIZE;
+  el.codeFontSizeInput.value = DEFAULT_CODE_FONT_SIZE;
   el.densitySelect.value = preset.density;
   el.translucentSidebarInput.checked = preset.translucentSidebar;
   el.contrastInput.value = preset.contrast;

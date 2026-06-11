@@ -273,19 +273,19 @@ pub(crate) async fn research_search(
     let mut statuses = Vec::new();
     let mut papers = Vec::new();
 
-    let openalex = fetch_openalex(&state.http, &research_secrets, query, limit).await;
+    let (openalex, s2, crossref, arxiv, github) = tokio::join!(
+        fetch_openalex(&state.http, &research_secrets, query, limit),
+        fetch_semantic_scholar(&state.http, &research_secrets, query, limit),
+        fetch_crossref(&state.http, &research_secrets, query, limit),
+        fetch_arxiv(&state.data_root, &state.http, query, limit),
+        fetch_github_repos(&state.http, &research_secrets, query, 5),
+    );
+
     ingest_connector_result("openalex", openalex, &mut papers, &mut statuses);
-
-    let s2 = fetch_semantic_scholar(&state.http, &research_secrets, query, limit).await;
     ingest_connector_result("semantic_scholar", s2, &mut papers, &mut statuses);
-
-    let crossref = fetch_crossref(&state.http, &research_secrets, query, limit).await;
     ingest_connector_result("crossref", crossref, &mut papers, &mut statuses);
-
-    let arxiv = fetch_arxiv(&state.data_root, &state.http, query, limit).await;
     ingest_connector_result("arxiv", arxiv, &mut papers, &mut statuses);
 
-    let github = fetch_github_repos(&state.http, &research_secrets, query, 5).await;
     let github_candidates = match github {
         Ok(items) => {
             statuses.push(SourceStatus {
@@ -303,7 +303,7 @@ pub(crate) async fn research_search(
                 ok: false,
                 fetched: 0,
                 degraded: true,
-                message: format!("{SOURCE_TIMEOUT_NOTE}: {err}"),
+                message: source_error_message(&err),
             });
             Vec::new()
         }
@@ -466,9 +466,27 @@ fn ingest_connector_result(
             ok: false,
             fetched: 0,
             degraded: true,
-            message: format!("{SOURCE_TIMEOUT_NOTE}: {err}"),
+            message: source_error_message(&err),
         }),
     }
+}
+
+fn source_error_message(err: &anyhow::Error) -> String {
+    let raw = err.to_string();
+    let lower = raw.to_ascii_lowercase();
+    if lower.contains("api key") && lower.contains("not configured") {
+        return "source key is not configured; other sources remain usable".into();
+    }
+    if lower.contains("429") || lower.contains("rate limit") {
+        return "source is rate limited; configure a key or retry later".into();
+    }
+    if lower.contains("timeout") || lower.contains("timed out") {
+        return "source timed out; other sources remain usable".into();
+    }
+    if lower.contains("network") || lower.contains("dns") || lower.contains("connect") {
+        return "source network request failed; check proxy or connectivity".into();
+    }
+    SOURCE_TIMEOUT_NOTE.into()
 }
 
 fn research_db_path(root: &Path) -> PathBuf {

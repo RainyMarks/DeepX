@@ -207,7 +207,7 @@
                   <div class="audit-input-grid">
                     <label>
                       <span data-i18n="repoUrl">代码仓库链接或本地路径</span>
-                      <input id="repoAuditInput" type="text" spellcheck="false" placeholder="https://github.com/owner/repo" />
+                      <input id="repoAuditInput" type="text" spellcheck="false" placeholder="留空则分析当前工作区，也可填 GitHub repo" />
                     </label>
                     <div class="audit-actions">
                       <button id="repoAuditButton" class="primary-button" type="button" data-i18n="runAudit">运行审计</button>
@@ -422,14 +422,14 @@
                         <strong data-i18n="uiFontSize">UI size</strong>
                         <small data-i18n="uiFontSizeHelp">Adjust the base size used by interface text.</small>
                       </span>
-                      <input id="uiFontSizeInput" type="number" min="12" max="18" step="1" />
+                      <input id="uiFontSizeInput" class="fixed-size-input" type="number" value="14" readonly disabled />
                     </label>
                     <label class="settings-row">
                       <span>
                         <strong data-i18n="codeFontSize">Code size</strong>
                         <small data-i18n="codeFontSizeHelp">Adjust code, terminal, and reasoning text size.</small>
                       </span>
-                      <input id="codeFontSizeInput" type="number" min="10" max="16" step="1" />
+                      <input id="codeFontSizeInput" class="fixed-size-input" type="number" value="12" readonly disabled />
                     </label>
                     <label class="settings-row">
                       <span><strong data-i18n="density">Density</strong></span>
@@ -531,6 +531,14 @@
               <section class="settings-section" data-settings-section="research">
                 <h2 data-i18n="researchSources">科研源</h2>
                 <p class="section-help" data-i18n="researchSourcesHelp">这些配置能让论文搜索、代码审计和 AI 分析更稳定；留空不会覆盖已保存密钥。</p>
+                <div class="research-source-guide">
+                  <strong>如何配置论文源和 AI</strong>
+                  <span>OpenAlex：填写 OpenAlex API key，用于开放论文库检索；未填时会自动降级到其他来源。</span>
+                  <span>Semantic Scholar：填写 Semantic Scholar Graph API key，用于语义学术搜索、引用和开放 PDF 线索。</span>
+                  <span>GitHub：填写 GitHub token，用于提高代码仓库搜索额度和审计稳定性，公开仓库搜索不需要私有仓库权限。</span>
+                  <span>Crossref：填写常用邮箱作为 mailto，用于 DOI 元数据检索和礼貌访问。</span>
+                  <span>AI 与联网搜索：模型密钥在“模型”页配置，Brave、Tavily、Serper、SearXNG 在“搜索”页配置。</span>
+                </div>
                 <div class="settings-list">
                   <label class="settings-row">
                     <span>
