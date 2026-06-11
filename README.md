@@ -1,10 +1,10 @@
 # 雨刃 / RainyReSearch
 
-雨刃（RainyReSearch）`1.0.0` 是面向科研复现与研究开发的本地 Agent 工作台。当前版本从 `1.0.0` 重新开始，旧 `0.x` release 链只作为历史产物保留，不参与当前更新线。
+雨刃（RainyReSearch）`1.0.1` 是面向科研复现与研究开发的本地 Agent 工作台。当前发行线从 `1.0.0` 重新开始，旧 `0.x` release 链只作为历史产物保留，不参与当前更新线。
 
 核心目标不是做一个通用聊天壳，而是把论文搜索、AI 研究对话、代码复现、服务器监控、论文情报卡、关系图和代码分析放进一个可落地的科研闭环里。它保留多 provider、用户自填 API key、工作区、终端、权限模式、缓存指标和本地 JSONL trace 能力。
 
-## 1.0.0 模块
+## 1.0.1 模块
 
 - 论文雷达：默认由 AI 搭配 OpenAlex、Semantic Scholar、Crossref、arXiv、GitHub 和强联网搜索一起检索；只记录用户搜索历史，不把所有文献灌进本地数据库。
 - 代码分析：审计 GitHub repo 或本地 repo 的 README、依赖、train/eval/inference、dataset、checkpoint、config、硬编码路径和 issue 信号。
@@ -13,7 +13,7 @@
 - 选题生成：在左侧 AI 研究助手中生成研究方案、消融计划和可交给 Agent 的开发任务。
 - 服务器监控：左侧提供 SSH 连接、远端命令和定时巡检入口，可用于论文训练进度、GPU、磁盘和日志监控。
 
-ResultForge 暂不在 `1.0.0` UI 暴露，后续版本再补完整模块。
+ResultForge 暂不在 `1.0.1` UI 暴露，后续版本再补完整模块。
 
 ## 配置与数据
 
@@ -56,7 +56,7 @@ npm run check:self-contained
 - `resources/rainy-research-core.exe`
 - `resources/app.asar`
 - `resources/rainy-research-assets/`
-- `dist/RainyReSearch-portable-v1.0.0.zip`
+- `dist/RainyReSearch-portable-v1.0.1.zip`
 
 ## 安全边界
 

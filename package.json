@@ -1,7 +1,7 @@
 {
   "name": "rainy-research-desktop",
   "productName": "RainyReSearch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Source-available noncommercial multi-provider coding agent desktop shell",
   "main": "electron/main.js",
   "author": "RainyMarks",
