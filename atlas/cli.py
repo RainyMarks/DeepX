@@ -33,13 +33,21 @@ def import_authorized(source: Path | None = typer.Option(None, help="授权参�
 
 
 @app.command("collect-openalex")
-def collect_openalex_command(max_records: int = typer.Option(3200, min=100, max=10000)) -> None:
+def collect_openalex_command(max_records: int = typer.Option(12000, min=100, max=30000)) -> None:
     typer.echo(json.dumps(collect_openalex(max_records), ensure_ascii=False, indent=2))
 
 
 @app.command("collect-secondary")
-def collect_secondary_command(max_per_query: int = typer.Option(40, min=1, max=300)) -> None:
-    typer.echo(json.dumps(collect_secondary(max_per_query), ensure_ascii=False, indent=2))
+def collect_secondary_command(
+    max_per_query: int = typer.Option(40, min=1, max=300),
+    sources: str = typer.Option("crossref,arxiv,semantic_scholar,dblp"),
+) -> None:
+    requested = {name.strip() for name in sources.split(",") if name.strip()}
+    supported = {"crossref", "arxiv", "semantic_scholar", "dblp"}
+    unknown = requested - supported
+    if unknown:
+        raise typer.BadParameter("未知数据源：" + ", ".join(sorted(unknown)))
+    typer.echo(json.dumps(collect_secondary(max_per_query, requested), ensure_ascii=False, indent=2))
 
 
 @app.command("publish")

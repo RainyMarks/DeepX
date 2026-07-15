@@ -1,3 +1,4 @@
+from atlas.sources.openalex import DEFAULT_QUERIES
 from atlas.taxonomy import classify_tasks, contribution_type, is_in_scope
 
 
@@ -44,6 +45,12 @@ def test_opaque_title_can_be_rescued_by_explicit_abstract():
     )
 
 
+def test_classic_generated_image_spotting_title_is_retained():
+    title = "CNN-generated images are surprisingly easy to spot... for now"
+    assert is_in_scope(title)
+    assert "synthetic_detection" in classify_tasks(title)
+
+
 def test_image_steganalysis_is_a_first_class_task():
     title = "Deep Learning for JPEG Image Steganalysis and Cover-Stego Classification"
     assert is_in_scope(title)
@@ -61,3 +68,12 @@ def test_digital_image_watermarking_is_separate_from_content_credentials():
 def test_text_steganography_and_text_watermarks_remain_out_of_scope():
     assert not is_in_scope("Neural Linguistic Steganography for Secret Text Communication")
     assert not is_in_scope("Watermarking Large Language Model Generated Text")
+
+
+def test_collection_queries_cover_all_specialized_tracks():
+    joined = "\n".join(DEFAULT_QUERIES).lower()
+    assert "scene text" in joined
+    assert "steganalysis" in joined
+    assert "watermark" in joined
+    assert "source attribution" in joined
+    assert "face morphing" in joined

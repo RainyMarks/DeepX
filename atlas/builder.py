@@ -267,19 +267,22 @@ def secondary_papers() -> list[Paper]:
         primary_url = ""
         venue_name = ""
         venue_type = "unknown"
+        issn = ""
         citation_count = 0
         authors: list[AuthorRef] = []
         source_id = ""
         if source_name == "crossref":
             title_value = row.get("title") or []
-            title = title_value[0] if isinstance(title_value, list) and title_value else str(title_value)
+            title = (title_value[0] if title_value else "") if isinstance(title_value, list) else str(title_value)
             date_parts = ((row.get("published") or {}).get("date-parts") or [[]])[0]
             year = int(date_parts[0]) if date_parts else None
             abstract = re.sub(r"<[^>]+>", " ", row.get("abstract", ""))
             doi = canonical_doi(row.get("DOI", ""))
             primary_url = row.get("URL", "")
             venue_value = row.get("container-title") or []
-            venue_name = venue_value[0] if isinstance(venue_value, list) and venue_value else str(venue_value)
+            venue_name = (venue_value[0] if venue_value else "") if isinstance(venue_value, list) else str(venue_value)
+            issn_value = row.get("ISSN") or []
+            issn = (issn_value[0] if issn_value else "") if isinstance(issn_value, list) else str(issn_value)
             venue_type = "journal" if "journal" in row.get("type", "") else "conference" if "proceedings" in row.get("type", "") else "unknown"
             citation_count = int(row.get("is-referenced-by-count") or 0)
             source_id = doi
@@ -314,7 +317,7 @@ def secondary_papers() -> list[Paper]:
             continue
         output.append(Paper(
             id=stable_id(title, year, doi, arxiv_id), title=title, year=year, abstract=abstract, authors=authors,
-            venue=apply_venue_ranking(venue_name, venue_type), task_tags=classify_tasks(title, abstract), contribution_type=contribution_type(title),
+            venue=apply_venue_ranking(venue_name, venue_type, issn), task_tags=classify_tasks(title, abstract), contribution_type=contribution_type(title),
             review_status="auto", doi=doi, arxiv_id=arxiv_id, semantic_scholar_id=source_id if source_name == "semantic_scholar" else "",
             primary_url=primary_url or (f"https://doi.org/{doi}" if doi else ""), citation_count=citation_count,
             provenance=[Provenance(source=source_name, source_id=source_id, url=primary_url, query=envelope.get("query", ""), retrieved_at=envelope.get("retrieved_at", ""))],
@@ -373,6 +376,13 @@ def _load_decisions() -> dict[str, dict]:
                 decision = json.loads(line)
                 output[decision["paper_id"]] = decision
     return output
+
+
+def raw_candidate_count() -> int:
+    """Count the full local candidate pool across independently fetched sources."""
+
+    paths = [RAW_DIR / "openalex_candidates.jsonl", RAW_DIR / "secondary_candidates.jsonl"]
+    return sum(sum(1 for line in path.open(encoding="utf-8") if line.strip()) for path in paths if path.exists())
 
 
 def _apply_decisions(papers: list[Paper]) -> list[Paper]:
@@ -451,7 +461,7 @@ def build_public() -> DatasetManifest:
     ranking_count = sum(len(paper.venue.rankings) for paper in papers if paper.venue)
     quality = {
         "dataset_version": str(date.today()),
-        "candidate_count": sum(1 for _ in (RAW_DIR / "openalex_candidates.jsonl").open(encoding="utf-8")) if (RAW_DIR / "openalex_candidates.jsonl").exists() else len(papers),
+        "candidate_count": raw_candidate_count() or len(papers),
         "public_paper_count": len(papers),
         "verified_paper_count": sum(paper.review_status == "verified" for paper in papers),
         "auto_review_count": sum(paper.review_status == "auto" for paper in papers),
@@ -486,12 +496,12 @@ def build_public() -> DatasetManifest:
         write(name, values)
         shard_names.append(shard)
 
-    raw_candidate_count = sum(1 for _ in (RAW_DIR / "openalex_candidates.jsonl").open(encoding="utf-8")) if (RAW_DIR / "openalex_candidates.jsonl").exists() else len(papers)
+    candidate_count = raw_candidate_count() or len(papers)
     mapped = [item for item in institutions.values() if item.latitude is not None and item.longitude is not None]
     manifest = DatasetManifest(
         dataset_version=str(date.today()), paper_count=len(papers), verified_paper_count=sum(p.review_status == "verified" for p in papers),
         author_count=len(author_index), institution_count=len(institutions), mapped_institution_count=len(mapped),
-        country_count=len({item.country_code for item in institutions.values() if item.country_code}), candidate_count=raw_candidate_count,
+        country_count=len({item.country_code for item in institutions.values() if item.country_code}), candidate_count=candidate_count,
         detail_shards=shard_names,
     )
     write("manifest.json", manifest.model_dump(mode="json"))

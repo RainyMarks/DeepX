@@ -72,6 +72,7 @@ def _strong_title_evidence(title: str) -> bool:
         r"watermark",
         r"recogn",
         r"distinguish",
+        r"\bspot\b",
         r"benchmark",
         r"dataset",
         r"survey",
@@ -104,6 +105,7 @@ def _strong_title_evidence(title: str) -> bool:
         r"traceab",
         r"recogn",
         r"distinguish",
+        r"\bspot\b",
     )
 
     if image and synthetic and synthetic_forensic:
@@ -352,6 +354,7 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
         r"\baigc.{0,24}images?",
         r"synthetic(?: generated)?.{0,24}images?",
         r"gan generated.{0,24}images?",
+        r"cnn generated.{0,24}images?",
         r"diffusion generated.{0,24}images?",
         r"computer generated images?",
     ):
