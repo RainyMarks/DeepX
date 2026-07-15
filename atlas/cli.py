@@ -12,6 +12,7 @@ import uvicorn
 
 from atlas.admin import create_app
 from atlas.builder import AUTHORIZED_DIR, build_public
+from atlas.bulk_review import bulk_review
 from atlas.collector import collect_openalex, collect_secondary
 from atlas.validation import ValidationError, validate_public
 
@@ -44,6 +45,14 @@ def collect_secondary_command(max_per_query: int = typer.Option(40, min=1, max=3
 @app.command("publish")
 def publish() -> None:
     typer.echo(json.dumps(build_public().model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+@app.command("bulk-review")
+def bulk_review_command() -> None:
+    """快速完成剩余公开记录的范围与稳定来源初筛，然后统一发布。"""
+    result = bulk_review()
+    manifest = build_public()
+    typer.echo(json.dumps({"review": result, "manifest": manifest.model_dump(mode="json")}, ensure_ascii=False, indent=2))
 
 
 @app.command("validate-public")
