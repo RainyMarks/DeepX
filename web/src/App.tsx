@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AtlasMap } from "./components/AtlasMap";
 import { loadAtlasContent, loadAtlasSummary, loadPaperDetail } from "./data";
 import { exportPapers } from "./exports";
-import { DEFAULT_FILTERS, filterPapers, type FilterState } from "./filters";
+import { correctedVenueQuery, DEFAULT_FILTERS, filterPapers, type FilterState } from "./filters";
 import { CONTRIBUTIONS, TASKS } from "./task";
 import type { AtlasData, AtlasSummary, Author, CatalogPaper, Institution, PaperDetail, TaskId } from "./types";
 
@@ -173,7 +173,7 @@ export default function App() {
         <label>作者<input value={filters.author} onChange={(e) => update("author", e.target.value)} placeholder="作者姓名" /></label>
         <label>机构<input value={filters.institution} onChange={(e) => update("institution", e.target.value)} placeholder="机构名称" /></label>
         <label>国家/地区<select value={filters.country} onChange={(e) => update("country", e.target.value)}><option value="">全部国家/地区</option>{countryOptions.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-        <label>Venue / Source<input value={filters.venue} onChange={(e) => update("venue", e.target.value)} placeholder="CVPR、TIFS、arXiv…" /></label>
+        <label>Venue / Source<input value={filters.venue} onChange={(e) => update("venue", e.target.value)} placeholder="CVPR、TIFS、arXiv…" />{filters.venue.trim() && correctedVenueQuery(filters.venue) !== filters.venue.trim() && <small className="filter-hint">已按 {correctedVenueQuery(filters.venue)} 检索</small>}</label>
         <label>数据源<select value={filters.source} onChange={(e) => update("source", e.target.value)}><option value="">全部数据源</option>{sourceOptions.map((source) => <option key={source} value={source}>{source}</option>)}</select></label>
         <label>研究任务<select value={filters.task} onChange={(e) => update("task", e.target.value)}><option value="">全部任务</option>{Object.entries(TASKS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
         <label>贡献类型<select value={filters.contribution} onChange={(e) => update("contribution", e.target.value)}><option value="">全部类型</option>{Object.entries(CONTRIBUTIONS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>

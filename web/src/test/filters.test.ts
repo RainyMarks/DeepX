@@ -27,6 +27,14 @@ describe("filterPapers", () => {
     expect(filterPapers([base], { ...DEFAULT_FILTERS, q: "cvpr" })).toHaveLength(1);
   });
 
+  it("corrects common transposed venue abbreviations", () => {
+    const tifs: CatalogPaper = {
+      ...base,
+      venue: { id: "venue-tifs", name: "IEEE Transactions on Information Forensics and Security", short_name: "TIFS", type: "journal", rankings: [] },
+    };
+    expect(filterPapers([tifs], { ...DEFAULT_FILTERS, venue: "TISF" })).toEqual([tifs]);
+  });
+
   it("combines dedicated author, institution, country, venue and source fields", () => {
     const result = filterPapers([base], {
       ...DEFAULT_FILTERS,

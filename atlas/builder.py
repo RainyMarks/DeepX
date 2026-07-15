@@ -20,6 +20,21 @@ CURATED_DIR = ROOT / "data" / "curated"
 RAW_DIR = ROOT / "data" / "raw"
 PUBLIC_DIR = ROOT / "web" / "public" / "data" / "v1"
 
+VENUE_SHORT_NAMES = {
+    "ieee transactions on information forensics and security": "TIFS",
+    "ieee transactions on image processing": "TIP",
+    "ieee transactions on pattern analysis and machine intelligence": "TPAMI",
+    "ieee transactions on multimedia": "TMM",
+    "ieee transactions on circuits and systems for video technology": "TCSVT",
+    "ieee signal processing letters": "SPL",
+    "ieee signal processing magazine": "SPM",
+    "pattern recognition": "PR",
+    "signal processing image communication": "SPIC",
+    "expert systems with applications": "ESWA",
+    "multimedia tools and applications": "MTAP",
+    "computer vision and image understanding": "CVIU",
+}
+
 COUNTRY_NAMES = {
     "US": "美国", "CN": "中国", "GB": "英国", "DE": "德国", "FR": "法国", "IT": "意大利",
     "CA": "加拿大", "AU": "澳大利亚", "JP": "日本", "KR": "韩国", "SG": "新加坡", "CH": "瑞士",
@@ -57,6 +72,7 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
     if not name:
         return None
     normalized = normalized_title(name)
+    known_short_name = VENUE_SHORT_NAMES.get(normalized, "")
     if any(marker in normalized.split() for marker in ("workshop", "workshops", "findings", "companion")):
         return Venue(
             id=_slug(name, "venue"),
@@ -96,8 +112,8 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                 if system in {"CAS", "JCR"} and item_type != "journal":
                     continue
                 rankings.append(VenueRanking(**rank))
-            return Venue(id=item["id"], name=name, short_name=item.get("short_name", ""), type=item_type, issn=issn, rankings=rankings)
-    return Venue(id=_slug(name, "venue"), name=name, type=venue_type if venue_type in {"conference", "journal", "preprint", "book"} else "unknown", issn=issn)
+            return Venue(id=item["id"], name=name, short_name=item.get("short_name", "") or known_short_name, type=item_type, issn=issn, rankings=rankings)
+    return Venue(id=_slug(name, "venue"), name=name, short_name=known_short_name, type=venue_type if venue_type in {"conference", "journal", "preprint", "book"} else "unknown", issn=issn)
 
 
 def authorized_institutions() -> tuple[dict[str, Institution], dict[str, set[str]]]:

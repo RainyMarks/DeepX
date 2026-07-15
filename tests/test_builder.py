@@ -41,3 +41,8 @@ def test_ccf_is_never_applied_to_journals():
     assert venue and not venue.rankings
     mismatched = apply_venue_ranking("AAAI Conference on Artificial Intelligence", "journal")
     assert mismatched and not mismatched.rankings
+
+
+def test_common_journal_names_receive_searchable_short_names():
+    venue = apply_venue_ranking("IEEE Transactions on Information Forensics and Security", "journal")
+    assert venue and venue.short_name == "TIFS" and venue.rankings == []

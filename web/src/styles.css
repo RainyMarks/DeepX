@@ -94,4 +94,5 @@ body{background-image:linear-gradient(rgba(25,119,131,.045) 1px,transparent 1px)
 .directory-grid article,.institution-list article{background:#fff}.detail-panel{background:linear-gradient(180deg,#fff,#f5f9f8);box-shadow:-18px 0 55px rgba(20,54,62,.18)}.detail-close{background:#fff;color:var(--ink)}.detail-badges span,.detail-badges a{color:var(--ink)}.primary-link{background:var(--gold);color:#fff}
 footer{background:#edf5f4;color:var(--ink);border-color:var(--line)}footer span{color:var(--muted)}footer a{color:var(--ink)}
 .load-state{background:var(--paper);color:var(--ink)}.load-state code{background:#e7f1f0}.loading-orbit{border-color:var(--blue)}
+.filter-hint{display:block;margin-top:6px;color:var(--gold);font:700 10px var(--mono);letter-spacing:.03em}
 @media(max-width:520px){.signal-node{box-shadow:inset 0 0 0 3px rgba(250,253,252,.9),0 3px 11px color-mix(in srgb,var(--node-color) 26%,transparent)}}
