@@ -104,9 +104,28 @@ def create_app(token: str | None = None) -> FastAPI:
             required = [row.get("venue_name"), row.get("system"), row.get("level"), row.get("version"), row.get("source_url")]
             if not all(required):
                 raise HTTPException(400, "CSV 必须包含 venue_name,system,level,version,source_url")
+            system = row["system"].strip().upper()
+            venue_type = row.get("venue_type", "").strip().lower()
+            level = row["level"].strip().upper()
+            version = row["version"].strip()
+            source_url = row["source_url"].strip()
+            if "新锐" in " ".join(row.values()) or "xr-ranking" in source_url.lower():
+                raise HTTPException(400, "不接受新锐期刊分区；中科院分区仅允许最后官方版 2025")
+            if system not in {"CCF", "CAS", "JCR"}:
+                raise HTTPException(400, "system 仅允许 CCF、CAS 或 JCR")
+            if system == "CCF" and venue_type != "conference":
+                raise HTTPException(400, "CCF 等级只允许导入会议")
+            if system in {"CAS", "JCR"} and venue_type != "journal":
+                raise HTTPException(400, "中科院/JCR 分区只允许导入期刊")
+            if system == "CCF" and level not in {"A", "B", "C"}:
+                raise HTTPException(400, "CCF level 仅允许 A、B、C")
+            if system == "CAS" and (version != "2025" or level not in {"1", "2", "3", "4"}):
+                raise HTTPException(400, "中科院分区仅允许 2025 版和 1–4 区")
+            if system == "JCR" and (version != "2026" or level not in {"Q1", "Q2", "Q3", "Q4"}):
+                raise HTTPException(400, "JCR 仅允许 2026 版和 Q1–Q4")
             key = row["venue_name"].strip().lower()
-            venue = by_name.setdefault(key, {"id": "venue-imported-" + secrets.token_hex(6), "name": row["venue_name"], "short_name": row.get("short_name", ""), "type": row.get("venue_type", "unknown"), "aliases": [], "rankings": []})
-            venue["rankings"].append({"system": row["system"], "level": row["level"], "category": row.get("category", ""), "is_top": row.get("is_top", "").lower() in {"1", "true", "yes"}, "version": row["version"], "source_url": row["source_url"], "verified_at": row.get("verified_at") or "local-import"})
+            venue = by_name.setdefault(key, {"id": "venue-imported-" + secrets.token_hex(6), "name": row["venue_name"], "short_name": row.get("short_name", ""), "type": venue_type, "aliases": [], "rankings": []})
+            venue["rankings"].append({"system": system, "level": level, "category": row.get("category", ""), "is_top": system == "CAS" and row.get("is_top", "").lower() in {"1", "true", "yes"}, "version": version, "source_url": source_url, "verified_at": row.get("verified_at") or "local-import"})
         path.write_text(json.dumps(list(by_name.values()), ensure_ascii=False, indent=2), encoding="utf-8")
         build_public()
         return RedirectResponse(url=f"/?token={app.state.admin_token}", status_code=303)

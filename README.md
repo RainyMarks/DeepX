@@ -1,6 +1,6 @@
 # 生成图像取证研究图谱
 
-生成图像取证研究图谱（Synthetic Image Forensics Atlas）是一个中文学术地图，聚合 AI 生成图像检测、来源溯源、深度伪造、图像篡改定位、场景文本图像伪造和内容凭证研究。公开站部署为纯静态 GitHub Pages，本地审核台负责采集、去重、核验与发布。
+生成图像取证研究图谱（Synthetic Image Forensics Atlas）是一个中文学术地图，聚合 AI 生成图像检测、来源溯源、深度伪造、图像篡改定位、场景文本图像伪造、图像隐写分析、数字图像水印和内容凭证研究。公开站部署为纯静态 GitHub Pages，本地审核台负责采集、去重、核验与发布。
 
 ## 快速开始
 
@@ -28,7 +28,7 @@ python -m atlas.cli admin
 python -m atlas.cli import-authorized
 
 # 从 OpenAlex 扩充候选池（其他来源适配器位于 atlas/sources）
-python -m atlas.cli collect-openalex --max-records 2400
+python -m atlas.cli collect-openalex --max-records 5000
 
 # 从 Crossref、arXiv、Semantic Scholar、DBLP 交叉补充
 python -m atlas.cli collect-secondary --max-per-query 40
@@ -54,7 +54,9 @@ python -m atlas.cli validate-public --strict
 
 ## 数据边界
 
-收录范围限定为图像取证。纯 OCR、只使用合成图像训练下游任务、普通相机型号归因，以及音频、视频和纯文本生成检测不属于本图谱。中科院/JCR 受限等级只能由有权使用的维护者在本地导入；缺失时显示“暂无可靠等级数据”，不会推测。
+收录范围限定为图像取证。纯 OCR、只使用合成图像训练下游任务、普通相机型号归因，以及音频、视频、文本隐写和纯文本生成检测不属于本图谱。
+
+等级口径严格分离：CCF 只用于会议；期刊只显示维护者有权使用并导入的中科院 2025 最后官方版或 JCR 2026。项目明确拒绝“新锐期刊分区”，支持中科院/JCR 单独筛选和“一区或 Q1”等综合检索。缺失时显示“暂无可靠等级数据”，不会推测，也不会抓取或公开再分发受限的完整分区表。
 
 ## 许可与来源
 

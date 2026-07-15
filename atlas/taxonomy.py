@@ -10,6 +10,8 @@ TASK_LABELS = {
     "image_forgery": "图像篡改检测与定位",
     "scene_text_forgery": "场景文本图像伪造",
     "content_provenance": "内容凭证与水印验证",
+    "image_steganalysis": "图像隐写与隐写分析",
+    "digital_watermarking": "数字图像水印与认证",
 }
 
 
@@ -65,6 +67,9 @@ def _strong_title_evidence(title: str) -> bool:
         r"provenance",
         r"fingerprint",
         r"traceab",
+        r"steganalysis",
+        r"steganograph",
+        r"watermark",
         r"recogn",
         r"distinguish",
         r"benchmark",
@@ -154,6 +159,41 @@ def _strong_title_evidence(title: str) -> bool:
         title, r"forg", r"tamper", r"locali[sz]", r"authentic", r"watermark"
     ):
         return True
+    if _matches(title, r"\bsteganalysis\b", r"image steganograph", r"stego images?", r"cover stego") and _matches(
+        title,
+        r"images?",
+        r"visual",
+        r"digital",
+        r"spatial",
+        r"jpeg",
+        r"deep learning",
+        r"transformer",
+        r"benchmark",
+        r"dataset",
+        r"survey",
+        r"review",
+        r"detect",
+    ):
+        return True
+    if _matches(title, r"(?:digital |image |visual )watermark", r"watermarking.{0,24}images?", r"images?.{0,24}watermark") and _matches(
+        title,
+        r"detect",
+        r"authentic",
+        r"forensic",
+        r"tamper",
+        r"locali[sz]",
+        r"robust",
+        r"fragile",
+        r"invisible",
+        r"reversible",
+        r"zero watermark",
+        r"deep learning",
+        r"neural",
+        r"survey",
+        r"review",
+        r"benchmark",
+    ):
+        return True
     if _matches(title, r"\bc2pa\b", r"content credentials?") and _matches(
         title, r"image", r"visual", r"media", r"content", r"generated", r"authentic", r"provenance"
     ):
@@ -197,6 +237,9 @@ def _explicit_abstract_evidence(text: str) -> bool:
         r"(?:forged|tampered) (?:scene text|document images?|text images?)",
         r"content credentials?.{0,80}(?:images?|visual|authentic|provenance)",
         r"\bc2pa\b.{0,80}(?:images?|visual|authentic|provenance)",
+        r"(?:image |jpeg |spatial )?steganalysis",
+        r"(?:detect|classif).{0,60}(?:stego|steganograph).{0,40}images?",
+        r"(?:digital |image )watermark.{0,80}(?:detect|authentic|tamper|robust|forensic)",
     )
 
 
@@ -237,6 +280,8 @@ def is_in_scope(title: str, abstract: str = "") -> bool:
         r"verif",
         r"provenance",
         r"watermark",
+        r"steganalysis",
+        r"steganograph",
         r"traceab",
     )
     return weak_title_clue and _explicit_abstract_evidence(normalize_text(f"{title} {abstract}"))
@@ -245,6 +290,22 @@ def is_in_scope(title: str, abstract: str = "") -> bool:
 def classify_tasks(title: str, abstract: str = "") -> list[str]:
     body = normalize_text(f"{title} {abstract}")
     tags: list[str] = []
+    if _matches(
+        body,
+        r"\bsteganalysis\b",
+        r"image steganograph",
+        r"stego images?",
+        r"cover stego",
+        r"steganographic image",
+    ):
+        tags.append("image_steganalysis")
+    if _matches(
+        body,
+        r"(?:digital |image |visual |invisible |fragile |robust |reversible )watermark",
+        r"watermarking.{0,32}(?:images?|visual|diffusion|generative)",
+        r"(?:images?|visual|diffusion|generative).{0,32}watermark",
+    ):
+        tags.append("digital_watermarking")
     if _matches(
         body,
         r"(?:scene text|document images?|text images?).{0,45}(?:forg|tamper|manipulat)",
@@ -262,7 +323,16 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
         tags.append("source_attribution")
     if _matches(body, r"\bc2pa\b", r"content credentials?") or (
         _matches(body, r"watermark", r"provenance verification")
-        and _matches(body, r"ai generated", r"generative", r"diffusion", r"synthetic", r"deepfake", r"tamper", r"content provenance")
+        and _matches(
+            body,
+            r"ai generated",
+            r"generative",
+            r"diffusion",
+            r"synthetic",
+            r"deepfake",
+            r"content provenance",
+            r"content credential",
+        )
     ):
         tags.append("content_provenance")
     if _matches(

@@ -38,6 +38,17 @@ def validate_public(strict: bool = False) -> dict:
         for ranking in (paper.get("venue") or {}).get("rankings", []):
             if not ranking.get("system") or not ranking.get("version") or not ranking.get("source_url") or not ranking.get("verified_at"):
                 errors.append(f"等级缺少来源或版本: {paper.get('id')}")
+            venue_type = (paper.get("venue") or {}).get("type")
+            if ranking.get("system") == "CCF" and venue_type != "conference":
+                errors.append(f"CCF 只能用于会议: {paper.get('id')}")
+            if ranking.get("system") in {"CAS", "JCR"} and venue_type != "journal":
+                errors.append(f"期刊分区只能用于期刊: {paper.get('id')}")
+            if ranking.get("system") == "CAS" and ranking.get("version") != "2025":
+                errors.append(f"中科院分区必须为最后官方版 2025: {paper.get('id')}")
+            if ranking.get("system") == "JCR" and ranking.get("version") != "2026":
+                errors.append(f"JCR 分区必须为 2026 版: {paper.get('id')}")
+            if "新锐" in json.dumps(ranking, ensure_ascii=False) or "xr-ranking" in ranking.get("source_url", "").lower():
+                errors.append(f"禁止使用新锐期刊分区: {paper.get('id')}")
     institutions_path = PUBLIC_DIR / "institutions.json"
     institutions = json.loads(institutions_path.read_text(encoding="utf-8")) if institutions_path.exists() else []
     for institution in institutions:

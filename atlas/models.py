@@ -30,7 +30,7 @@ class AuthorRef(BaseModel):
 
 
 class VenueRanking(BaseModel):
-    system: Literal["CCF", "SCI", "JCR", "CAS"]
+    system: Literal["CCF", "JCR", "CAS"]
     level: str
     category: str = ""
     is_top: bool = False

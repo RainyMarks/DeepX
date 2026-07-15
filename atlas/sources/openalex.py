@@ -23,6 +23,16 @@ DEFAULT_QUERIES = [
     "document image text tampering detection",
     "image provenance watermark verification",
     "C2PA image verification",
+    "image steganalysis detection",
+    "deep learning image steganalysis",
+    "image steganography detection benchmark",
+    "cover stego image classification",
+    "digital image watermarking authentication",
+    "image watermark detection robustness",
+    "fragile watermark image tamper localization",
+    "deep learning image watermarking",
+    "invisible watermark generated image detection",
+    "diffusion model watermarking provenance",
 ]
 
 

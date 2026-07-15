@@ -65,6 +65,9 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
             issn=issn,
         )
     for item in load_rankings():
+        item_type = item.get("type", venue_type)
+        if venue_type in {"conference", "journal"} and item_type in {"conference", "journal"} and item_type != venue_type:
+            continue
         aliases = [item["name"], item.get("short_name", ""), *item.get("aliases", [])]
         if issn and item.get("issn") and issn.lower() == item["issn"].lower():
             matched = True
@@ -85,8 +88,15 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                     matched = True
                     break
         if matched:
-            rankings = [VenueRanking(**rank) for rank in item.get("rankings", [])]
-            return Venue(id=item["id"], name=name, short_name=item.get("short_name", ""), type=item.get("type", venue_type), issn=issn, rankings=rankings)
+            rankings = []
+            for rank in item.get("rankings", []):
+                system = rank.get("system")
+                if system == "CCF" and item_type != "conference":
+                    continue
+                if system in {"CAS", "JCR"} and item_type != "journal":
+                    continue
+                rankings.append(VenueRanking(**rank))
+            return Venue(id=item["id"], name=name, short_name=item.get("short_name", ""), type=item_type, issn=issn, rankings=rankings)
     return Venue(id=_slug(name, "venue"), name=name, type=venue_type if venue_type in {"conference", "journal", "preprint", "book"} else "unknown", issn=issn)
 
 
@@ -145,7 +155,7 @@ def authorized_papers() -> list[Paper]:
         venue_type = "preprint" if row.get("is_arxiv_preprint") else publication_type if publication_type in {"conference", "journal", "book"} else "unknown"
         output.append(Paper(
             id=stable_id(title, year, doi, arxiv_id), title=title, year=year,
-            publication_date=row.get("publication_date", ""), abstract=row.get("abstract", ""), authors=authors,
+            publication_date=row.get("publication_date") or "", abstract=row.get("abstract") or "", authors=authors,
             institution_ids=sorted(paper_map.get(paper_key, [])), venue=apply_venue_ranking(venue_name, venue_type),
             task_tags=task_tags, contribution_type=row.get("entry_type") if row.get("entry_type") in {"method", "dataset", "benchmark", "survey", "analysis"} else contribution_type(title),
             review_status="verified" if manually_confirmed else "auto", doi=doi, arxiv_id=arxiv_id,
@@ -212,7 +222,7 @@ def openalex_papers() -> list[Paper]:
         openalex_id = str(row.get("id", "")).rsplit("/", 1)[-1]
         primary_url = (row.get("primary_location") or {}).get("landing_page_url") or ids.get("doi") or row.get("id") or ""
         output.append(Paper(
-            id=stable_id(title, year, doi, arxiv_id), title=title, year=year, publication_date=row.get("publication_date", ""), abstract=abstract,
+            id=stable_id(title, year, doi, arxiv_id), title=title, year=year, publication_date=row.get("publication_date") or "", abstract=abstract,
             authors=authors, institution_ids=sorted(set(institution_ids)), venue=apply_venue_ranking(venue_name, venue_type),
             task_tags=classify_tasks(title, abstract), contribution_type=contribution_type(title), review_status="auto",
             doi=doi, arxiv_id=arxiv_id, openalex_id=openalex_id, primary_url=primary_url,

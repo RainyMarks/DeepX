@@ -13,7 +13,7 @@
 <div class="shell">
 <aside>
   <div class="card"><h2>数据闭环</h2><form method="post" action="/jobs/collect?token={{ token }}"><button type="submit">采集并重建</button></form><br><form method="post" action="/jobs/publish?token={{ token }}"><button class="alt" type="submit">重新发布公开数据</button></form></div>
-  <div class="card"><h2>导入等级 CSV</h2><form method="post" enctype="multipart/form-data" action="/rankings/import?token={{ token }}"><input type="file" name="file" accept=".csv" required><button type="submit">导入并校验</button></form></div>
+  <div class="card"><h2>导入等级 CSV</h2><form method="post" enctype="multipart/form-data" action="/rankings/import?token={{ token }}"><input type="file" name="file" accept=".csv" required><button type="submit">导入并校验</button></form><small>CCF 仅会议；期刊仅中科院 2025 或 JCR 2026。拒绝新锐分区。</small></div>
   <div class="card"><h2>审核原则</h2><small>只有维护者点击“确认核验”才会生成 verified 决定。自动采集、自动分类和跨源匹配永远保持待复核。</small></div>
 </aside>
 <main>

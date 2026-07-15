@@ -39,3 +39,15 @@ test("restores a shared filter URL and exports CSV", async ({ page }, testInfo) 
   await page.getByRole("button", { name: "CSV" }).click();
   expect((await download).suggestedFilename()).toContain(".csv");
 });
+
+test("opens an efficient cluster intelligence dock without covering the map", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop interaction coverage");
+  await page.goto("/?view=map");
+  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
+  const node = page.locator(".signal-node-host").first();
+  await expect(node).toBeVisible();
+  await node.click();
+  await expect(page.getByRole("complementary", { name: "区域论文情报舱" })).toBeVisible();
+  await expect(page.locator(".cluster-abstract").first()).toBeVisible();
+  await expect(page.locator(".map-explorer")).toHaveClass(/has-cluster/);
+});

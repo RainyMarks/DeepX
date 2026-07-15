@@ -34,3 +34,10 @@ def test_workshops_and_findings_do_not_inherit_main_venue_rank():
     ):
         venue = apply_venue_ranking(name)
         assert venue and not venue.rankings
+
+
+def test_ccf_is_never_applied_to_journals():
+    venue = apply_venue_ranking("IEEE Transactions on Pattern Analysis and Machine Intelligence", "journal")
+    assert venue and not venue.rankings
+    mismatched = apply_venue_ranking("AAAI Conference on Artificial Intelligence", "journal")
+    assert mismatched and not mismatched.rankings

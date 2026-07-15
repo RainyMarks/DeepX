@@ -42,3 +42,22 @@ def test_opaque_title_can_be_rescued_by_explicit_abstract():
         "No Detector to Rule Them All",
         "We study generalizable AI-generated image detection in the wild.",
     )
+
+
+def test_image_steganalysis_is_a_first_class_task():
+    title = "Deep Learning for JPEG Image Steganalysis and Cover-Stego Classification"
+    assert is_in_scope(title)
+    assert "image_steganalysis" in classify_tasks(title)
+
+
+def test_digital_image_watermarking_is_separate_from_content_credentials():
+    title = "Robust Digital Image Watermarking for Authentication and Tamper Detection"
+    tags = classify_tasks(title)
+    assert is_in_scope(title)
+    assert "digital_watermarking" in tags
+    assert "content_provenance" not in tags
+
+
+def test_text_steganography_and_text_watermarks_remain_out_of_scope():
+    assert not is_in_scope("Neural Linguistic Steganography for Secret Text Communication")
+    assert not is_in_scope("Watermarking Large Language Model Generated Text")

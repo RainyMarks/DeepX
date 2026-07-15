@@ -56,6 +56,9 @@ def collect_secondary(max_per_query: int = 40) -> dict:
         "image forgery detection localization",
         "generated image source attribution",
         "scene text image forgery detection",
+        "image steganalysis detection",
+        "digital image watermarking authentication",
+        "fragile watermark image tamper localization",
     ]
     sources = [
         CrossrefSource(mailto=os.getenv("CROSSREF_MAILTO", "")),

@@ -7,6 +7,8 @@ export const TASKS: Record<TaskId, { label: string; short: string; color: string
   image_forgery: { label: "图像篡改检测与定位", short: "图像篡改", color: "#b07a23" },
   scene_text_forgery: { label: "场景文本图像伪造", short: "场景文本", color: "#2d7561" },
   content_provenance: { label: "内容凭证与水印验证", short: "内容凭证", color: "#4c6692" },
+  image_steganalysis: { label: "图像隐写与隐写分析", short: "隐写分析", color: "#567b18" },
+  digital_watermarking: { label: "数字图像水印与认证", short: "图像水印", color: "#d85b40" },
 };
 
 export const CONTRIBUTIONS: Record<string, string> = {

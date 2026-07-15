@@ -4,10 +4,12 @@ export type TaskId =
   | "deepfake_detection"
   | "image_forgery"
   | "scene_text_forgery"
-  | "content_provenance";
+  | "content_provenance"
+  | "image_steganalysis"
+  | "digital_watermarking";
 
 export interface Ranking {
-  system: "CCF" | "SCI" | "JCR" | "CAS";
+  system: "CCF" | "JCR" | "CAS";
   level: string;
   category: string;
   is_top: boolean;

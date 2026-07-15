@@ -38,4 +38,22 @@ describe("filterPapers", () => {
     }, [institution]);
     expect(result).toHaveLength(1);
   });
+
+  it("supports CAS, JCR and combined journal-zone lookup without treating journals as CCF", () => {
+    const journal: CatalogPaper = {
+      ...base,
+      id: "paper-journal",
+      venue: {
+        id: "venue-journal", name: "Forensic Imaging", short_name: "FI", type: "journal",
+        rankings: [
+          { system: "CAS", level: "1", category: "工程技术", is_top: true, version: "2025", source_url: "https://example.com/cas", verified_at: "2026-07-15" },
+          { system: "JCR", level: "Q2", category: "Imaging Science", is_top: false, version: "2026", source_url: "https://example.com/jcr", verified_at: "2026-07-15" },
+        ],
+      },
+    };
+    expect(filterPapers([base, journal], { ...DEFAULT_FILTERS, journal: "1" })).toEqual([journal]);
+    expect(filterPapers([base, journal], { ...DEFAULT_FILTERS, journalSystem: "JCR", journal: "2" })).toEqual([journal]);
+    expect(filterPapers([base, journal], { ...DEFAULT_FILTERS, journalSystem: "CAS", journal: "TOP" })).toEqual([journal]);
+    expect(filterPapers([journal], { ...DEFAULT_FILTERS, ccf: "A" })).toHaveLength(0);
+  });
 });

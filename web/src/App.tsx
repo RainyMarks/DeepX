@@ -19,7 +19,7 @@ function readInitialState(): { view: View; filters: FilterState } {
 function rankingLabel(paper: CatalogPaper, system: string) {
   const ranking = paper.venue?.rankings.find((item) => item.system === system);
   if (!ranking) return "";
-  if (system === "CAS") return `中科院 ${ranking.level}${ranking.is_top ? " · TOP" : ""}`;
+  if (system === "CAS") return `中科院 ${ranking.level}区${ranking.is_top ? " · TOP" : ""}`;
   if (system === "JCR") return `JCR ${ranking.level}`;
   return `${system}-${ranking.level}`;
 }
@@ -32,6 +32,7 @@ function PaperCard({ paper, onOpen }: { paper: CatalogPaper; onOpen: () => void 
     <div className="paper-card-top"><span className={`review-dot ${paper.review_status}`}>{paper.review_status === "verified" ? "已核验" : "待复核"}</span><span>{paper.year ?? "年份待补"}</span></div>
     <h3>{paper.title}</h3>
     <p className="paper-authors">{paper.authors.slice(0, 5).map((item) => item.name).join("，")}{paper.authors.length > 5 ? " 等" : ""}</p>
+    {paper.abstract_excerpt && <p className="paper-abstract">{paper.abstract_excerpt}</p>}
     <div className="paper-venue"><strong>{paper.venue?.short_name || paper.venue?.name || "来源待补"}</strong><span>{CONTRIBUTIONS[paper.contribution_type]}</span></div>
     <div className="tag-row">{paper.task_tags.slice(0, 3).map((task) => <span key={task} style={{ "--tag": TASKS[task].color } as React.CSSProperties}>{TASKS[task].short}</span>)}{[ccf, cas, jcr].filter(Boolean).map((item) => <b key={item}>{item}</b>)}</div>
   </article>;
@@ -145,14 +146,14 @@ export default function App() {
       <div className="dataset-stamp"><strong>DATASET</strong><span>{summary.manifest.dataset_version}</span><small>{summary.manifest.paper_count.toLocaleString()} 篇论文</small></div>
     </header>
     <section className="hero-strip">
-      <div><span>PUBLIC RESEARCH ATLAS</span><h2>从真假判断，到生成来源与篡改位置。</h2><p>聚合论文、作者、机构、地理位置与学术等级，持续追踪生成图像取证研究的演进。</p></div>
+      <div><span>FORENSIC SIGNAL OBSERVATORY</span><h2>从生成痕迹，到隐写、水印与可信来源。</h2><p>把检测、归因、篡改定位、隐写分析和数字水印放在同一张可检索的证据网络中。</p></div>
       <dl><div><dt>论文</dt><dd>{summary.manifest.paper_count.toLocaleString()}</dd></div><div><dt>已核验</dt><dd>{summary.manifest.verified_paper_count.toLocaleString()}</dd></div><div><dt>作者</dt><dd>{summary.manifest.author_count.toLocaleString()}</dd></div><div><dt>国家/地区</dt><dd>{summary.manifest.country_count}</dd></div></dl>
     </section>
     <main className="load-state content-loading"><div className="loading-orbit" /><span>摘要已就绪</span><h2>正在按需装载论文、作者与机构索引…</h2></main>
   </div>;
 
   const maxTask = Math.max(...data.stats.tasks.map((item) => item.count), 1);
-  return <div className="app-shell" data-atlas-ready="true">
+  return <div className={`app-shell ${detail || selectedAuthor ? "has-detail" : ""}`} data-atlas-ready="true">
     <header className="masthead">
       <div className="brand-block"><span className="brand-seal">鉴</span><div><p>GENERATIVE IMAGE FORENSICS · 中文研究基础设施</p><h1>生成图像取证研究图谱</h1></div></div>
       <nav aria-label="主视图">{(["map", "papers", "authors", "institutions"] as View[]).map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{({ map: "世界地图", papers: "论文库", authors: "作者图谱", institutions: "机构图谱" } as Record<View, string>)[item]}</button>)}</nav>
@@ -160,7 +161,7 @@ export default function App() {
     </header>
 
     <section className="hero-strip">
-      <div><span>PUBLIC RESEARCH ATLAS</span><h2>从真假判断，到生成来源与篡改位置。</h2><p>聚合论文、作者、机构、地理位置与学术等级，持续追踪生成图像取证研究的演进。</p></div>
+      <div><span>FORENSIC SIGNAL OBSERVATORY</span><h2>从生成痕迹，到隐写、水印与可信来源。</h2><p>把检测、归因、篡改定位、隐写分析和数字水印放在同一张可检索的证据网络中。</p></div>
       <dl><div><dt>论文</dt><dd>{data.manifest.paper_count.toLocaleString()}</dd></div><div><dt>已核验</dt><dd>{data.manifest.verified_paper_count.toLocaleString()}</dd></div><div><dt>作者</dt><dd>{data.manifest.author_count.toLocaleString()}</dd></div><div><dt>国家/地区</dt><dd>{data.manifest.country_count}</dd></div></dl>
     </section>
 
@@ -178,15 +179,15 @@ export default function App() {
         <label>贡献类型<select value={filters.contribution} onChange={(e) => update("contribution", e.target.value)}><option value="">全部类型</option>{Object.entries(CONTRIBUTIONS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
         <div className="split-filter"><label>起始年份<input type="number" value={filters.yearFrom} onChange={(e) => update("yearFrom", e.target.value)} placeholder="2000" /></label><label>结束年份<input type="number" value={filters.yearTo} onChange={(e) => update("yearTo", e.target.value)} placeholder="2026" /></label></div>
         <label>审核状态<select value={filters.review} onChange={(e) => update("review", e.target.value)}><option value="">全部状态</option><option value="verified">人工核验核心集</option><option value="auto">自动收录待复核</option></select></label>
-        <label>CCF 等级<select value={filters.ccf} onChange={(e) => update("ccf", e.target.value)}><option value="">全部等级</option><option value="A">CCF-A</option><option value="B">CCF-B</option><option value="C">CCF-C</option></select></label>
-        <label>期刊分区<select value={filters.journal} onChange={(e) => update("journal", e.target.value)}><option value="">全部分区</option><option value="1">一区 / Q1</option><option value="2">二区 / Q2</option><option value="3">三区 / Q3</option><option value="4">四区 / Q4</option><option value="TOP">TOP</option></select></label>
+        <label>CCF 会议等级<select value={filters.ccf} onChange={(e) => update("ccf", e.target.value)}><option value="">全部会议等级</option><option value="A">CCF-A</option><option value="B">CCF-B</option><option value="C">CCF-C</option></select></label>
+        <div className="ranking-filter"><label>期刊评价<select value={filters.journalSystem} onChange={(e) => update("journalSystem", e.target.value)}><option value="">综合检索</option><option value="CAS">中科院 2025</option><option value="JCR">JCR 2026</option></select></label><label>期刊分区<select value={filters.journal} onChange={(e) => update("journal", e.target.value)}><option value="">全部分区</option><option value="1">一区 / Q1</option><option value="2">二区 / Q2</option><option value="3">三区 / Q3</option><option value="4">四区 / Q4</option><option value="TOP">中科院 TOP</option></select></label></div>
         <div className="filter-result"><span>当前结果</span><strong>{filtered.length.toLocaleString()}</strong><small>唯一论文</small></div>
         <div className="export-row"><button onClick={() => exportPapers(filtered, "csv")}>CSV</button><button onClick={() => exportPapers(filtered, "json")}>JSON</button><button onClick={() => exportPapers(filtered, "bib")}>BibTeX</button></div>
       </aside>
 
       <main className="content-stage">
         {view === "map" && <section className="map-view">
-          <div className="map-frame"><div className="map-caption"><span>机构聚合点随缩放展开</span><span>连线表示当前筛选论文中的机构合作</span></div><AtlasMap papers={filtered} institutions={data.institutions} onPaper={openPaper} /></div>
+          <div className="map-frame"><div className="map-caption"><span>单击信号节点直接浏览机构与论文摘要</span><span>放大拆点是可选操作 · 连线表示合作强度</span></div><AtlasMap papers={filtered} institutions={data.institutions} onPaper={openPaper} onInstitution={(name) => update("institution", name)} detailOpen={Boolean(detail)} /></div>
           <aside className="stats-column"><div className="section-label">TASK DISTRIBUTION</div><h2>研究任务分布</h2>{data.stats.tasks.map((item) => <button key={item.id} className="task-bar" onClick={() => update("task", filters.task === item.id ? "" : item.id)}><span>{item.label}</span><b>{filtered.filter((paper) => paper.task_tags.includes(item.id)).length}</b><i style={{ width: `${(item.count / maxTask) * 100}%`, background: TASKS[item.id].color }} /></button>)}<div className="stats-note"><strong>{visibleInstitutions.length}</strong><span>个机构进入当前视图</span><p>{data.manifest.data_notice}</p></div></aside>
         </section>}
         {view === "papers" && <section className="library-view"><div className="view-heading"><div><span>PAPER LIBRARY</span><h2>论文库</h2></div><p>按年份与引用快照排序，点击卡片查看摘要、来源和等级版本。</p></div><div className="paper-grid">{filtered.slice(0, 600).map((paper) => <PaperCard key={paper.id} paper={paper} onOpen={() => openPaper(paper.id)} />)}</div>{filtered.length > 600 && <p className="limit-note">当前展示前 600 条；导出包含全部 {filtered.length} 条结果。</p>}</section>}
