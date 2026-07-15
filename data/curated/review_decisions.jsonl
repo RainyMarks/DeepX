@@ -145,7 +145,6 @@
 {"paper_id": "paper-067441147a9f0390", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-f957e7d79add3896", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-852f132ec75a9e2c", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
-{"paper_id": "paper-1ae053c100e03ea1", "status": "rejected", "reviewer": "local_maintainer", "note": "快速批量核验：缺少稳定来源或命中明确非图像取证主题，排除。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-7d7a158d3177303d", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-989fed7c9b627eef", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-834c964967219a66", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
@@ -1208,7 +1207,6 @@
 {"paper_id": "paper-e40127c460b79af9", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-0b8085bf58810e35", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-5286ff05e32c4600", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
-{"paper_id": "paper-da6f492aec8347c2", "status": "rejected", "reviewer": "local_maintainer", "note": "快速批量核验：缺少稳定来源或命中明确非图像取证主题，排除。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-1cd977f38a27d57f", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-7af5263007dd2929", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
 {"paper_id": "paper-c74f7742a91be21c", "status": "verified", "reviewer": "local_maintainer", "note": "快速批量核验：已有稳定来源，且现有任务标签与图像取证范围一致。", "task_tags": [], "decided_at": "2026-07-15T07:13:57Z"}
@@ -2494,3 +2492,5 @@
 {"paper_id": "paper-f134f3995df72804", "status": "verified", "reviewer": "local_maintainer", "note": "??????????/????????????????????????????????DOI?arXiv??????", "task_tags": [], "decided_at": "2026-07-15T07:16:22Z"}
 {"paper_id": "paper-47ef68fe83783864", "status": "verified", "reviewer": "local_maintainer", "note": "??/????????????????????", "task_tags": [], "decided_at": "2026-07-15T07:16:31Z"}
 {"paper_id": "paper-3ce2c1331ca6da7f", "status": "verified", "reviewer": "local_maintainer", "note": "??????????/????????????????????????????????DOI?arXiv??????", "task_tags": [], "decided_at": "2026-07-15T07:16:40Z"}
+{"paper_id": "paper-1ae053c100e03ea1", "status": "rejected", "reviewer": "local_maintainer", "note": "?????Diffusion Language Model??????????????", "task_tags": [], "decided_at": "2026-07-15T07:16:48Z"}
+{"paper_id": "paper-da6f492aec8347c2", "status": "verified", "reviewer": "local_maintainer", "note": "??/????????????????????", "task_tags": [], "decided_at": "2026-07-15T07:16:57Z"}
