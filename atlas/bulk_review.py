@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
-
 from atlas.builder import CURATED_DIR, PUBLIC_DIR
 from atlas.models import utc_now
 
