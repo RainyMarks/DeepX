@@ -1,0 +1,17 @@
+name: 元数据纠错
+description: 反馈标题、作者、年份、Venue 或链接错误
+title: "[元数据纠错] "
+labels: ["data: metadata"]
+body:
+  - type: input
+    id: paper
+    attributes: { label: 论文标题或图谱链接 }
+    validations: { required: true }
+  - type: textarea
+    id: correction
+    attributes: { label: 当前错误与建议修改 }
+    validations: { required: true }
+  - type: input
+    id: evidence
+    attributes: { label: 官方证据链接 }
+    validations: { required: true }

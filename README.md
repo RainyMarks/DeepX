@@ -1,67 +1,61 @@
-# 雨刃 / RainyReSearch
+# 生成图像取证研究图谱
 
-雨刃（RainyReSearch）`1.0.1` 是面向科研复现与研究开发的本地 Agent 工作台。当前发行线从 `1.0.0` 重新开始，旧 `0.x` release 链只作为历史产物保留，不参与当前更新线。
+生成图像取证研究图谱（Synthetic Image Forensics Atlas）是一个中文学术地图，聚合 AI 生成图像检测、来源溯源、深度伪造、图像篡改定位、场景文本图像伪造和内容凭证研究。公开站部署为纯静态 GitHub Pages，本地审核台负责采集、去重、核验与发布。
 
-核心目标不是做一个通用聊天壳，而是把论文搜索、AI 研究对话、代码复现、服务器监控、论文情报卡、关系图和代码分析放进一个可落地的科研闭环里。它保留多 provider、用户自填 API key、工作区、终端、权限模式、缓存指标和本地 JSONL trace 能力。
-
-## 1.0.1 模块
-
-- 论文雷达：默认由 AI 搭配 OpenAlex、Semantic Scholar、Crossref、arXiv、GitHub 和强联网搜索一起检索；只记录用户搜索历史，不把所有文献灌进本地数据库。
-- 代码分析：审计 GitHub repo 或本地 repo 的 README、依赖、train/eval/inference、dataset、checkpoint、config、硬编码路径和 issue 信号。
-- TrickScore：输出复现/可信性风险，不输出“造假概率”，每个判断都保留 evidence。
-- 关系图：构建论文、代码、方法、数据集和技术模块关系图。
-- 选题生成：在左侧 AI 研究助手中生成研究方案、消融计划和可交给 Agent 的开发任务。
-- 服务器监控：左侧提供 SSH 连接、远端命令和定时巡检入口，可用于论文训练进度、GPU、磁盘和日志监控。
-
-ResultForge 暂不在 `1.0.1` UI 暴露，后续版本再补完整模块。
-
-## 配置与数据
-
-首次启动后进入 `设置 -> 模型` 填写自己的模型 API key。科研源可在 `设置 -> 科研源` 填写：
-
-- OpenAlex API key
-- Semantic Scholar API key
-- GitHub token
-- Crossref mailto
-
-强联网搜索可在 `设置 -> 联网搜索` 填写 Brave、Tavily、Serper 或 SearXNG。没有 key 时会明确降级，仍可使用 arXiv、Crossref 公开能力和公开搜索兜底。密钥保存在本机 `data/secrets.local.json`，不会进入发行包。
-
-研究数据独立保存在：
-
-```text
-data/research/
-  research.db
-  search-history.jsonl
-  repos/
-  reports/
-```
-
-旧聊天会话仍可读取；研究数据不会覆盖旧会话目录。
-
-## 本地开发
-
-需要 Windows、PowerShell、Rust、Node.js、npm 和 Python。
+## 快速开始
 
 ```powershell
-cargo test --manifest-path core/Cargo.toml
-node --check electron/main.js electron/preload.js electron/renderer/app.js
-npm run package
-npm run zip
-npm run check:self-contained
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+npm --prefix web install
+python -m atlas.cli validate-public
+npm --prefix web run dev
 ```
 
-发行产物：
+启动本地中文审核台：
 
-- `RainyReSearch.exe`
-- `resources/rainy-research-core.exe`
-- `resources/app.asar`
-- `resources/rainy-research-assets/`
-- `dist/RainyReSearch-portable-v1.0.1.zip`
+```powershell
+python -m atlas.cli admin
+```
 
-## 安全边界
+终端会打印带随机令牌的本地地址。审核台仅监听 `127.0.0.1`，原始抓取数据、密钥和 SQLite 均不会进入公开站。
 
-RainyReSearch 的本地文件工具默认限制在用户选择的工作区内，发行包不包含本机密钥、历史会话、缓存指标、绝对用户路径或上游 shell-only 文件。
+## 数据工作流
 
-## License
+```powershell
+# 导入已获授权的研究地图公开数据
+python -m atlas.cli import-authorized
 
-本项目使用 `PolyForm-Noncommercial-1.0.0`。源码可以查看、学习、修改和在非商业场景中分发；未经授权不得用于商业目的。
+# 从 OpenAlex 扩充候选池（其他来源适配器位于 atlas/sources）
+python -m atlas.cli collect-openalex --max-records 2400
+
+# 从 Crossref、arXiv、Semantic Scholar、DBLP 交叉补充
+python -m atlas.cli collect-secondary --max-per-query 40
+
+# 合并、去重、分类并生成 web/public/data/v1
+python -m atlas.cli publish
+
+# 发布前门禁
+python -m atlas.cli validate-public --strict
+```
+
+公开数据区分 `verified`（人工核验）、`auto`（自动收录待复核）和 `rejected`。任何自动流程都不能生成 `verified` 状态。
+
+严格门禁同时检查 2,000 条候选、1,000 篇公开论文和 300 篇人工核验。前两项可由数据管线完成；人工核验未达标时命令会如实失败，不能用自动记录补足。
+
+## 项目结构
+
+- `web/`：React、TypeScript、Vite 公共站。
+- `atlas/`：多源采集、数据规范化、审核后台和静态导出。
+- `data/authorized/`：经授权导入的种子数据。
+- `data/curated/`：可审计的人工决定和 venue 等级。
+- `web/public/data/v1/`：公开站读取的确定性导出。
+
+## 数据边界
+
+收录范围限定为图像取证。纯 OCR、只使用合成图像训练下游任务、普通相机型号归因，以及音频、视频和纯文本生成检测不属于本图谱。中科院/JCR 受限等级只能由有权使用的维护者在本地导入；缺失时显示“暂无可靠等级数据”，不会推测。
+
+## 许可与来源
+
+本仓库中新编写的软件代码使用 MIT License。文献元数据仍受各来源条款约束；详见 [DATA_NOTICE.md](DATA_NOTICE.md)。

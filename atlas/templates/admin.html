@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>图谱审核台</title>
+  <style>
+    :root{--ink:#102a2d;--paper:#f3efe5;--red:#b9472d;--line:#cfc6b2;--muted:#667270}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:"Microsoft YaHei",sans-serif}header{padding:30px 5vw 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:24px;align-items:end}h1{font-family:"STSong","SimSun",serif;font-size:34px;margin:0}.eyebrow{color:var(--red);letter-spacing:.18em;font-size:12px}.stats{display:flex;gap:24px}.stats b{font:700 26px Georgia,serif;display:block}.shell{display:grid;grid-template-columns:280px 1fr;min-height:calc(100vh - 110px)}aside{border-right:1px solid var(--line);padding:28px}.card{background:#fffaf0;border:1px solid var(--line);padding:18px;margin-bottom:14px;box-shadow:4px 4px 0 #ddd4c2}.card h2{font-size:16px;margin:0 0 12px}button,.button{border:1px solid var(--ink);background:var(--ink);color:white;padding:9px 14px;cursor:pointer}button.alt{background:transparent;color:var(--ink)}input,select{width:100%;padding:10px;border:1px solid var(--line);background:#fffdf7;margin:5px 0 12px}main{padding:28px 4vw}.toolbar{display:grid;grid-template-columns:1fr 180px;gap:12px;margin-bottom:20px}.paper{background:#fffdf7;border-top:3px solid var(--ink);padding:18px;margin-bottom:12px;display:grid;grid-template-columns:1fr auto;gap:20px}.paper h3{margin:0 0 8px;font-family:"STSong","SimSun",serif;font-size:19px}.meta{color:var(--muted);font-size:13px}.actions{display:flex;gap:8px;align-items:start}.verify{background:#376c5a;border-color:#376c5a}.reject{background:var(--red);border-color:var(--red)}.empty{padding:40px;border:1px dashed var(--line);text-align:center}@media(max-width:800px){header,.shell{display:block}.stats{margin-top:18px}aside{border-right:0;border-bottom:1px solid var(--line)}.paper{display:block}.actions{margin-top:14px}.toolbar{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header><div><div class="eyebrow">LOCAL CURATION CONSOLE · 仅本机</div><h1>生成图像取证研究图谱审核台</h1></div><div class="stats"><span><b>{{ manifest.get('paper_count',0) }}</b>公开论文</span><span><b>{{ manifest.get('verified_paper_count',0) }}</b>已核验</span><span><b>{{ manifest.get('candidate_count',0) }}</b>候选记录</span></div></header>
+<div class="shell">
+<aside>
+  <div class="card"><h2>数据闭环</h2><form method="post" action="/jobs/collect?token={{ token }}"><button type="submit">采集并重建</button></form><br><form method="post" action="/jobs/publish?token={{ token }}"><button class="alt" type="submit">重新发布公开数据</button></form></div>
+  <div class="card"><h2>导入等级 CSV</h2><form method="post" enctype="multipart/form-data" action="/rankings/import?token={{ token }}"><input type="file" name="file" accept=".csv" required><button type="submit">导入并校验</button></form></div>
+  <div class="card"><h2>审核原则</h2><small>只有维护者点击“确认核验”才会生成 verified 决定。自动采集、自动分类和跨源匹配永远保持待复核。</small></div>
+</aside>
+<main>
+  <form class="toolbar" method="get"><input type="hidden" name="token" value="{{ token }}"><input name="q" value="{{ q }}" placeholder="检索标题…"><select name="status" onchange="this.form.submit()"><option value="auto" {% if status=='auto' %}selected{% endif %}>待复核</option><option value="verified" {% if status=='verified' %}selected{% endif %}>已核验</option><option value="" {% if not status %}selected{% endif %}>全部</option></select></form>
+  {% for paper in papers %}<article class="paper"><div><h3>{{ paper.title }}</h3><div class="meta">{{ paper.year or '年份未知' }} · {{ (paper.venue or {}).get('name','来源待补') }} · {{ paper.task_tags|join(' / ') }} · {{ paper.sources|join(', ') }}</div></div><div class="actions"><form method="post" action="/review/{{ paper.id }}?token={{ token }}"><input type="hidden" name="status" value="verified"><input type="hidden" name="note" value="维护者在本地审核台确认"><button class="verify">确认核验</button></form><form method="post" action="/review/{{ paper.id }}?token={{ token }}"><input type="hidden" name="status" value="rejected"><input type="hidden" name="note" value="维护者判定不在范围内"><button class="reject">排除</button></form></div></article>{% else %}<div class="empty">没有符合条件的记录。</div>{% endfor %}
+</main></div>
+</body></html>

@@ -1,20 +1,15 @@
 {
-  "name": "rainy-research-desktop",
-  "productName": "RainyReSearch",
-  "version": "1.0.1",
-  "description": "Source-available noncommercial multi-provider coding agent desktop shell",
-  "main": "electron/main.js",
-  "author": "RainyMarks",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/RainyMarks/DeepX.git"
-  },
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "name": "synthetic-image-forensics-atlas",
   "private": true,
+  "version": "2.0.0",
+  "description": "生成图像取证研究图谱：中文学术地图与本地审核工作台",
   "scripts": {
-    "package": "powershell -ExecutionPolicy Bypass -File scripts/package-deepx.ps1",
-    "zip": "powershell -ExecutionPolicy Bypass -File scripts/make-portable-zip.ps1",
-    "test:core": "cargo test --manifest-path core/Cargo.toml",
-    "check:self-contained": "powershell -ExecutionPolicy Bypass -File scripts/self-contained-check.ps1"
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "test": "npm --prefix web run test",
+    "test:e2e": "npm --prefix web run test:e2e",
+    "typecheck": "npm --prefix web run typecheck",
+    "data:validate": "python -m atlas.cli validate-public",
+    "admin": "python -m atlas.cli admin"
   }
 }

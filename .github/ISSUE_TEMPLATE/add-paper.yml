@@ -1,0 +1,22 @@
+name: 补充论文
+description: 提交本图谱尚未收录的同领域论文
+title: "[补充论文] "
+labels: ["data: paper"]
+body:
+  - type: input
+    id: title
+    attributes: { label: 论文标题 }
+    validations: { required: true }
+  - type: input
+    id: url
+    attributes: { label: DOI、arXiv 或出版页面 }
+    validations: { required: true }
+  - type: dropdown
+    id: task
+    attributes:
+      label: 主要任务
+      options: [生成/合成图像检测, 生成来源归因与验证, 深度伪造与人脸操纵, 图像篡改检测与定位, 场景文本图像伪造, 内容凭证与水印验证]
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes: { label: 收录理由与补充信息 }

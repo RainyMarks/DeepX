@@ -1,46 +1,33 @@
-# Local user state and secrets
-data/
-*.log
-secrets.local.json
-*.env
-*.local.json
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
 
-# Build outputs
-dist/
-core/target/
-electron/node_modules/
-resources/app.asar
-resources/app.asar.unpacked/
-resources/deepx-core.exe
-resources/rainy-research-core.exe
-resources/node.exe
-resources/node_repl.exe
-resources/rg
-resources/DeepX.png
-resources/rainy-research-assets/
-resources/codex-notification.wav
+# Local state, source snapshots and secrets
+.env
+.env.*
+!.env.example
+data/local/
+data/raw/
+data/cache/
+*.sqlite
+*.sqlite3
+*.db
 
-# Legacy renderer copies at repository root. The real renderer lives in electron/renderer/.
-/app.js
-/index.html
-/styles.css
+# Frontend
+node_modules/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+playwright-report/
+test-results/
 
-# Packaged Electron runtime at repository root
-DeepX.exe
-RainyReSearch.exe
-chrome_*.pak
-icudtl.dat
-LICENSES.chromium.html
-resources.pak
-snapshot_blob.bin
-v8_context_snapshot.bin
-vk_swiftshader_icd.json
-/version
-*.dll
-*.bin
-locales/
-
-# Generated release archives
-*.zip
-!releases/
-!releases/*.zip
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

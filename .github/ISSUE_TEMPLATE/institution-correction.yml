@@ -1,0 +1,17 @@
+name: 机构纠错
+description: 反馈机构名称、作者归属或地理位置错误
+title: "[机构纠错] "
+labels: ["data: institution"]
+body:
+  - type: input
+    id: institution
+    attributes: { label: 机构名称 }
+    validations: { required: true }
+  - type: textarea
+    id: correction
+    attributes: { label: 需要修正的关系或位置 }
+    validations: { required: true }
+  - type: input
+    id: evidence
+    attributes: { label: 机构官网或论文证据 }
+    validations: { required: true }

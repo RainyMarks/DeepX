@@ -1,0 +1,21 @@
+name: 等级纠错
+description: 反馈 CCF、JCR 或中科院分区标签问题
+title: "[等级纠错] "
+labels: ["data: ranking"]
+body:
+  - type: input
+    id: venue
+    attributes: { label: 会议或期刊名称 }
+    validations: { required: true }
+  - type: dropdown
+    id: system
+    attributes: { label: 评价体系, options: [CCF, SCI, JCR, 中科院分区] }
+    validations: { required: true }
+  - type: textarea
+    id: correction
+    attributes: { label: 正确等级、版本年份和说明 }
+    validations: { required: true }
+  - type: input
+    id: evidence
+    attributes: { label: 官方来源链接 }
+    validations: { required: true }

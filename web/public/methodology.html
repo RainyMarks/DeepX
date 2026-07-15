@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数据方法 · 生成图像取证研究图谱</title>
+  <style>
+    :root{color:#0d3034;background:#f2eddf;font-family:"Microsoft YaHei",sans-serif}body{margin:0}main{max-width:850px;margin:auto;padding:64px 28px 90px}header{border-top:6px solid #bd4a31;border-bottom:1px solid #c9c0ac;padding:24px 0}h1,h2{font-family:STSong,SimSun,serif;font-weight:400}h1{font-size:42px;margin:8px 0}h2{margin-top:42px}p,li{line-height:1.85}code{background:#e3ddce;padding:2px 5px}a{color:#9b3d29}.notice{border:1px solid #0d3034;padding:18px;background:#fffaf0}.kicker{font:700 11px Georgia,serif;letter-spacing:.18em;color:#bd4a31}
+  </style>
+</head>
+<body><main>
+  <header><span class="kicker">DATA METHODOLOGY · PUBLIC PREVIEW</span><h1>数据方法与质量边界</h1><p>本页说明公开图谱如何采集、筛选、去重、核验与赋级。</p></header>
+  <h2>收录范围</h2><p>覆盖 AI 生成/合成图像检测、生成模型与来源归因、深度伪造与人脸操纵、图像篡改检测与定位、场景文本图像伪造，以及内容凭证、水印和生成来源验证。纯 OCR、普通相机型号归因、只用合成图训练无关下游任务，以及音频、视频和纯文本生成检测不进入公开集。</p>
+  <h2>采集与公开门槛</h2><p>候选来自 OpenAlex、Crossref、arXiv、Semantic Scholar、DBLP 及经许可的种子记录。采集阶段偏向召回；只有标题或摘要明确陈述图像取证任务的记录才进入公开站。被挡下的记录仍保留在本地候选池供维护者复核。</p>
+  <h2>去重与来源链</h2><p>依次使用 DOI、arXiv ID、OpenAlex/Semantic Scholar 标识和标题+年份进行确定性合并。模糊标题只进入人工队列，不自动合并。每篇公开记录保留数据源、原始标识、查询词和抓取时间。</p>
+  <h2>审核状态</h2><p><code>verified</code> 只能由人工确认产生；<code>auto</code> 表示自动收录、待人工复核；被拒绝记录不会导出。质量目标中的 300 篇核心集未达到时，报告会明确显示，不用自动记录冒充。</p>
+  <h2>学术等级</h2><p>CCF、SCI、JCR 和中科院分区相互独立，不合成“综合等级”。CCF 记录版本和官方来源；JCR/中科院数据仅允许维护者导入其有权使用的数据。名称或 ISSN 无法可靠匹配时不赋级。</p>
+  <p class="notice">本图谱仍是持续更新的 public preview，不构成完整 bibliography。元数据和自动分类可能有误，请以论文原始页面为准，并通过 GitHub Issues 反馈。</p>
+  <p><a href="./">← 返回研究图谱</a> · <a href="./data/v1/quality.json">查看机器可读质量报告</a></p>
+</main></body></html>

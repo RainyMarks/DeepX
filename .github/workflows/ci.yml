@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "codex/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: pip install -e ".[dev]"
+      - run: npm ci --prefix web
+      - run: ruff check atlas tests
+      - run: pytest
+      - run: python -m atlas.cli validate-public
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npm run test:e2e
+      - name: Check final release quality targets
+        continue-on-error: true
+        run: python -m atlas.cli validate-public --strict
