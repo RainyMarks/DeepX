@@ -36,12 +36,22 @@ def create_app(token: str | None = None) -> FastAPI:
     def load_state() -> tuple[dict, list[dict]]:
         manifest = json.loads((PUBLIC_DIR / "manifest.json").read_text(encoding="utf-8")) if (PUBLIC_DIR / "manifest.json").exists() else {}
         catalog = json.loads((PUBLIC_DIR / "catalog.json").read_text(encoding="utf-8")) if (PUBLIC_DIR / "catalog.json").exists() else []
+        details: dict[str, dict] = {}
+        for shard in (PUBLIC_DIR / "details").glob("*.json"):
+            for item in json.loads(shard.read_text(encoding="utf-8")):
+                details[item["id"]] = item
+        enriched = []
+        for item in catalog:
+            detail = details.get(item["id"], {})
+            enriched.append({**item, **{key: detail.get(key) for key in ("abstract", "doi", "arxiv_id", "provenance", "notes") if key in detail}})
+        catalog = enriched
         return manifest, catalog
 
     @app.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request, _: str = Depends(authorized), q: str = "", status: str = "auto"):
         manifest, catalog = load_state()
         filtered = [item for item in catalog if (not status or item.get("review_status") == status) and (not q or q.lower() in item.get("title", "").lower())]
+        filtered.sort(key=lambda item: (item.get("citation_count", 0), item.get("year") or 0), reverse=True)
         response = TEMPLATES.TemplateResponse(request, "admin.html", {"manifest": manifest, "papers": filtered[:120], "q": q, "status": status, "token": app.state.admin_token})
         response.set_cookie("atlas_admin_token", app.state.admin_token, httponly=True, samesite="strict")
         return response
