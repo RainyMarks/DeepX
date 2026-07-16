@@ -46,3 +46,23 @@ def test_ccf_is_never_applied_to_journals():
 def test_common_journal_names_receive_searchable_short_names():
     venue = apply_venue_ranking("IEEE Transactions on Information Forensics and Security", "journal")
     assert venue and venue.short_name == "TIFS" and venue.rankings == []
+
+
+def test_security_ccf_a_conferences_are_curated_explicitly():
+    for name in (
+        "ACM Conference on Computer and Communications Security",
+        "IEEE Symposium on Security and Privacy",
+        "USENIX Security Symposium",
+        "Network and Distributed System Security Symposium",
+    ):
+        venue = apply_venue_ranking(name, "conference")
+        assert venue and venue.rankings and venue.rankings[0].system == "CCF"
+        assert venue.rankings[0].level == "A"
+
+
+def test_latest_ccf_catalog_treats_ijcai_as_b_and_iclr_as_a():
+    ijcai = apply_venue_ranking("International Joint Conference on Artificial Intelligence", "conference")
+    iclr = apply_venue_ranking("International Conference on Learning Representations", "conference")
+    assert ijcai and ijcai.rankings[0].level == "B"
+    assert iclr and iclr.rankings[0].level == "A"
+    assert ijcai.rankings[0].version == "第七版（2026）"

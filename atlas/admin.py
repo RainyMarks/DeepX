@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from atlas.builder import CURATED_DIR, PUBLIC_DIR, build_public
+from atlas.jsonl import iter_jsonl
 from atlas.collector import collect_openalex, collect_secondary
 from atlas.db import connect
 from atlas.models import ReviewDecision, utc_now
@@ -65,7 +66,7 @@ def create_app(token: str | None = None) -> FastAPI:
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = []
         if path.exists():
-            existing = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            existing = list(iter_jsonl(path))
         existing = [item for item in existing if item.get("paper_id") != paper_id]
         existing.append(decision.model_dump(mode="json"))
         path.write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in existing), encoding="utf-8")

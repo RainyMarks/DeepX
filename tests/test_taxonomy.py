@@ -1,4 +1,4 @@
-from atlas.sources.openalex import DEFAULT_QUERIES
+from atlas.sources.openalex import COLLECTION_QUERIES, PRIORITY_VENUE_QUERIES
 from atlas.taxonomy import classify_tasks, contribution_type, is_in_scope
 
 
@@ -71,9 +71,30 @@ def test_text_steganography_and_text_watermarks_remain_out_of_scope():
 
 
 def test_collection_queries_cover_all_specialized_tracks():
-    joined = "\n".join(DEFAULT_QUERIES).lower()
+    joined = "\n".join(COLLECTION_QUERIES).lower()
     assert "scene text" in joined
     assert "steganalysis" in joined
     assert "watermark" in joined
     assert "source attribution" in joined
     assert "face morphing" in joined
+    assert "reversible data hiding" in joined
+
+
+def test_priority_queries_cover_ccf_a_and_priority_journal_sweeps():
+    joined = "\n".join(PRIORITY_VENUE_QUERIES).lower()
+    for venue in ("cvpr", "iccv", "acm multimedia", "acm ccs", "usenix security", "ndss", "tifs"):
+        assert venue in joined
+
+
+def test_long_tail_forensics_are_retained_and_classified():
+    for title in (
+        "Detection of Double JPEG Compression for Image Forensics",
+        "Image Seam Carving Detection with Forensic Traces",
+        "Robust Reversible Data Hiding for Image Authentication and Tamper Detection",
+        "Cover-Source Mismatch in Rich Model Image Steganalysis",
+    ):
+        assert is_in_scope(title)
+    assert "image_forgery" in classify_tasks("Detection of Double JPEG Compression for Image Forensics")
+    assert "digital_watermarking" in classify_tasks(
+        "Robust Reversible Data Hiding for Image Authentication and Tamper Detection"
+    )

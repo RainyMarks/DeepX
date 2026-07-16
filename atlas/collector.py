@@ -6,8 +6,14 @@ import time
 from pathlib import Path
 
 from atlas.models import utc_now
+from atlas.jsonl import iter_jsonl
 from atlas.sources import ArxivSource, CrossrefSource, DblpSource, OpenAlexSource, SemanticScholarSource
-from atlas.sources.openalex import DEFAULT_QUERIES
+from atlas.sources.openalex import (
+    COLLECTION_QUERIES,
+    DEFAULT_QUERIES,
+    PRIORITY_VENUE_QUERIES,
+    PRIORITY_VENUE_TASKS,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +59,10 @@ SECONDARY_QUERIES = [
     "diffusion model watermarking provenance",
 ]
 
+# Crossref, Semantic Scholar and DBLP benefit from venue-qualified searches.
+# arXiv has no final venue metadata, so it keeps the general topic vocabulary.
+SECONDARY_QUERIES = list(dict.fromkeys([*SECONDARY_QUERIES, *DEFAULT_QUERIES, *PRIORITY_VENUE_QUERIES]))
+
 
 def _existing_openalex_records() -> dict[str, dict]:
     """Keep existing candidates when the query vocabulary is expanded."""
@@ -62,10 +72,7 @@ def _existing_openalex_records() -> dict[str, dict]:
     for path in paths:
         if not path.exists():
             continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            envelope = json.loads(line)
+        for envelope in iter_jsonl(path):
             row = envelope.get("record", envelope)
             source_id = str(row.get("id") or row.get("doi") or row.get("title"))
             if source_id:
@@ -96,10 +103,7 @@ def _existing_secondary_records() -> dict[str, dict]:
     records: dict[str, dict] = {}
     if not path.exists():
         return records
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        envelope = json.loads(line)
+    for envelope in iter_jsonl(path):
         key = _secondary_record_key(envelope)
         if key.rsplit(":", 1)[-1]:
             records[key] = envelope
@@ -111,14 +115,14 @@ def collect_openalex(max_records: int = 3200) -> dict:
     source = OpenAlexSource(api_key=os.getenv("OPENALEX_API_KEY", ""), mailto=os.getenv("CROSSREF_MAILTO", ""))
     # Keep enough depth per topic for long-tail venue papers. Existing records
     # are merged first, so expanding the vocabulary never discards old finds.
-    per_query = max(100, (max_records + len(DEFAULT_QUERIES) - 1) // len(DEFAULT_QUERIES))
+    per_query = max(100, (max_records + len(COLLECTION_QUERIES) - 1) // len(COLLECTION_QUERIES))
     records = _existing_openalex_records()
     existing_count = len(records)
     query_hits: dict[str, int] = {}
     errors: list[dict] = []
     partial_path = RAW_DIR / "openalex_candidates.partial.jsonl"
     retrieved_at = utc_now()
-    for query in DEFAULT_QUERIES:
+    for query in COLLECTION_QUERIES:
         count = 0
         newly_found: list[dict] = []
         try:
@@ -175,6 +179,8 @@ def collect_openalex(max_records: int = 3200) -> dict:
         "new_records": max(0, len(ordered) - existing_count),
         "institutions": len(institution_rows),
         "query_hits": query_hits,
+        "query_count": len(COLLECTION_QUERIES),
+        "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
         "retrieved_at": retrieved_at,
     }
@@ -196,7 +202,8 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
     existing_count = len(records)
     errors: list[dict] = []
     for source in sources:
-        for query in SECONDARY_QUERIES:
+        queries = DEFAULT_QUERIES if source.name == "arxiv" else SECONDARY_QUERIES
+        for query in queries:
             try:
                 for row in source.search(query, max_per_query):
                     envelope = {"source": source.name, "query": query, "retrieved_at": utc_now(), "record": row}
@@ -217,8 +224,62 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
         "records": len(output),
         "new_records": max(0, len(output) - existing_count),
         "source_counts": source_counts,
+        "query_count": len(SECONDARY_QUERIES),
+        "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
         "retrieved_at": utc_now(),
     }
     (RAW_DIR / "secondary_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return report
+
+
+def collect_crossref_venues(max_per_query: int = 300) -> dict:
+    """Run a high-precision Crossref sweep with topic and venue in separate fields."""
+
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    source = CrossrefSource(mailto=os.getenv("CROSSREF_MAILTO", ""))
+    records = _existing_secondary_records()
+    existing_count = len(records)
+    errors: list[dict] = []
+    query_hits: dict[str, int] = {}
+    for venue, tasks in PRIORITY_VENUE_TASKS.items():
+        # The acronym is useful in free-text search but less useful in the
+        # dedicated container-title field.
+        container = venue.removesuffix(" TIFS")
+        for query in tasks:
+            label = f"{query} @ {container}"
+            try:
+                rows = source.search_in_venue(query, container, max_per_query)
+                query_hits[label] = len(rows)
+                for row in rows:
+                    envelope = {
+                        "source": source.name,
+                        "query": label,
+                        "query_tier": "priority_venue",
+                        "retrieved_at": utc_now(),
+                        "record": row,
+                    }
+                    records.setdefault(_secondary_record_key(envelope), envelope)
+            except Exception as exc:
+                errors.append({"source": source.name, "query": label, "error": str(exc)[:300]})
+            time.sleep(0.35)
+
+    output = list(records.values())
+    temp = RAW_DIR / "secondary_candidates.jsonl.tmp"
+    temp.write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in output), encoding="utf-8")
+    temp.replace(RAW_DIR / "secondary_candidates.jsonl")
+    report = {
+        "source": "crossref",
+        "mode": "venue_scoped",
+        "existing_records": existing_count,
+        "records": len(output),
+        "new_records": max(0, len(output) - existing_count),
+        "query_count": len(query_hits),
+        "query_hits": query_hits,
+        "errors": errors,
+        "retrieved_at": utc_now(),
+    }
+    (RAW_DIR / "crossref_venue_report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return report

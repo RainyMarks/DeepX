@@ -155,13 +155,21 @@ def _strong_title_evidence(title: str) -> bool:
         r"manipulated image",
         r"image splicing",
         r"copy move",
+        r"image resampling",
+        r"double jpeg",
+        r"contrast enhancement",
+        r"seam carving",
+        r"object removal",
+        r"image inpainting",
+        r"image retouching",
+        r"image harmonization",
     ) and forensic:
         return True
     if _matches(title, r"scene text", r"document image", r"text image", r"forged character", r"tampered text") and _matches(
-        title, r"forg", r"tamper", r"locali[sz]", r"authentic", r"watermark"
+        title, r"forg", r"tamper", r"locali[sz]", r"authentic", r"watermark", r"replacement", r"erasure", r"insertion", r"deletion"
     ):
         return True
-    if _matches(title, r"\bsteganalysis\b", r"image steganograph", r"stego images?", r"cover stego") and _matches(
+    if _matches(title, r"\bsteganalysis\b", r"image steganograph", r"stego images?", r"cover stego", r"rich models?") and _matches(
         title,
         r"images?",
         r"visual",
@@ -175,6 +183,10 @@ def _strong_title_evidence(title: str) -> bool:
         r"survey",
         r"review",
         r"detect",
+        r"cover source mismatch",
+        r"s uniward",
+        r"j uniward",
+        r"\bwow\b",
     ):
         return True
     if _matches(title, r"(?:digital |image |visual )watermark", r"watermarking.{0,24}images?", r"images?.{0,24}watermark") and _matches(
@@ -202,6 +214,10 @@ def _strong_title_evidence(title: str) -> bool:
         return True
     if _matches(title, r"watermark") and _matches(
         title, r"ai generated", r"generated images?", r"diffusion", r"synthetic", r"deepfake", r"provenance", r"tamper", r"content credential"
+    ):
+        return True
+    if _matches(title, r"reversible data hiding", r"zero watermark") and image and _matches(
+        title, r"authentic", r"tamper", r"forensic", r"robust", r"fragile", r"verification"
     ):
         return True
     if _matches(title, r"provenance") and _matches(title, r"image", r"visual", r"digital media", r"generated", r"synthetic", r"c2pa", r"content") and _matches(
@@ -242,6 +258,7 @@ def _explicit_abstract_evidence(text: str) -> bool:
         r"(?:image |jpeg |spatial )?steganalysis",
         r"(?:detect|classif).{0,60}(?:stego|steganograph).{0,40}images?",
         r"(?:digital |image )watermark.{0,80}(?:detect|authentic|tamper|robust|forensic)",
+        r"reversible data hiding.{0,80}(?:image|authentic|tamper|forensic)",
     )
 
 
@@ -285,6 +302,11 @@ def is_in_scope(title: str, abstract: str = "") -> bool:
         r"steganalysis",
         r"steganograph",
         r"traceab",
+        r"resampling",
+        r"double jpeg",
+        r"seam carving",
+        r"inpainting",
+        r"retouching",
     )
     return weak_title_clue and _explicit_abstract_evidence(normalize_text(f"{title} {abstract}"))
 
@@ -299,6 +321,9 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
         r"stego images?",
         r"cover stego",
         r"steganographic image",
+        r"rich models?.{0,24}stegan",
+        r"cover source mismatch.{0,24}stegan",
+        r"(?:s uniward|j uniward|\bwow\b).{0,40}stegan",
     ):
         tags.append("image_steganalysis")
     if _matches(
@@ -306,12 +331,15 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
         r"(?:digital |image |visual |invisible |fragile |robust |reversible )watermark",
         r"watermarking.{0,32}(?:images?|visual|diffusion|generative)",
         r"(?:images?|visual|diffusion|generative).{0,32}watermark",
+        r"reversible data hiding.{0,40}(?:image|authentic|tamper)",
+        r"zero watermark.{0,40}(?:image|authentic|tamper)",
     ):
         tags.append("digital_watermarking")
     if _matches(
         body,
         r"(?:scene text|document images?|text images?).{0,45}(?:forg|tamper|manipulat)",
         r"(?:forg|tamper|manipulat).{0,45}(?:scene text|document images?|text images?)",
+        r"(?:scene text|document images?|text images?).{0,45}(?:replacement|erasure|insertion|deletion)",
     ):
         tags.append("scene_text_forgery")
     if _matches(body, r"\bdeepfakes?\b", r"deep fakes?", r"face swap", r"facial? manipulation", r"face forgery"):
@@ -321,6 +349,8 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
         r"(?:generated|generative|synthetic|generator|diffusion).{0,60}(?:source|model|origin) attribution",
         r"(?:source|model|origin) attribution.{0,60}(?:generated|generative|synthetic|generator|diffusion|images?)",
         r"generative model fingerprint",
+        r"(?:gan|diffusion|generator).{0,40}(?:fingerprint|identification|recognition)",
+        r"(?:fingerprint|identification|recognition).{0,40}(?:gan|diffusion|generator)",
     ):
         tags.append("source_attribution")
     if _matches(body, r"\bc2pa\b", r"content credentials?") or (
@@ -346,6 +376,14 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
         r"image tamper",
         r"forged images?",
         r"tampered images?",
+        r"image resampling",
+        r"double jpeg",
+        r"contrast enhancement",
+        r"seam carving",
+        r"object removal",
+        r"image inpainting",
+        r"image retouching",
+        r"image harmonization",
     ):
         tags.append("image_forgery")
     if _matches(

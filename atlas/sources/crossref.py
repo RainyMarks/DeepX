@@ -17,3 +17,18 @@ class CrossrefSource:
         response = self.client.get("https://api.crossref.org/works", params=params)
         response.raise_for_status()
         return response.json().get("message", {}).get("items", [])
+
+    def search_in_venue(self, query: str, venue: str, limit: int = 100) -> list[dict]:
+        """Search topic and container independently for high-precision venue sweeps."""
+
+        params = {
+            "query.title": query,
+            "query.container-title": venue,
+            "rows": min(limit, 1000),
+            "select": "DOI,title,author,published,container-title,type,URL,is-referenced-by-count,ISSN",
+        }
+        if self.mailto:
+            params["mailto"] = self.mailto
+        response = self.client.get("https://api.crossref.org/works", params=params)
+        response.raise_for_status()
+        return response.json().get("message", {}).get("items", [])

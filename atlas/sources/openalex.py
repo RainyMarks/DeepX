@@ -30,6 +30,16 @@ DEFAULT_QUERIES = [
     "origin attribution generated images",
     "generative model fingerprint images",
     "synthetic image provenance verification",
+    "AI generated image detector robustness",
+    "AI generated image detector generalization",
+    "AI generated image detection in the wild",
+    "AI generated image detection adversarial attack",
+    "AI generated image detection survey",
+    "multimodal AI generated image detection",
+    "GAN fingerprint image attribution",
+    "diffusion fingerprint source attribution",
+    "generator identification generated images",
+    "which generator created this image",
 
     # Face manipulation and general image tampering
     "deepfake image detection",
@@ -46,6 +56,13 @@ DEFAULT_QUERIES = [
     "image inpainting detection forensics",
     "object removal image forgery detection",
     "image retouching detection forensics",
+    "image resampling detection forensics",
+    "double JPEG compression detection forensics",
+    "contrast enhancement image forensics",
+    "image seam carving detection",
+    "image composition harmonization detection forensics",
+    "face morphing attack detection benchmark",
+    "partial face manipulation detection",
 
     # Scene text and document-image tampering
     "scene text image forgery detection",
@@ -55,12 +72,20 @@ DEFAULT_QUERIES = [
     "document image text tampering detection",
     "document image forgery detection",
     "text replacement image forgery detection",
+    "scene text editing detection forensics",
+    "scene text erasure detection forensics",
+    "text insertion deletion image tampering detection",
+    "document text replacement forgery localization",
 
     # Provenance and credentials
     "image provenance watermark verification",
     "image provenance verification",
     "C2PA image verification",
     "content credentials image authenticity",
+    "content authenticity initiative image provenance",
+    "media provenance image authenticity verification",
+    "image provenance graph verification",
+    "image content credential tamper detection",
 
     # Image steganalysis
     "image steganalysis detection",
@@ -70,6 +95,12 @@ DEFAULT_QUERIES = [
     "JPEG image steganalysis",
     "spatial image steganalysis",
     "adaptive image steganalysis",
+    "rich model image steganalysis",
+    "cover source mismatch image steganalysis",
+    "deep residual network image steganalysis",
+    "adversarial image steganalysis",
+    "steganalysis spatial rich models",
+    "steganalysis WOW S UNIWARD J UNIWARD",
 
     # Digital image watermarking
     "digital image watermarking authentication",
@@ -81,7 +112,123 @@ DEFAULT_QUERIES = [
     "invisible watermark generated image detection",
     "diffusion model watermarking provenance",
     "generative image watermarking provenance",
+    "reversible data hiding image authentication",
+    "zero watermark image authentication",
+    "watermark removal attack image",
+    "watermark detection generated images",
+    "semantic image watermarking authentication",
+    "image watermarking survey",
 ]
+
+
+# High-quality venue sweeps are deliberately represented as search queries, not
+# as ranking assertions. Conference badges come only from the curated CCF file;
+# CAS/JCR badges still require an authorized year-specific import.
+PRIORITY_VENUE_TASKS = {
+    # CCF-A conferences relevant to vision, multimedia and security.
+    "CVPR": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "ICCV": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "AAAI": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "NeurIPS": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "image provenance verification", "generative image watermarking",
+    ),
+    "ICML": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "image provenance verification", "generative image watermarking",
+    ),
+    "ICLR": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "image provenance verification", "generative image watermarking",
+    ),
+    "ACM Multimedia": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "ACM CCS": (
+        "AI generated image detection", "deepfake image detection", "image provenance verification",
+        "content credentials image", "image watermarking", "image steganalysis",
+    ),
+    "IEEE Symposium on Security and Privacy": (
+        "AI generated image detection", "deepfake image detection", "image provenance verification",
+        "content credentials image", "image watermarking", "image steganalysis",
+    ),
+    "USENIX Security": (
+        "AI generated image detection", "deepfake image detection", "image provenance verification",
+        "content credentials image", "image watermarking", "image steganalysis",
+    ),
+    "NDSS": (
+        "AI generated image detection", "deepfake image detection", "image provenance verification",
+        "content credentials image", "image watermarking", "image steganalysis",
+    ),
+    "SIGGRAPH": (
+        "AI generated image detection", "generated image source attribution", "image provenance verification",
+        "image watermarking",
+    ),
+
+    # Priority journal sweeps. These names improve recall only and do not imply
+    # a CAS or JCR value in the public dataset.
+    "IEEE Transactions on Information Forensics and Security TIFS": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "IEEE Transactions on Pattern Analysis and Machine Intelligence": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+    ),
+    "IEEE Transactions on Image Processing": (
+        "AI generated image detection", "deepfake image detection", "image forgery localization",
+        "scene text image forgery", "image provenance verification", "image watermarking", "image steganalysis",
+    ),
+    "IEEE Transactions on Multimedia": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "IEEE Transactions on Circuits and Systems for Video Technology": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+        "image watermarking", "image steganalysis",
+    ),
+    "IEEE Transactions on Dependable and Secure Computing": (
+        "AI generated image detection", "deepfake image detection", "image provenance verification",
+        "content credentials image", "image watermarking", "image steganalysis",
+    ),
+    "International Journal of Computer Vision": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+    ),
+    "Pattern Recognition": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image watermarking", "image steganalysis",
+    ),
+    "Information Fusion": (
+        "AI generated image detection", "generated image source attribution", "deepfake image detection",
+        "image forgery localization", "scene text image forgery", "image provenance verification",
+    ),
+}
+
+PRIORITY_VENUE_QUERIES = [
+    f"{task} {venue}"
+    for venue, tasks in PRIORITY_VENUE_TASKS.items()
+    for task in tasks
+]
+
+COLLECTION_QUERIES = list(dict.fromkeys([*DEFAULT_QUERIES, *PRIORITY_VENUE_QUERIES]))
 
 
 class OpenAlexSource:

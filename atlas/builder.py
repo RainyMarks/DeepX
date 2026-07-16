@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from atlas.dedupe import canonical_arxiv, canonical_doi, normalized_title, stable_id
+from atlas.jsonl import iter_jsonl
 from atlas.models import AuthorIndex, AuthorRef, DatasetManifest, Institution, Paper, Provenance, Venue, VenueRanking
 from atlas.sources.openalex import inverted_abstract
 from atlas.taxonomy import TASK_LABELS, classify_tasks, contribution_type, is_in_scope
@@ -26,6 +27,11 @@ VENUE_SHORT_NAMES = {
     "ieee transactions on pattern analysis and machine intelligence": "TPAMI",
     "ieee transactions on multimedia": "TMM",
     "ieee transactions on circuits and systems for video technology": "TCSVT",
+    "ieee transactions on dependable and secure computing": "TDSC",
+    "international journal of computer vision": "IJCV",
+    "information fusion": "IF",
+    "journal of visual communication and image representation": "JVCIR",
+    "acm transactions on multimedia computing communications and applications": "TOMM",
     "ieee signal processing letters": "SPL",
     "ieee signal processing magazine": "SPM",
     "pattern recognition": "PR",
@@ -205,10 +211,7 @@ def openalex_papers() -> list[Paper]:
     if not path.exists():
         return []
     output: list[Paper] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        envelope = json.loads(line)
+    for envelope in iter_jsonl(path):
         row = envelope.get("record", envelope)
         title = row.get("title") or row.get("display_name") or ""
         abstract = inverted_abstract(row.get("abstract_inverted_index"))
@@ -253,10 +256,7 @@ def secondary_papers() -> list[Paper]:
     if not path.exists():
         return []
     output: list[Paper] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        envelope = json.loads(line)
+    for envelope in iter_jsonl(path):
         source_name = envelope.get("source", "")
         row = envelope.get("record") or {}
         title = ""
@@ -371,10 +371,8 @@ def _load_decisions() -> dict[str, dict]:
     path = CURATED_DIR / "review_decisions.jsonl"
     output: dict[str, dict] = {}
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                decision = json.loads(line)
-                output[decision["paper_id"]] = decision
+        for decision in iter_jsonl(path):
+            output[decision["paper_id"]] = decision
     return output
 
 

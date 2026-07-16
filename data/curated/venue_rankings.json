@@ -1,10 +1,114 @@
 [
-  {"id":"venue-cvpr","name":"IEEE/CVF Conference on Computer Vision and Pattern Recognition","short_name":"CVPR","type":"conference","aliases":["conference on computer vision and pattern recognition","cvpr"],"rankings":[{"system":"CCF","level":"A","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]},
-  {"id":"venue-iccv","name":"IEEE/CVF International Conference on Computer Vision","short_name":"ICCV","type":"conference","aliases":["international conference on computer vision","iccv"],"rankings":[{"system":"CCF","level":"A","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]},
-  {"id":"venue-aaai","name":"AAAI Conference on Artificial Intelligence","short_name":"AAAI","type":"conference","aliases":["aaai conference on artificial intelligence","proceedings of the aaai conference on artificial intelligence"],"rankings":[{"system":"CCF","level":"A","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]},
-  {"id":"venue-ijcai","name":"International Joint Conference on Artificial Intelligence","short_name":"IJCAI","type":"conference","aliases":["international joint conference on artificial intelligence","ijcai"],"rankings":[{"system":"CCF","level":"A","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]},
-  {"id":"venue-neurips","name":"Conference on Neural Information Processing Systems","short_name":"NeurIPS","type":"conference","aliases":["neural information processing systems","neurips","nips"],"rankings":[{"system":"CCF","level":"A","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]},
-  {"id":"venue-icml","name":"International Conference on Machine Learning","short_name":"ICML","type":"conference","aliases":["international conference on machine learning","icml"],"rankings":[{"system":"CCF","level":"A","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]},
-  {"id":"venue-acmmm","name":"ACM International Conference on Multimedia","short_name":"ACM MM","type":"conference","aliases":["acm international conference on multimedia","acm multimedia","acm mm"],"rankings":[{"system":"CCF","level":"A","category":"计算机图形学与多媒体","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/CGAndMT","verified_at":"2026-07-15"}]},
-  {"id":"venue-eccv","name":"European Conference on Computer Vision","short_name":"ECCV","type":"conference","aliases":["european conference on computer vision","eccv"],"rankings":[{"system":"CCF","level":"B","category":"人工智能","version":"第六版（2022）","source_url":"https://www.ccf.org.cn/Academic_Evaluation/AI/","verified_at":"2026-07-15"}]}
+  {
+    "id": "venue-cvpr",
+    "name": "IEEE/CVF Conference on Computer Vision and Pattern Recognition",
+    "short_name": "CVPR",
+    "type": "conference",
+    "aliases": ["IEEE Conference on Computer Vision and Pattern Recognition", "Conference on Computer Vision and Pattern Recognition", "CVPR"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-iccv",
+    "name": "IEEE/CVF International Conference on Computer Vision",
+    "short_name": "ICCV",
+    "type": "conference",
+    "aliases": ["IEEE International Conference on Computer Vision", "International Conference on Computer Vision", "ICCV"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-aaai",
+    "name": "AAAI Conference on Artificial Intelligence",
+    "short_name": "AAAI",
+    "type": "conference",
+    "aliases": ["Proceedings of the AAAI Conference on Artificial Intelligence", "AAAI"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-ijcai",
+    "name": "International Joint Conference on Artificial Intelligence",
+    "short_name": "IJCAI",
+    "type": "conference",
+    "aliases": ["Proceedings of the International Joint Conference on Artificial Intelligence", "IJCAI"],
+    "rankings": [{"system": "CCF", "level": "B", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-neurips",
+    "name": "Conference on Neural Information Processing Systems",
+    "short_name": "NeurIPS",
+    "type": "conference",
+    "aliases": ["Advances in Neural Information Processing Systems", "Neural Information Processing Systems", "NeurIPS", "NIPS"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-icml",
+    "name": "International Conference on Machine Learning",
+    "short_name": "ICML",
+    "type": "conference",
+    "aliases": ["Proceedings of the International Conference on Machine Learning", "ICML"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-iclr",
+    "name": "International Conference on Learning Representations",
+    "short_name": "ICLR",
+    "type": "conference",
+    "aliases": ["Conference on Learning Representations", "ICLR"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-acmmm",
+    "name": "ACM International Conference on Multimedia",
+    "short_name": "ACM MM",
+    "type": "conference",
+    "aliases": ["ACM Multimedia", "ACM MM"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-siggraph",
+    "name": "ACM Special Interest Group on Computer Graphics",
+    "short_name": "SIGGRAPH",
+    "type": "conference",
+    "aliases": ["ACM SIGGRAPH Annual Conference", "ACM SIGGRAPH Conference", "SIGGRAPH"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-ccs",
+    "name": "ACM Conference on Computer and Communications Security",
+    "short_name": "CCS",
+    "type": "conference",
+    "aliases": ["ACM SIGSAC Conference on Computer and Communications Security", "ACM CCS", "CCS"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "网络与信息安全", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-sp",
+    "name": "IEEE Symposium on Security and Privacy",
+    "short_name": "S&P",
+    "type": "conference",
+    "aliases": ["IEEE Security and Privacy", "IEEE S&P", "Symposium on Security and Privacy"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "网络与信息安全", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-usenix-security",
+    "name": "USENIX Security Symposium",
+    "short_name": "USENIX Security",
+    "type": "conference",
+    "aliases": ["USENIX Security", "USENIX Association Security Symposium"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "网络与信息安全", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-ndss",
+    "name": "Network and Distributed System Security Symposium",
+    "short_name": "NDSS",
+    "type": "conference",
+    "aliases": ["Network and Distributed Systems Security Symposium", "NDSS Symposium", "NDSS"],
+    "rankings": [{"system": "CCF", "level": "A", "category": "网络与信息安全", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-eccv",
+    "name": "European Conference on Computer Vision",
+    "short_name": "ECCV",
+    "type": "conference",
+    "aliases": ["Computer Vision ECCV", "ECCV"],
+    "rankings": [{"system": "CCF", "level": "B", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  }
 ]

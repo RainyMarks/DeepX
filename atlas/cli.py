@@ -13,7 +13,7 @@ import uvicorn
 from atlas.admin import create_app
 from atlas.builder import AUTHORIZED_DIR, build_public
 from atlas.bulk_review import bulk_review
-from atlas.collector import collect_openalex, collect_secondary
+from atlas.collector import collect_crossref_venues, collect_openalex, collect_secondary
 from atlas.validation import ValidationError, validate_public
 
 
@@ -48,6 +48,11 @@ def collect_secondary_command(
     if unknown:
         raise typer.BadParameter("未知数据源：" + ", ".join(sorted(unknown)))
     typer.echo(json.dumps(collect_secondary(max_per_query, requested), ensure_ascii=False, indent=2))
+
+
+@app.command("collect-crossref-venues")
+def collect_crossref_venues_command(max_per_query: int = typer.Option(300, min=1, max=1000)) -> None:
+    typer.echo(json.dumps(collect_crossref_venues(max_per_query), ensure_ascii=False, indent=2))
 
 
 @app.command("publish")
