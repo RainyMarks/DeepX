@@ -37,9 +37,12 @@ function rankingSummary(paper: CatalogPaper): string {
   return "";
 }
 
-function MapObserver({ onZoom, detailOpen }: { onZoom: (zoom: number) => void; detailOpen: boolean }) {
+function MapObserver({ onZoom, onBackground, detailOpen }: { onZoom: (zoom: number) => void; onBackground: () => void; detailOpen: boolean }) {
   const map = useMap();
-  useMapEvents({ zoomend(event) { onZoom(event.target.getZoom()); } });
+  useMapEvents({
+    zoomend(event) { onZoom(event.target.getZoom()); },
+    click() { onBackground(); },
+  });
 
   useEffect(() => {
     const container = map.getContainer();
@@ -185,6 +188,18 @@ export function AtlasMap({ papers, institutions, onPaper, onInstitution, detailO
   }, [papers, institutionMap, zoom]);
 
   const selected = clusters.find((cluster) => cluster.key === selectedKey) ?? null;
+  useEffect(() => {
+    if (selectedKey && !selected) setSelectedKey("");
+  }, [selected, selectedKey]);
+  useEffect(() => {
+    if (detailOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedKey("");
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [detailOpen]);
+
   return <div className={`map-explorer ${selected ? "has-cluster" : ""}`}>
     <MapContainer
       center={[24, 12]}
@@ -209,9 +224,9 @@ export function AtlasMap({ papers, institutions, onPaper, onInstitution, detailO
         updateWhenIdle
         keepBuffer={3}
       />
-      <MapObserver onZoom={setZoom} detailOpen={detailOpen || Boolean(selected)} />
-      <MapLayers clusters={clusters} collaborations={collaborations} selectedKey={selectedKey} zoom={zoom} onSelect={setSelectedKey} />
+      <MapObserver onZoom={setZoom} onBackground={() => setSelectedKey("")} detailOpen={detailOpen || Boolean(selected)} />
+      <MapLayers clusters={clusters} collaborations={collaborations} selectedKey={selectedKey} zoom={zoom} onSelect={(key) => setSelectedKey((current) => current === key ? "" : key)} />
     </MapContainer>
-    {selected && <ClusterDock cluster={selected} papers={papers} onClose={() => setSelectedKey("")} onPaper={onPaper} onInstitution={onInstitution} />}
+    {selected && !detailOpen && <ClusterDock cluster={selected} papers={papers} onClose={() => setSelectedKey("")} onPaper={onPaper} onInstitution={onInstitution} />}
   </div>;
 }

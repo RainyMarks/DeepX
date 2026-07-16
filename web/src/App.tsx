@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AtlasMap } from "./components/AtlasMap";
 import { loadAtlasContent, loadAtlasSummary, loadPaperDetail } from "./data";
 import { exportPapers } from "./exports";
@@ -38,10 +38,23 @@ function PaperCard({ paper, onOpen }: { paper: CatalogPaper; onOpen: () => void 
   </article>;
 }
 
-function DetailPanel({ detail, onClose }: { detail: PaperDetail | null; onClose: () => void }) {
+function DetailPanel({ detail, onClose, mapMode = false }: { detail: PaperDetail | null; onClose: () => void; mapMode?: boolean }) {
+  useEffect(() => {
+    if (!detail) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [detail, onClose]);
+
   if (!detail) return null;
-  return <aside className="detail-panel" aria-label="论文详情">
-    <button className="detail-close" type="button" onClick={onClose} aria-label="关闭详情">×</button>
+  return <aside className={`detail-panel paper-detail-panel ${mapMode ? "map-detail-panel" : ""}`} aria-label="论文详情">
+    <div className="detail-toolbar">
+      <button className="detail-back" type="button" onClick={onClose}>{mapMode ? "← 返回区域论文" : "← 关闭详情"}</button>
+      <span>ESC</span>
+      <button className="detail-close" type="button" onClick={onClose} aria-label="关闭详情">×</button>
+    </div>
     <div className="detail-scroll">
       <span className="detail-index">PAPER RECORD · {detail.year ?? "N.D."}</span>
       <h2>{detail.title}</h2>
@@ -103,8 +116,11 @@ export default function App() {
   const [view, setView] = useState<View>(initial.view);
   const [filters, setFilters] = useState<FilterState>(initial.filters);
   const [detail, setDetail] = useState<PaperDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [selectedAuthorId, setSelectedAuthorId] = useState("");
   const [mobileFilters, setMobileFilters] = useState(false);
+  const detailRequest = useRef(0);
 
   useEffect(() => {
     loadAtlasSummary()
@@ -134,7 +150,33 @@ export default function App() {
   const countryOptions = useMemo(() => [...new Map((data?.institutions ?? []).filter((item) => item.country_code || item.country).map((item) => [item.country_code || item.country, item.country || item.country_code])).entries()].sort((a, b) => a[1].localeCompare(b[1], "zh-CN")), [data]);
   const sourceOptions = useMemo(() => [...new Set((data?.papers ?? []).flatMap((paper) => paper.sources))].sort(), [data]);
 
-  async function openPaper(id: string) { setDetail(await loadPaperDetail(id)); }
+  async function openPaper(id: string) {
+    const request = ++detailRequest.current;
+    setSelectedAuthorId("");
+    setDetail(null);
+    setDetailError("");
+    setDetailLoading(true);
+    try {
+      const nextDetail = await loadPaperDetail(id);
+      if (request === detailRequest.current) setDetail(nextDetail);
+    } catch (cause) {
+      if (request === detailRequest.current) setDetailError(cause instanceof Error ? cause.message : "论文记录加载失败");
+    } finally {
+      if (request === detailRequest.current) setDetailLoading(false);
+    }
+  }
+  function closeDetail() {
+    detailRequest.current += 1;
+    setDetail(null);
+    setDetailLoading(false);
+    setDetailError("");
+  }
+  function changeView(nextView: View) {
+    closeDetail();
+    setSelectedAuthorId("");
+    setMobileFilters(false);
+    setView(nextView);
+  }
   function update<K extends keyof FilterState>(key: K, value: FilterState[K]) { setFilters((current) => ({ ...current, [key]: value })); }
 
   if (error) return <main className="load-state"><span>DATA LOAD ERROR</span><h1>公开数据未能加载</h1><p>{error}</p><code>python -m atlas.cli publish</code></main>;
@@ -152,11 +194,10 @@ export default function App() {
     <main className="load-state content-loading"><div className="loading-orbit" /><span>摘要已就绪</span><h2>正在按需装载论文、作者与机构索引…</h2></main>
   </div>;
 
-  const maxTask = Math.max(...data.stats.tasks.map((item) => item.count), 1);
-  return <div className={`app-shell ${detail || selectedAuthor ? "has-detail" : ""}`} data-atlas-ready="true">
+  return <div className={`app-shell ${view === "map" ? "map-shell" : ""} ${(detail && view !== "map") || selectedAuthor ? "has-detail" : ""}`} data-atlas-ready="true">
     <header className="masthead">
       <div className="brand-block"><span className="brand-seal">鉴</span><div><p>GENERATIVE IMAGE FORENSICS · 中文研究基础设施</p><h1>生成图像取证研究图谱</h1></div></div>
-      <nav aria-label="主视图">{(["map", "papers", "authors", "institutions"] as View[]).map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{({ map: "世界地图", papers: "论文库", authors: "作者图谱", institutions: "机构图谱" } as Record<View, string>)[item]}</button>)}</nav>
+      <nav aria-label="主视图">{(["map", "papers", "authors", "institutions"] as View[]).map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => changeView(item)}>{({ map: "世界地图", papers: "论文库", authors: "作者图谱", institutions: "机构图谱" } as Record<View, string>)[item]}</button>)}</nav>
       <div className="dataset-stamp"><strong>DATASET</strong><span>{data.manifest.dataset_version}</span><small>{data.manifest.paper_count.toLocaleString()} 篇论文</small></div>
     </header>
 
@@ -166,7 +207,7 @@ export default function App() {
     </section>
 
     <button className="mobile-filter-button" onClick={() => setMobileFilters((value) => !value)}>筛选与导出 · {filtered.length}</button>
-    <div className="workspace">
+    <div className={`workspace ${view === "map" ? "map-workspace" : ""}`}>
       <aside className={`filter-rail ${mobileFilters ? "open" : ""}`}>
         <div className="filter-heading"><span>FILTER INDEX</span><h2>筛选索引</h2><button onClick={() => setFilters(DEFAULT_FILTERS)}>清空</button></div>
         <label>关键词<input value={filters.q} onChange={(e) => update("q", e.target.value)} placeholder="标题、作者、机构、Venue" /></label>
@@ -185,18 +226,25 @@ export default function App() {
         <div className="export-row"><button onClick={() => exportPapers(filtered, "csv")}>CSV</button><button onClick={() => exportPapers(filtered, "json")}>JSON</button><button onClick={() => exportPapers(filtered, "bib")}>BibTeX</button></div>
       </aside>
 
-      <main className="content-stage">
+      <main className={`content-stage ${view === "map" ? "map-stage" : ""}`}>
         {view === "map" && <section className="map-view">
-          <div className="map-frame"><div className="map-caption"><span>单击信号节点直接浏览机构与论文摘要</span><span>放大拆点是可选操作 · 连线表示合作强度</span></div><AtlasMap papers={filtered} institutions={data.institutions} onPaper={openPaper} onInstitution={(name) => update("institution", name)} detailOpen={Boolean(detail)} /></div>
-          <aside className="stats-column"><div className="section-label">TASK DISTRIBUTION</div><h2>研究任务分布</h2>{data.stats.tasks.map((item) => <button key={item.id} className="task-bar" onClick={() => update("task", filters.task === item.id ? "" : item.id)}><span>{item.label}</span><b>{filtered.filter((paper) => paper.task_tags.includes(item.id)).length}</b><i style={{ width: `${(item.count / maxTask) * 100}%`, background: TASKS[item.id].color }} /></button>)}<div className="stats-note"><strong>{visibleInstitutions.length}</strong><span>个机构进入当前视图</span><p>{data.manifest.data_notice}</p></div></aside>
+          <div className="map-frame">
+            <div className="map-caption"><span>单击信号节点直接浏览机构与论文摘要</span><span>点击地图空白处关闭区域列表 · 连线表示合作强度</span></div>
+            <AtlasMap papers={filtered} institutions={data.institutions} onPaper={openPaper} onInstitution={(name) => update("institution", name)} detailOpen={Boolean(detail) || detailLoading} />
+            <DetailPanel detail={detail} onClose={closeDetail} mapMode />
+            {detailLoading && <div className="detail-load-status" role="status"><i /><span>正在装载论文记录…</span><button type="button" onClick={closeDetail}>取消</button></div>}
+            {detailError && <div className="detail-load-status detail-load-error" role="alert"><span>论文记录加载失败</span><small>{detailError}</small><button type="button" onClick={closeDetail}>关闭</button></div>}
+          </div>
         </section>}
         {view === "papers" && <section className="library-view"><div className="view-heading"><div><span>PAPER LIBRARY</span><h2>论文库</h2></div><p>按年份与引用快照排序，点击卡片查看摘要、来源和等级版本。</p></div><div className="paper-grid">{filtered.slice(0, 600).map((paper) => <PaperCard key={paper.id} paper={paper} onOpen={() => openPaper(paper.id)} />)}</div>{filtered.length > 600 && <p className="limit-note">当前展示前 600 条；导出包含全部 {filtered.length} 条结果。</p>}</section>}
         {view === "authors" && <section className="directory-view"><div className="view-heading"><div><span>AUTHOR ATLAS</span><h2>作者图谱</h2></div><p>仅统计图谱范围内的同领域论文，不混入作者其他研究方向。</p></div><div className="directory-grid">{visibleAuthors.slice(0, 240).map((author, index) => <article key={author.id}><span className="directory-rank">{String(index + 1).padStart(2, "0")}</span><h3>{author.name}</h3><strong>{author.visible.length} 篇同领域论文</strong><div className="mini-tasks">{Object.entries(author.task_counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([task, count]) => <span key={task}>{TASKS[task as TaskId]?.short} {count}</span>)}</div><button onClick={() => setSelectedAuthorId(author.id)}>打开作者档案 →</button></article>)}</div></section>}
         {view === "institutions" && <section className="directory-view"><div className="view-heading"><div><span>INSTITUTION INDEX</span><h2>机构图谱</h2></div><p>坐标必须具有来源；未经确认的坐标不会用于地图定位。</p></div><div className="institution-list">{visibleInstitutions.slice(0, 300).map((institution, index) => <article key={institution.id}><span>{String(index + 1).padStart(3, "0")}</span><div><h3>{institution.name}</h3><p>{[institution.city, institution.country].filter(Boolean).join(" · ") || "地点待核验"}</p></div><strong>{institution.visible.length}<small>篇论文</small></strong><b className={institution.latitude != null ? "mapped" : "unmapped"}>{institution.latitude != null ? "已定位" : "待定位"}</b></article>)}</div></section>}
       </main>
     </div>
-    <footer><div><strong>生成图像取证研究图谱</strong><span>数据不是完整书目，等级也不代表单篇论文质量。</span></div><nav><a href={`${import.meta.env.BASE_URL}methodology.html`}>数据方法</a><a href={`${import.meta.env.BASE_URL}data/v1/manifest.json`}>Manifest</a><a href={`${import.meta.env.BASE_URL}data/v1/catalog.json`}>论文 JSON</a><a href={`${import.meta.env.BASE_URL}data/v1/quality.json`}>质量报告</a><a href="https://github.com/RainyMarks/DeepX/issues/new" target="_blank" rel="noreferrer">补充/纠错</a><a href="https://github.com/RainyMarks/DeepX" target="_blank" rel="noreferrer">GitHub</a></nav></footer>
-    <DetailPanel detail={detail} onClose={() => setDetail(null)} />
+    {view !== "map" && <footer><div><strong>生成图像取证研究图谱</strong><span>数据不是完整书目，等级也不代表单篇论文质量。</span></div><nav><a href={`${import.meta.env.BASE_URL}methodology.html`}>数据方法</a><a href={`${import.meta.env.BASE_URL}data/v1/manifest.json`}>Manifest</a><a href={`${import.meta.env.BASE_URL}data/v1/catalog.json`}>论文 JSON</a><a href={`${import.meta.env.BASE_URL}data/v1/quality.json`}>质量报告</a><a href="https://github.com/RainyMarks/DeepX/issues/new" target="_blank" rel="noreferrer">补充/纠错</a><a href="https://github.com/RainyMarks/DeepX" target="_blank" rel="noreferrer">GitHub</a></nav></footer>}
+    {view !== "map" && <DetailPanel detail={detail} onClose={closeDetail} />}
+    {view !== "map" && detailLoading && <div className="detail-load-status page-detail-status" role="status"><i /><span>正在装载论文记录…</span><button type="button" onClick={closeDetail}>取消</button></div>}
+    {view !== "map" && detailError && <div className="detail-load-status detail-load-error page-detail-status" role="alert"><span>论文记录加载失败</span><button type="button" onClick={closeDetail}>关闭</button></div>}
     <AuthorPanel author={selectedAuthor} papers={data.papers} institutions={data.institutions} onPaper={(id) => { setSelectedAuthorId(""); void openPaper(id); }} onAllPapers={(name) => { update("author", name); setView("papers"); setSelectedAuthorId(""); }} onClose={() => setSelectedAuthorId("")} />
   </div>;
 }

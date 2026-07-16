@@ -51,3 +51,30 @@ test("opens an efficient cluster intelligence dock without covering the map", as
   await expect(page.locator(".cluster-abstract").first()).toBeVisible();
   await expect(page.locator(".map-explorer")).toHaveClass(/has-cluster/);
 });
+
+test("uses the full map workbench and keeps paper details reversible", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop map workbench coverage");
+  await page.goto("/?view=map");
+  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator(".stats-column")).toHaveCount(0);
+  await expect(page.locator("footer")).toHaveCount(0);
+
+  const explorer = page.locator(".map-explorer");
+  const explorerBox = await explorer.boundingBox();
+  const viewport = page.viewportSize();
+  expect(explorerBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(explorerBox!.width).toBeGreaterThan(viewport!.width - 310);
+  expect(Math.abs(explorerBox!.y + explorerBox!.height - viewport!.height)).toBeLessThan(24);
+
+  await page.locator(".signal-node-host").first().click();
+  await page.locator(".cluster-paper-open").first().click();
+  await expect(page.getByRole("complementary", { name: "论文详情" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "区域论文情报舱" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "← 返回区域论文" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("complementary", { name: "论文详情" })).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "区域论文情报舱" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭区域情报舱" }).click();
+  await expect(explorer).not.toHaveClass(/has-cluster/);
+});
