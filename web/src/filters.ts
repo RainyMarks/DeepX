@@ -22,16 +22,87 @@ export const DEFAULT_FILTERS: FilterState = {
   task: "", contribution: "", review: "", ccf: "", journalSystem: "", journal: "", yearFrom: "", yearTo: "",
 };
 
+export interface PaperSearchEntry {
+  searchable: string;
+  searchableNormalized: string;
+  authors: string[];
+  institutions: string[];
+  countryKeys: string[];
+  venue: string;
+  venueNormalized: string;
+  venueNameNormalized: string;
+  venueShortNormalized: string;
+  venueType: "conference" | "journal" | "other" | "";
+}
+
+export type PaperSearchIndex = Map<string, PaperSearchEntry>;
+
 const VENUE_QUERY_CORRECTIONS: Record<string, string> = {
   TISF: "TIFS",
+  IEEETISF: "TIFS",
+  IEEETIFS: "TIFS",
   PAMI: "TPAMI",
   PAML: "TPAMI",
+  IEEEPAMI: "TPAMI",
+  IEEETPAMI: "TPAMI",
   TCVST: "TCSVT",
+  IEEETCVST: "TCSVT",
+  IEEETCSVT: "TCSVT",
+  IEEETIP: "TIP",
+  IEEETMM: "TMM",
+  IEEETDSC: "TDSC",
 };
+
+export function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
 
 export function correctedVenueQuery(value: string): string {
   const query = value.trim();
-  return VENUE_QUERY_CORRECTIONS[query.toUpperCase()] ?? query;
+  return VENUE_QUERY_CORRECTIONS[normalizeSearchText(query).toUpperCase()] ?? query;
+}
+
+export interface VenueRankingReconciliation {
+  filters: FilterState;
+  venueType: PaperSearchEntry["venueType"];
+  cleared: Array<"ccf" | "journal">;
+}
+
+export function reconcileVenueRankingFilters(
+  filters: FilterState,
+  papers: CatalogPaper[],
+  searchIndex?: PaperSearchIndex,
+): VenueRankingReconciliation {
+  const query = normalizeSearchText(correctedVenueQuery(filters.venue));
+  if (!query) return { filters, venueType: "", cleared: [] };
+  const index = searchIndex ?? buildPaperSearchIndex(papers);
+  const types = new Set<PaperSearchEntry["venueType"]>();
+  for (const entry of index.values()) {
+    if (entry.venueShortNormalized === query || entry.venueNameNormalized === query) {
+      if (entry.venueType) types.add(entry.venueType);
+    }
+  }
+  if (types.size !== 1) return { filters, venueType: "", cleared: [] };
+
+  const venueType = [...types][0];
+  if (venueType === "journal" && filters.ccf) {
+    return {
+      filters: { ...filters, ccf: "" },
+      venueType,
+      cleared: ["ccf"],
+    };
+  }
+  if (venueType === "conference" && (filters.journalSystem || filters.journal)) {
+    return {
+      filters: { ...filters, journalSystem: "", journal: "" },
+      venueType,
+      cleared: ["journal"],
+    };
+  }
+  return { filters, venueType, cleared: [] };
 }
 
 function journalRankingMatches(paper: CatalogPaper, system: string, zone: string): boolean {
@@ -44,29 +115,72 @@ function journalRankingMatches(paper: CatalogPaper, system: string, zone: string
   return selected.some((item) => item.level === zone || item.level === `Q${zone}`);
 }
 
-export function filterPapers(papers: CatalogPaper[], filters: FilterState, institutions: Institution[] = []): CatalogPaper[] {
-  const query = filters.q.trim().toLowerCase();
+export function buildPaperSearchIndex(
+  papers: CatalogPaper[],
+  institutions: Institution[] = [],
+): PaperSearchIndex {
+  const institutionMap = new Map(institutions.map((item) => [item.id, item]));
+  return new Map(papers.map((paper) => {
+    const paperInstitutions = paper.institution_ids
+      .map((id) => institutionMap.get(id))
+      .filter(Boolean) as Institution[];
+    const authors = paper.authors.map((item) => item.name.toLowerCase());
+    const institutionNames = paperInstitutions.map((item) => item.name.toLowerCase());
+    const venueName = paper.venue?.name ?? "";
+    const venueShort = paper.venue?.short_name ?? "";
+    const venue = `${venueName} ${venueShort}`.toLowerCase();
+    const searchable = `${paper.title} ${authors.join(" ")} ${venue} ${institutionNames.join(" ")}`.toLowerCase();
+    const venueType: PaperSearchEntry["venueType"] = !paper.venue
+      ? ""
+      : paper.venue.type === "conference" || paper.venue.type === "journal"
+        ? paper.venue.type
+        : "other";
+    return [paper.id, {
+      searchable,
+      searchableNormalized: normalizeSearchText(searchable),
+      authors,
+      institutions: institutionNames,
+      countryKeys: paperInstitutions.flatMap((item) => [item.country_code, item.country]).filter(Boolean),
+      venue,
+      venueNormalized: normalizeSearchText(venue),
+      venueNameNormalized: normalizeSearchText(venueName),
+      venueShortNormalized: normalizeSearchText(venueShort),
+      venueType,
+    }] as const;
+  }));
+}
+
+export function filterPapers(
+  papers: CatalogPaper[],
+  filters: FilterState,
+  institutions: Institution[] = [],
+  searchIndex?: PaperSearchIndex,
+): CatalogPaper[] {
+  const index = searchIndex ?? buildPaperSearchIndex(papers, institutions);
+  const effectiveFilters = reconcileVenueRankingFilters(filters, papers, index).filters;
+  const query = effectiveFilters.q.trim().toLowerCase();
+  const queryNormalized = normalizeSearchText(correctedVenueQuery(effectiveFilters.q));
   const authorQuery = filters.author.trim().toLowerCase();
   const institutionQuery = filters.institution.trim().toLowerCase();
-  const venueQuery = correctedVenueQuery(filters.venue).toLowerCase();
-  const institutionMap = new Map(institutions.map((item) => [item.id, item]));
+  const venueQuery = correctedVenueQuery(effectiveFilters.venue).toLowerCase();
+  const venueQueryNormalized = normalizeSearchText(venueQuery);
   return papers.filter((paper) => {
-    const paperInstitutions = paper.institution_ids.map((id) => institutionMap.get(id)).filter(Boolean) as Institution[];
-    const searchable = `${paper.title} ${paper.authors.map((item) => item.name).join(" ")} ${paper.venue?.name ?? ""} ${paper.venue?.short_name ?? ""} ${paperInstitutions.map((item) => item.name).join(" ")}`.toLowerCase();
+    const search = index.get(paper.id);
+    if (!search) return false;
     const ccf = paper.venue?.type === "conference" ? paper.venue.rankings.find((item) => item.system === "CCF")?.level ?? "" : "";
-    const journal = journalRankingMatches(paper, filters.journalSystem, filters.journal);
-    return (!query || searchable.includes(query))
-      && (!authorQuery || paper.authors.some((item) => item.name.toLowerCase().includes(authorQuery)))
-      && (!institutionQuery || paperInstitutions.some((item) => item.name.toLowerCase().includes(institutionQuery)))
-      && (!filters.country || paperInstitutions.some((item) => item.country_code === filters.country || item.country === filters.country))
-      && (!venueQuery || `${paper.venue?.name ?? ""} ${paper.venue?.short_name ?? ""}`.toLowerCase().includes(venueQuery))
-      && (!filters.source || paper.sources.includes(filters.source))
-      && (!filters.task || paper.task_tags.includes(filters.task as TaskId))
-      && (!filters.contribution || paper.contribution_type === filters.contribution)
-      && (!filters.review || paper.review_status === filters.review)
-      && (!filters.ccf || ccf === filters.ccf)
+    const journal = journalRankingMatches(paper, effectiveFilters.journalSystem, effectiveFilters.journal);
+    return (!query || search.searchable.includes(query) || search.searchableNormalized.includes(queryNormalized))
+      && (!authorQuery || search.authors.some((item) => item.includes(authorQuery)))
+      && (!institutionQuery || search.institutions.some((item) => item.includes(institutionQuery)))
+      && (!effectiveFilters.country || search.countryKeys.includes(effectiveFilters.country))
+      && (!venueQuery || search.venue.includes(venueQuery) || search.venueNormalized.includes(venueQueryNormalized))
+      && (!effectiveFilters.source || paper.sources.includes(effectiveFilters.source))
+      && (!effectiveFilters.task || paper.task_tags.includes(effectiveFilters.task as TaskId))
+      && (!effectiveFilters.contribution || paper.contribution_type === effectiveFilters.contribution)
+      && (!effectiveFilters.review || paper.review_status === effectiveFilters.review)
+      && (!effectiveFilters.ccf || ccf === effectiveFilters.ccf)
       && journal
-      && (!filters.yearFrom || (paper.year ?? 0) >= Number(filters.yearFrom))
-      && (!filters.yearTo || (paper.year ?? 9999) <= Number(filters.yearTo));
-  }).sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || b.citation_count - a.citation_count);
+      && (!effectiveFilters.yearFrom || (paper.year ?? 0) >= Number(effectiveFilters.yearFrom))
+      && (!effectiveFilters.yearTo || (paper.year ?? 9999) <= Number(effectiveFilters.yearTo));
+  }).sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || b.citation_count - a.citation_count || a.id.localeCompare(b.id));
 }
