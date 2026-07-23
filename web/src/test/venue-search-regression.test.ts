@@ -10,7 +10,7 @@ function venuePaper(
   id: string,
   shortName: string,
   name: string,
-  type: "journal" | "conference",
+  type: "journal" | "conference" | "unknown",
 ): CatalogPaper {
   return {
     id,
@@ -23,9 +23,11 @@ function venuePaper(
     task_tags: ["image_forgery"],
     contribution_type: "method",
     review_status: "auto",
+    review: null,
     primary_url: "https://example.com",
     citation_count: 0,
     sources: ["openalex"],
+    root_sources: ["openalex"],
     abstract_excerpt: "",
   } as CatalogPaper;
 }
@@ -53,8 +55,14 @@ describe("venue search regressions", () => {
   });
 
   it("does not let a stale CCF filter hide an exact journal venue", () => {
+    const tifsWithUnknownType = venuePaper(
+      "paper-tifs-unknown",
+      "TIFS",
+      "IEEE Transactions on Information Forensics and Security",
+      "unknown",
+    );
     const filters = { ...DEFAULT_FILTERS, venue: "TIFS", ccf: "A" };
-    expect(reconcileVenueRankingFilters(filters, [tifs, tpami]).filters.ccf).toBe("");
-    expect(filterPapers([tifs, tpami], filters)).toEqual([tifs]);
+    expect(reconcileVenueRankingFilters(filters, [tifs, tifsWithUnknownType, tpami]).filters.ccf).toBe("");
+    expect(filterPapers([tifs, tifsWithUnknownType, tpami], filters)).toEqual([tifs, tifsWithUnknownType]);
   });
 });

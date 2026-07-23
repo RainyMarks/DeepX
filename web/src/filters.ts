@@ -85,6 +85,10 @@ export function reconcileVenueRankingFilters(
       if (entry.venueType) types.add(entry.venueType);
     }
   }
+  // Incomplete source metadata may label a small subset of an otherwise
+  // canonical journal/conference as "other". A known type remains decisive;
+  // only a real journal-vs-conference collision is ambiguous.
+  if (types.has("journal") || types.has("conference")) types.delete("other");
   if (types.size !== 1) return { filters, venueType: "", cleared: [] };
 
   const venueType = [...types][0];
