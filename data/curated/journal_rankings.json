@@ -7,8 +7,8 @@
     "issn": "1556-6013",
     "aliases": ["IEEE Trans. Inf. Forensics Secur.", "IEEE Transactions on Information Forensics & Security"],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=DaB1Xr", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=DaB1Xr", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13028.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13028.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -19,8 +19,8 @@
     "issn": "1051-8215",
     "aliases": ["IEEE Trans. Circuits Syst. Video Technol."],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=5yNyVD", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Engineering, Electrical & Electronic", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=5yNyVD", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13003.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Engineering, Electrical & Electronic", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13003.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -31,8 +31,8 @@
     "issn": "1520-9210",
     "aliases": ["IEEE Trans. Multimedia"],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=52AdWp", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Telecommunications", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=52AdWp", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13038.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Telecommunications", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13038.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -43,8 +43,8 @@
     "issn": "1057-7149",
     "aliases": ["IEEE Trans. Image Process."],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=5dglkp", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=5dglkp", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13024.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13024.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -55,8 +55,8 @@
     "issn": "0162-8828",
     "aliases": ["IEEE Trans. Pattern Anal. Mach. Intell.", "IEEE PAMI"],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=pB23zp", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=pB23zp", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13045.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13045.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -67,8 +67,8 @@
     "issn": "0031-3203",
     "aliases": ["Pattern Recognit."],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=p6vzvp", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=p6vzvp", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/16115.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/16115.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -79,8 +79,8 @@
     "issn": "1566-2535",
     "aliases": ["INFORM FUSION"],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=DlZBEp", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=DlZBEp", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13194.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13194.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -91,8 +91,8 @@
     "issn": "0957-4174",
     "aliases": ["Expert Syst. Appl."],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=pB2jEp", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=pB2jEp", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/12439.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/12439.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -103,8 +103,8 @@
     "issn": "0950-7051",
     "aliases": ["KNOWL-BASED SYST", "Knowledge Based Systems"],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=rAA2jr", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science, Artificial Intelligence", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=rAA2jr", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/15113.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science, Artificial Intelligence", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/15113.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -115,8 +115,8 @@
     "issn": "1545-5971",
     "aliases": ["IEEE Trans. Dependable Secure Comput."],
     "rankings": [
-      {"system": "CAS", "level": "2", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=rRl3K5", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=rRl3K5", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13012.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13012.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -127,8 +127,8 @@
     "issn": "0920-5691",
     "aliases": ["Int. J. Comput. Vision"],
     "rankings": [
-      {"system": "CAS", "level": "2", "category": "计算机科学", "is_top": false, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=DXRW1p", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science, Artificial Intelligence", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=DXRW1p", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13332.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science, Artificial Intelligence", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13332.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -139,8 +139,8 @@
     "issn": "0020-0255",
     "aliases": ["INFORMATION SCIENCES"],
     "rankings": [
-      {"system": "CAS", "level": "2", "category": "计算机科学", "is_top": false, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=5KlQWD", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science, Information Systems", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=5KlQWD", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13198.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science, Information Systems", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13198.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -151,8 +151,8 @@
     "issn": "0893-6080",
     "aliases": [],
     "rankings": [
-      {"system": "CAS", "level": "2", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=pox085", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Neurosciences", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=pox085", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/37754.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Neurosciences", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/37754.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -163,8 +163,8 @@
     "issn": "0952-1976",
     "aliases": ["Eng. Appl. Artif. Intell."],
     "rankings": [
-      {"system": "CAS", "level": "1", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=pP3GOr", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=pP3GOr", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "1", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/12154.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/12154.html", "verified_at": "2026-08-12"}
     ]
   },
   {
@@ -175,8 +175,8 @@
     "issn": "2327-4662",
     "aliases": ["IEEE Internet Things J."],
     "rankings": [
-      {"system": "CAS", "level": "2", "category": "计算机科学", "is_top": true, "version": "2025", "source_url": "https://www.ablesci.com/journal/detail?id=rwxJ1p", "verified_at": "2026-08-12"},
-      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering; Telecommunications", "version": "2026", "source_url": "https://www.ablesci.com/journal/detail?id=rwxJ1p", "verified_at": "2026-08-12"}
+      {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/19389.html", "verified_at": "2026-08-12"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering; Telecommunications", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/19389.html", "verified_at": "2026-08-12"}
     ]
   }
 ]

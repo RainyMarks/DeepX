@@ -131,11 +131,14 @@ def create_app(token: str | None = None) -> FastAPI:
                 raise HTTPException(400, "CCF level 仅允许 A、B、C")
             if system == "CAS" and (version != "2025" or level not in {"1", "2", "3", "4"}):
                 raise HTTPException(400, "中科院分区仅允许 2025 版和 1–4 区")
+            scope = row.get("scope", "")
+            if system == "CAS" and scope != "大类":
+                raise HTTPException(400, "公开中科院筛选仅接收 scope=大类；小类数据不得混入")
             if system == "JCR" and (version != "2026" or level not in {"Q1", "Q2", "Q3", "Q4"}):
                 raise HTTPException(400, "JCR 仅允许 2026 版和 Q1–Q4")
             key = row["venue_name"].strip().lower()
             venue = by_name.setdefault(key, {"id": "venue-imported-" + secrets.token_hex(6), "name": row["venue_name"], "short_name": row.get("short_name", ""), "type": venue_type, "aliases": [], "rankings": []})
-            venue["rankings"].append({"system": system, "level": level, "category": row.get("category", ""), "is_top": system == "CAS" and row.get("is_top", "").lower() in {"1", "true", "yes"}, "version": version, "source_url": source_url, "verified_at": row.get("verified_at") or "local-import"})
+            venue["rankings"].append({"system": system, "level": level, "category": row.get("category", ""), "scope": scope if system == "CAS" else "", "is_top": system == "CAS" and row.get("is_top", "").lower() in {"1", "true", "yes"}, "version": version, "source_url": source_url, "verified_at": row.get("verified_at") or "local-import"})
         path.write_text(json.dumps(list(by_name.values()), ensure_ascii=False, indent=2), encoding="utf-8")
         build_public()
         return RedirectResponse(url=f"/?token={app.state.admin_token}", status_code=303)

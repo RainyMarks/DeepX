@@ -1,4 +1,4 @@
-from atlas.builder import apply_venue_ranking, authorized_papers
+from atlas.builder import apply_venue_ranking, authorized_papers, load_rankings
 
 
 def test_authorized_seed_preserves_human_review_status():
@@ -50,6 +50,35 @@ def test_common_journal_names_receive_searchable_short_names():
         ("CAS", "1", True),
         ("JCR", "Q1", False),
     ]
+
+
+def test_all_curated_journals_use_audited_2025_large_categories():
+    expected = {
+        "TIFS": ("1", True),
+        "TCSVT": ("1", True),
+        "TMM": ("1", True),
+        "TIP": ("1", True),
+        "TPAMI": ("1", True),
+        "PR": ("1", True),
+        "IF": ("1", True),
+        "ESWA": ("1", True),
+        "KBS": ("1", True),
+        "TDSC": ("2", True),
+        "IJCV": ("2", False),
+        "INS": ("2", False),
+        "NN": ("2", True),
+        "EAAI": ("1", True),
+        "IoTJ": ("2", True),
+    }
+    journals = [item for item in load_rankings() if item.get("type") == "journal"]
+    actual = {}
+    for item in journals:
+        cas = next(ranking for ranking in item["rankings"] if ranking["system"] == "CAS")
+        jcr = next(ranking for ranking in item["rankings"] if ranking["system"] == "JCR")
+        assert cas["version"] == "2025" and cas["scope"] == "大类"
+        assert jcr["version"] == "2026" and jcr["level"] == "Q1"
+        actual[item["short_name"]] = (cas["level"], cas["is_top"])
+    assert actual == expected
 
 
 def test_security_ccf_a_conferences_are_curated_explicitly():

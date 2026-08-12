@@ -32,6 +32,7 @@ class VenueRanking(BaseModel):
     system: Literal["CCF", "JCR", "CAS"]
     level: str
     category: str = ""
+    scope: Literal["大类", "小类", ""] = ""
     is_top: bool = False
     version: str
     source_url: str

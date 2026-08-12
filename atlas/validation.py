@@ -46,6 +46,8 @@ def validate_public(strict: bool = False) -> dict:
                 errors.append(f"期刊分区只能用于期刊: {paper.get('id')}")
             if ranking.get("system") == "CAS" and ranking.get("version") != "2025":
                 errors.append(f"中科院分区必须为最后官方版 2025: {paper.get('id')}")
+            if ranking.get("system") == "CAS" and ranking.get("scope") != "大类":
+                errors.append(f"公开中科院筛选必须使用 2025 大类分区: {paper.get('id')}")
             if ranking.get("system") == "JCR" and ranking.get("version") != "2026":
                 errors.append(f"JCR 分区必须为 2026 版: {paper.get('id')}")
             if "新锐" in json.dumps(ranking, ensure_ascii=False) or "xr-ranking" in ranking.get("source_url", "").lower():

@@ -12,6 +12,7 @@ export interface Ranking {
   system: "CCF" | "JCR" | "CAS";
   level: string;
   category: string;
+  scope?: "大类" | "小类" | "";
   is_top: boolean;
   version: string;
   source_url: string;

@@ -9,11 +9,11 @@
 CSV 必填列：
 
 ```text
-venue_name,short_name,venue_type,system,level,category,is_top,version,source_url,verified_at
+venue_name,short_name,venue_type,system,level,category,scope,is_top,version,source_url,verified_at
 ```
 
 - `CCF`：`venue_type=conference`，`level=A|B|C`，并保留官方目录版本。
-- `CAS`：`venue_type=journal`，仅接受最后官方版 `version=2025`，`level=1|2|3|4`；`is_top` 只对该体系有效。
+- `CAS`：`venue_type=journal`，仅接受最后官方版 `version=2025`，`level=1|2|3|4`，公开筛选必须使用 `scope=大类`；小类数据不得混入；`is_top` 只对该体系有效。
 - `JCR`：`venue_type=journal`，当前接受 `version=2026`，`level=Q1|Q2|Q3|Q4`。
 - 不接受“新锐期刊分区”或 `xr-ranking` 来源。
 - 名称或期刊类型无法可靠匹配时不自动赋级；同一篇论文可以分别显示 CAS 与 JCR，但不得合成为虚构的统一等级。

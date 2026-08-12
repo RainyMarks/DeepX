@@ -35,6 +35,7 @@ def test_public_release_contains_real_journal_ranking_coverage():
     assert len(jcr) >= 500
     assert sum(ranking["level"] == "1" for ranking in cas) >= 400
     assert sum(ranking["is_top"] for ranking in cas) >= 400
+    assert all(ranking["scope"] == "大类" for ranking in cas)
     assert sum(ranking["level"] == "Q1" for ranking in jcr) >= 500
 
 

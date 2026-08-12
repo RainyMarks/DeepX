@@ -32,7 +32,7 @@ function rankingSummary(paper: CatalogPaper): string {
   const cas = paper.venue?.rankings.find((item) => item.system === "CAS");
   const jcr = paper.venue?.rankings.find((item) => item.system === "JCR");
   if (ccf) return `CCF-${ccf.level}`;
-  if (cas) return `中科院 ${cas.level}区${cas.is_top ? " TOP" : ""}`;
+  if (cas) return `中科院${cas.scope || ""} · ${cas.version} ${cas.level}区${cas.is_top ? " TOP" : ""}`;
   if (jcr) return `JCR ${jcr.level}`;
   return "";
 }
