@@ -95,6 +95,8 @@ body{background-image:linear-gradient(rgba(25,119,131,.045) 1px,transparent 1px)
 footer{background:#edf5f4;color:var(--ink);border-color:var(--line)}footer span{color:var(--muted)}footer a{color:var(--ink)}
 .load-state{background:var(--paper);color:var(--ink)}.load-state code{background:#e7f1f0}.loading-orbit{border-color:var(--blue)}
 .filter-hint{display:block;margin-top:6px;color:var(--gold);font:700 10px var(--mono);letter-spacing:.03em}
+.filter-rail select:disabled{cursor:not-allowed;color:#7b8f94;background:#eef3f2;opacity:1}
+.ranking-data-hint{grid-column:1/-1;margin:-5px 0 13px;color:var(--muted);font:500 10px/1.55 var(--sans);letter-spacing:0}
 @media(max-width:520px){.signal-node{box-shadow:inset 0 0 0 3px rgba(250,253,252,.9),0 3px 11px color-mix(in srgb,var(--node-color) 26%,transparent)}}
 
 /* Typography refresh: one modern CJK voice; mono is reserved for evidence codes. */

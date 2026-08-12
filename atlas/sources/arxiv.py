@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from typing import ClassVar
 
 import httpx
 
 
 class ArxivSource:
     name = "arxiv"
-    ns = {"a": "http://www.w3.org/2005/Atom"}
+    ns: ClassVar[dict[str, str]] = {"a": "http://www.w3.org/2005/Atom"}
 
     def __init__(self, timeout: float = 30.0):
         self.client = httpx.Client(timeout=timeout, headers={"User-Agent": "SyntheticImageForensicsAtlas/2.0"})

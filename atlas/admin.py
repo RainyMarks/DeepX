@@ -12,12 +12,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from atlas.builder import CURATED_DIR, PUBLIC_DIR, build_public
-from atlas.jsonl import iter_jsonl
 from atlas.collector import collect_openalex, collect_secondary
 from atlas.db import connect
+from atlas.jsonl import iter_jsonl
 from atlas.models import ReviewDecision, utc_now
 from atlas.validation import ValidationError, validate_public
-
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = Jinja2Templates(directory=str(ROOT / "atlas" / "templates"))
@@ -87,7 +86,7 @@ def create_app(token: str | None = None) -> FastAPI:
             elif kind == "publish":
                 build_public()
                 validate_public(False)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - persist background job failures for the admin UI
             status = "failed"
             message = str(exc)[:500]
         finally:

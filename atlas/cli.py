@@ -11,17 +11,16 @@ import typer
 import uvicorn
 
 from atlas.admin import create_app
-from atlas.builder import AUTHORIZED_DIR, build_public
+from atlas.builder import AUTHORIZED_DIR, build_public, refresh_public_rankings
 from atlas.bulk_review import bulk_review
 from atlas.collector import collect_crossref_venues, collect_openalex, collect_secondary
 from atlas.validation import ValidationError, validate_public
-
 
 app = typer.Typer(no_args_is_help=True, help="生成图像取证研究图谱数据与审核工具")
 
 
 @app.command("import-authorized")
-def import_authorized(source: Path | None = typer.Option(None, help="授权参考仓库根目录")) -> None:
+def import_authorized(source: Path | None = typer.Option(None, help="授权参考仓库根目录")) -> None:  # noqa: B008 - Typer declares options in defaults
     if source:
         AUTHORIZED_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source / "web" / "data" / "public_preview_papers.json", AUTHORIZED_DIR / "reference_papers.json")
@@ -58,6 +57,12 @@ def collect_crossref_venues_command(max_per_query: int = typer.Option(300, min=1
 @app.command("publish")
 def publish() -> None:
     typer.echo(json.dumps(build_public().model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+@app.command("refresh-rankings")
+def refresh_rankings() -> None:
+    """只更新现有公开语料的等级映射，不依赖本地采集缓存。"""
+    typer.echo(json.dumps(refresh_public_rankings(), ensure_ascii=False, indent=2))
 
 
 @app.command("bulk-review")

@@ -40,6 +40,22 @@ test("restores a shared filter URL and exports CSV", async ({ page }, testInfo) 
   expect((await download).suggestedFilename()).toContain(".csv");
 });
 
+test("filters real CAS TOP, CAS zone 1 and JCR Q1 records", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop filter regression coverage");
+  await page.goto("/?view=papers&journalSystem=CAS&journal=TOP");
+  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByLabel("期刊评价")).toBeEnabled();
+  await expect(page.getByLabel("期刊分区")).toBeEnabled();
+  await expect(page.getByLabel("期刊评价")).toHaveValue("CAS");
+  await expect(page.getByLabel("期刊分区")).toHaveValue("TOP");
+  await expect(page.locator(".filter-result strong")).toHaveText("585");
+
+  await page.getByLabel("期刊分区").selectOption("1");
+  await expect(page.locator(".filter-result strong")).toHaveText("517");
+  await page.getByLabel("期刊评价").selectOption("JCR");
+  await expect(page.locator(".filter-result strong")).toHaveText("627");
+});
+
 test("opens an efficient cluster intelligence dock without covering the map", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "desktop interaction coverage");
   await page.goto("/?view=map");

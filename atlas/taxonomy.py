@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 TASK_LABELS = {
     "synthetic_detection": "生成/合成图像检测",
     "source_attribution": "生成来源归因与验证",
@@ -36,9 +35,7 @@ def _explicit_non_image_topic(title: str) -> bool:
         title, r"scene text", r"text image", r"document image"
     ):
         return True
-    if _matches(title, r"machine generated text", r"llm generated text", r"text generation detection") and not image:
-        return True
-    return False
+    return _matches(title, r"machine generated text", r"llm generated text", r"text generation detection") and not image
 
 
 def _strong_title_evidence(title: str) -> bool:
@@ -230,9 +227,7 @@ def _strong_title_evidence(title: str) -> bool:
         return True
     if image and _matches(title, r"forensic") and _matches(title, r"detect", r"analysis", r"survey", r"review", r"authentic", r"forg", r"tamper", r"manipulat"):
         return True
-    if image and _matches(title, r"\bfake images?\b") and _matches(title, r"detect", r"locali[sz]", r"forensic", r"attribut", r"benchmark"):
-        return True
-    return False
+    return image and _matches(title, r"\bfake images?\b") and _matches(title, r"detect", r"locali[sz]", r"forensic", r"attribut", r"benchmark")
 
 
 def _explicit_abstract_evidence(text: str) -> bool:

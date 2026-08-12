@@ -5,8 +5,8 @@ import os
 import time
 from pathlib import Path
 
-from atlas.models import utc_now
 from atlas.jsonl import iter_jsonl
+from atlas.models import utc_now
 from atlas.sources import ArxivSource, CrossrefSource, DblpSource, OpenAlexSource, SemanticScholarSource
 from atlas.sources.openalex import (
     COLLECTION_QUERIES,
@@ -14,7 +14,6 @@ from atlas.sources.openalex import (
     PRIORITY_VENUE_QUERIES,
     PRIORITY_VENUE_TASKS,
 )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"
@@ -133,7 +132,7 @@ def collect_openalex(max_records: int = 3200) -> dict:
                     records[source_id] = envelope
                     newly_found.append(envelope)
                 count += 1
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a failed query must not abort the collection batch
             errors.append({"query": query, "error": str(exc)[:500]})
         if newly_found:
             with partial_path.open("a", encoding="utf-8") as handle:
@@ -161,7 +160,7 @@ def collect_openalex(max_records: int = 3200) -> dict:
     existing_institutions = json.loads(institution_path.read_text(encoding="utf-8")) if institution_path.exists() else []
     try:
         fetched_institutions = source.fetch_institutions(institution_ids) if institution_ids else []
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - institution enrichment is optional
         errors.append({"stage": "institutions", "error": str(exc)[:500]})
         fetched_institutions = []
     institutions_by_id = {
@@ -208,7 +207,7 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
                 for row in source.search(query, max_per_query):
                     envelope = {"source": source.name, "query": query, "retrieved_at": utc_now(), "record": row}
                     records.setdefault(_secondary_record_key(envelope), envelope)
-            except Exception as exc:  # adapters remain optional and independently recoverable
+            except Exception as exc:  # noqa: BLE001 - adapters are optional and independently recoverable
                 errors.append({"source": source.name, "query": query, "error": str(exc)[:300]})
             time.sleep(3.1 if source.name == "arxiv" else 0.35)
     output = list(records.values())
@@ -260,7 +259,7 @@ def collect_crossref_venues(max_per_query: int = 300) -> dict:
                         "record": row,
                     }
                     records.setdefault(_secondary_record_key(envelope), envelope)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - one venue query must not abort the sweep
                 errors.append({"source": source.name, "query": label, "error": str(exc)[:300]})
             time.sleep(0.35)
 

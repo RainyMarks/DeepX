@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+
 from atlas.builder import PUBLIC_DIR
 from atlas.dedupe import canonical_arxiv, canonical_doi
 

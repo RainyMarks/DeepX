@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FILTERS, filterPapers } from "../filters";
+import {
+  availableJournalZones,
+  DEFAULT_FILTERS,
+  filterPapers,
+  getJournalRankingAvailability,
+  reconcileJournalRankingAvailability,
+} from "../filters";
 import type { CatalogPaper, Institution } from "../types";
 
 const base: CatalogPaper = {
@@ -63,5 +69,34 @@ describe("filterPapers", () => {
     expect(filterPapers([base, journal], { ...DEFAULT_FILTERS, journalSystem: "JCR", journal: "2" })).toEqual([journal]);
     expect(filterPapers([base, journal], { ...DEFAULT_FILTERS, journalSystem: "CAS", journal: "TOP" })).toEqual([journal]);
     expect(filterPapers([journal], { ...DEFAULT_FILTERS, ccf: "A" })).toHaveLength(0);
+  });
+
+  it("only exposes journal ranking options backed by public data", () => {
+    const availability = getJournalRankingAvailability([base]);
+    const stale = { ...DEFAULT_FILTERS, journalSystem: "CAS", journal: "TOP" };
+    expect(availability.CAS.size).toBe(0);
+    expect(availability.JCR.size).toBe(0);
+    expect(reconcileJournalRankingAvailability(stale, availability)).toEqual(DEFAULT_FILTERS);
+  });
+
+  it("maps available CAS and JCR levels to the shared zone selector", () => {
+    const journal: CatalogPaper = {
+      ...base,
+      venue: {
+        id: "venue-ranked", name: "Ranked Journal", short_name: "RJ", type: "journal",
+        rankings: [
+          { system: "CAS", level: "1", category: "工程技术", is_top: true, version: "2025", source_url: "https://example.com/cas", verified_at: "2026-07-15" },
+          { system: "JCR", level: "Q2", category: "Imaging Science", is_top: false, version: "2026", source_url: "https://example.com/jcr", verified_at: "2026-07-15" },
+        ],
+      },
+    };
+    const availability = getJournalRankingAvailability([journal]);
+    expect([...availability.CAS]).toEqual(["1", "TOP"]);
+    expect([...availability.JCR]).toEqual(["2"]);
+    expect([...availableJournalZones(availability, "")]).toEqual(["1", "TOP", "2"]);
+    expect(reconcileJournalRankingAvailability(
+      { ...DEFAULT_FILTERS, journalSystem: "JCR", journal: "TOP" },
+      availability,
+    )).toEqual({ ...DEFAULT_FILTERS, journalSystem: "JCR" });
   });
 });

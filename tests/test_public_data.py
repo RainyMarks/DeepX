@@ -17,6 +17,27 @@ def test_every_public_ranking_has_provenance():
             assert ranking["version"] and ranking["source_url"]
 
 
+def test_public_release_contains_real_journal_ranking_coverage():
+    catalog = json.loads((PUBLIC_DIR / "catalog.json").read_text(encoding="utf-8"))
+    cas = [
+        ranking
+        for paper in catalog
+        for ranking in (paper.get("venue") or {}).get("rankings", [])
+        if ranking["system"] == "CAS"
+    ]
+    jcr = [
+        ranking
+        for paper in catalog
+        for ranking in (paper.get("venue") or {}).get("rankings", [])
+        if ranking["system"] == "JCR"
+    ]
+    assert len(cas) >= 500
+    assert len(jcr) >= 500
+    assert sum(ranking["level"] == "1" for ranking in cas) >= 400
+    assert sum(ranking["is_top"] for ranking in cas) >= 400
+    assert sum(ranking["level"] == "Q1" for ranking in jcr) >= 500
+
+
 def test_quality_report_is_truthful_and_matches_release():
     manifest = json.loads((PUBLIC_DIR / "manifest.json").read_text(encoding="utf-8"))
     quality = json.loads((PUBLIC_DIR / "quality.json").read_text(encoding="utf-8"))

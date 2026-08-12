@@ -4,16 +4,24 @@ import hashlib
 import json
 import re
 from collections import Counter, defaultdict
-from datetime import date
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 from atlas.dedupe import canonical_arxiv, canonical_doi, normalized_title, stable_id
 from atlas.jsonl import iter_jsonl
-from atlas.models import AuthorIndex, AuthorRef, DatasetManifest, Institution, Paper, Provenance, Venue, VenueRanking
+from atlas.models import (
+    AuthorIndex,
+    AuthorRef,
+    DatasetManifest,
+    Institution,
+    Paper,
+    Provenance,
+    Venue,
+    VenueRanking,
+)
 from atlas.sources.openalex import inverted_abstract
 from atlas.taxonomy import TASK_LABELS, classify_tasks, contribution_type, is_in_scope
-
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTHORIZED_DIR = ROOT / "data" / "authorized"
@@ -69,8 +77,12 @@ def _author(name: str, source_id: str = "", orcid: str = "", institutions: list[
 
 
 def load_rankings() -> list[dict]:
-    path = CURATED_DIR / "venue_rankings.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    rankings: list[dict] = []
+    for name in ("venue_rankings.json", "journal_rankings.json"):
+        path = CURATED_DIR / name
+        if path.exists():
+            rankings.extend(json.loads(path.read_text(encoding="utf-8")))
+    return rankings
 
 
 def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") -> Venue | None:
@@ -398,6 +410,74 @@ def _apply_decisions(papers: list[Paper]) -> list[Paper]:
     return output
 
 
+def refresh_public_rankings() -> dict[str, int]:
+    """Refresh ranking badges without rebuilding the collected publication corpus."""
+    catalog_path = PUBLIC_DIR / "catalog.json"
+    if not catalog_path.exists():
+        raise FileNotFoundError("公开数据尚未生成，请先运行 python -m atlas.cli publish")
+
+    def update_papers(papers: list[dict]) -> None:
+        for paper in papers:
+            venue = paper.get("venue")
+            if not venue:
+                continue
+            ranked = apply_venue_ranking(
+                venue.get("name", ""),
+                venue.get("type", "unknown"),
+                venue.get("issn", ""),
+            )
+            if not ranked:
+                continue
+            venue["rankings"] = [item.model_dump(mode="json") for item in ranked.rankings]
+            if ranked.rankings:
+                venue["type"] = ranked.type
+            if ranked.short_name:
+                venue["short_name"] = ranked.short_name
+
+    def write(path: Path, value: object) -> None:
+        path.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    update_papers(catalog)
+    write(catalog_path, catalog)
+    for path in sorted((PUBLIC_DIR / "details").glob("*.json")):
+        details = json.loads(path.read_text(encoding="utf-8"))
+        update_papers(details)
+        write(path, details)
+
+    rankings = [
+        ranking
+        for paper in catalog
+        for ranking in (paper.get("venue") or {}).get("rankings", [])
+    ]
+    cas = [ranking for ranking in rankings if ranking["system"] == "CAS"]
+    jcr = [ranking for ranking in rankings if ranking["system"] == "JCR"]
+    ranked_papers = sum(bool((paper.get("venue") or {}).get("rankings")) for paper in catalog)
+
+    quality_path = PUBLIC_DIR / "quality.json"
+    quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    quality["dataset_version"] = str(datetime.now(UTC).date())
+    quality["venue_ranking_badge_count"] = len(rankings)
+    write(quality_path, quality)
+
+    manifest_path = PUBLIC_DIR / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["dataset_version"] = str(datetime.now(UTC).date())
+    manifest["generated_at"] = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    write(manifest_path, manifest)
+
+    return {
+        "paper_count": len(catalog),
+        "ranked_paper_count": ranked_papers,
+        "ranking_badge_count": len(rankings),
+        "cas_count": len(cas),
+        "cas_zone_1_count": sum(ranking["level"] == "1" for ranking in cas),
+        "cas_top_count": sum(ranking["is_top"] for ranking in cas),
+        "jcr_count": len(jcr),
+        "jcr_q1_count": sum(ranking["level"] == "Q1" for ranking in jcr),
+    }
+
+
 def build_public() -> DatasetManifest:
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     papers = _apply_decisions(_merge_exact([*authorized_papers(), *openalex_papers(), *secondary_papers()]))
@@ -458,7 +538,7 @@ def build_public() -> DatasetManifest:
     source_counts = Counter(source for paper in papers for source in {item.source for item in paper.provenance})
     ranking_count = sum(len(paper.venue.rankings) for paper in papers if paper.venue)
     quality = {
-        "dataset_version": str(date.today()),
+        "dataset_version": str(datetime.now(UTC).date()),
         "candidate_count": raw_candidate_count() or len(papers),
         "public_paper_count": len(papers),
         "verified_paper_count": sum(paper.review_status == "verified" for paper in papers),
@@ -497,7 +577,7 @@ def build_public() -> DatasetManifest:
     candidate_count = raw_candidate_count() or len(papers)
     mapped = [item for item in institutions.values() if item.latitude is not None and item.longitude is not None]
     manifest = DatasetManifest(
-        dataset_version=str(date.today()), paper_count=len(papers), verified_paper_count=sum(p.review_status == "verified" for p in papers),
+        dataset_version=str(datetime.now(UTC).date()), paper_count=len(papers), verified_paper_count=sum(p.review_status == "verified" for p in papers),
         author_count=len(author_index), institution_count=len(institutions), mapped_institution_count=len(mapped),
         country_count=len({item.country_code for item in institutions.values() if item.country_code}), candidate_count=candidate_count,
         detail_shards=shard_names,

@@ -7,7 +7,6 @@ from atlas.builder import CURATED_DIR, PUBLIC_DIR
 from atlas.jsonl import iter_jsonl
 from atlas.models import utc_now
 
-
 OUT_OF_SCOPE = re.compile(
     r"\b(?:audio|video|speech|voice|text generation|language model|pure ocr|camera model|"
     r"camera identification|tomato plant disease)\b|"

@@ -17,10 +17,62 @@ export interface FilterState {
   yearTo: string;
 }
 
+export type JournalRankingSystem = "CAS" | "JCR";
+
+export interface JournalRankingAvailability {
+  CAS: ReadonlySet<string>;
+  JCR: ReadonlySet<string>;
+}
+
 export const DEFAULT_FILTERS: FilterState = {
   q: "", author: "", institution: "", country: "", venue: "", source: "",
   task: "", contribution: "", review: "", ccf: "", journalSystem: "", journal: "", yearFrom: "", yearTo: "",
 };
+
+export function getJournalRankingAvailability(papers: CatalogPaper[]): JournalRankingAvailability {
+  const availability: Record<JournalRankingSystem, Set<string>> = {
+    CAS: new Set<string>(),
+    JCR: new Set<string>(),
+  };
+  for (const paper of papers) {
+    if (paper.venue?.type !== "journal") continue;
+    for (const ranking of paper.venue.rankings) {
+      if (ranking.system === "CAS" && /^[1-4]$/.test(ranking.level)) {
+        availability.CAS.add(ranking.level);
+        if (ranking.is_top) availability.CAS.add("TOP");
+      }
+      if (ranking.system === "JCR") {
+        const zone = ranking.level.match(/^Q?([1-4])$/)?.[1];
+        if (zone) availability.JCR.add(zone);
+      }
+    }
+  }
+  return availability;
+}
+
+export function availableJournalZones(
+  availability: JournalRankingAvailability,
+  system: string,
+): ReadonlySet<string> {
+  if (system === "CAS" || system === "JCR") return availability[system];
+  return new Set([...availability.CAS, ...availability.JCR]);
+}
+
+export function reconcileJournalRankingAvailability(
+  filters: FilterState,
+  availability: JournalRankingAvailability,
+): FilterState {
+  const hasCAS = availability.CAS.size > 0;
+  const hasJCR = availability.JCR.size > 0;
+  const journalSystem = filters.journalSystem === "CAS" && !hasCAS
+    || filters.journalSystem === "JCR" && !hasJCR
+    ? ""
+    : filters.journalSystem;
+  const zones = availableJournalZones(availability, journalSystem);
+  const journal = filters.journal && !zones.has(filters.journal) ? "" : filters.journal;
+  if (journalSystem === filters.journalSystem && journal === filters.journal) return filters;
+  return { ...filters, journalSystem, journal };
+}
 
 export interface PaperSearchEntry {
   searchable: string;

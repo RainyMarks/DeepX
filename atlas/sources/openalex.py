@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import time
-from typing import Iterable
+from collections.abc import Iterable
 
 import httpx
-
 
 DEFAULT_QUERIES = [
     # AI-generated / synthetic-image detection and attribution

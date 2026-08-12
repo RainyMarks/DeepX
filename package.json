@@ -10,6 +10,7 @@
     "test:e2e": "npm --prefix web run test:e2e",
     "typecheck": "npm --prefix web run typecheck",
     "data:validate": "python -m atlas.cli validate-public",
+    "data:rankings": "python -m atlas.cli refresh-rankings",
     "admin": "python -m atlas.cli admin"
   }
 }

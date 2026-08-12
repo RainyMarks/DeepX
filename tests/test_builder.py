@@ -15,7 +15,7 @@ def test_ccf_ranking_requires_curated_alias_match():
 
 
 def test_short_or_partial_venue_names_never_inherit_a_ranking():
-    for name in ("Pattern Recognition", "AI", "Information", "[]"):
+    for name in ("Pattern Matching", "AI", "Information", "[]"):
         venue = apply_venue_ranking(name)
         assert venue and not venue.rankings
 
@@ -36,16 +36,20 @@ def test_workshops_and_findings_do_not_inherit_main_venue_rank():
         assert venue and not venue.rankings
 
 
-def test_ccf_is_never_applied_to_journals():
+def test_journals_receive_only_journal_rankings():
     venue = apply_venue_ranking("IEEE Transactions on Pattern Analysis and Machine Intelligence", "journal")
-    assert venue and not venue.rankings
+    assert venue and {ranking.system for ranking in venue.rankings} == {"CAS", "JCR"}
     mismatched = apply_venue_ranking("AAAI Conference on Artificial Intelligence", "journal")
     assert mismatched and not mismatched.rankings
 
 
 def test_common_journal_names_receive_searchable_short_names():
     venue = apply_venue_ranking("IEEE Transactions on Information Forensics and Security", "journal")
-    assert venue and venue.short_name == "TIFS" and venue.rankings == []
+    assert venue and venue.short_name == "TIFS"
+    assert [(ranking.system, ranking.level, ranking.is_top) for ranking in venue.rankings] == [
+        ("CAS", "1", True),
+        ("JCR", "Q1", False),
+    ]
 
 
 def test_security_ccf_a_conferences_are_curated_explicitly():

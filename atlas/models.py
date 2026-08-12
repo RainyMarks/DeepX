@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
-
 
 ReviewStatus = Literal["verified", "auto", "rejected"]
 ContributionType = Literal["method", "dataset", "benchmark", "survey", "analysis"]
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class Provenance(BaseModel):

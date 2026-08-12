@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AtlasMap } from "./components/AtlasMap";
 import { loadAtlasContent, loadAtlasSummary, loadPaperDetail } from "./data";
 import { exportPapers } from "./exports";
-import { correctedVenueQuery, DEFAULT_FILTERS, filterPapers, type FilterState } from "./filters";
+import {
+  availableJournalZones,
+  correctedVenueQuery,
+  DEFAULT_FILTERS,
+  filterPapers,
+  getJournalRankingAvailability,
+  reconcileJournalRankingAvailability,
+  type FilterState,
+} from "./filters";
 import { CONTRIBUTIONS, TASKS } from "./task";
 import type { AtlasData, AtlasSummary, Author, CatalogPaper, Institution, PaperDetail, TaskId } from "./types";
 
@@ -138,10 +146,22 @@ export default function App() {
     history.replaceState(null, "", `${location.pathname}?${params}`);
   }, [view, filters]);
 
+  const journalRankingAvailability = useMemo(
+    () => getJournalRankingAvailability(data?.papers ?? []),
+    [data],
+  );
+  const effectiveFilters = useMemo(
+    () => reconcileJournalRankingAvailability(filters, journalRankingAvailability),
+    [filters, journalRankingAvailability],
+  );
+  useEffect(() => {
+    if (data && effectiveFilters !== filters) setFilters(effectiveFilters);
+  }, [data, effectiveFilters, filters]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
-    return filterPapers(data.papers, filters, data.institutions);
-  }, [data, filters]);
+    return filterPapers(data.papers, effectiveFilters, data.institutions);
+  }, [data, effectiveFilters]);
 
   const filteredIds = useMemo(() => new Set(filtered.map((paper) => paper.id)), [filtered]);
   const visibleAuthors = useMemo(() => data?.authors.map((author) => ({ ...author, visible: author.paper_ids.filter((id) => filteredIds.has(id)) })).filter((author) => author.visible.length).sort((a, b) => b.visible.length - a.visible.length) ?? [], [data, filteredIds]);
@@ -149,6 +169,10 @@ export default function App() {
   const selectedAuthor = useMemo(() => data?.authors.find((author) => author.id === selectedAuthorId) ?? null, [data, selectedAuthorId]);
   const countryOptions = useMemo(() => [...new Map((data?.institutions ?? []).filter((item) => item.country_code || item.country).map((item) => [item.country_code || item.country, item.country || item.country_code])).entries()].sort((a, b) => a[1].localeCompare(b[1], "zh-CN")), [data]);
   const sourceOptions = useMemo(() => [...new Set((data?.papers ?? []).flatMap((paper) => paper.sources))].sort(), [data]);
+  const hasCASRankings = journalRankingAvailability.CAS.size > 0;
+  const hasJCRRankings = journalRankingAvailability.JCR.size > 0;
+  const hasJournalRankings = hasCASRankings || hasJCRRankings;
+  const availableZones = availableJournalZones(journalRankingAvailability, filters.journalSystem);
 
   async function openPaper(id: string) {
     const request = ++detailRequest.current;
@@ -178,6 +202,12 @@ export default function App() {
     setView(nextView);
   }
   function update<K extends keyof FilterState>(key: K, value: FilterState[K]) { setFilters((current) => ({ ...current, [key]: value })); }
+  function updateJournalSystem(value: string) {
+    setFilters((current) => reconcileJournalRankingAvailability(
+      { ...current, journalSystem: value },
+      journalRankingAvailability,
+    ));
+  }
 
   if (error) return <main className="load-state"><span>DATA LOAD ERROR</span><h1>公开数据未能加载</h1><p>{error}</p><code>python -m atlas.cli publish</code></main>;
   if (!summary) return <main className="load-state"><div className="loading-orbit" /><span>正在展开研究图谱</span><h1>装订论文、作者与机构关系…</h1></main>;
@@ -221,7 +251,7 @@ export default function App() {
         <div className="split-filter"><label>起始年份<input type="number" value={filters.yearFrom} onChange={(e) => update("yearFrom", e.target.value)} placeholder="2000" /></label><label>结束年份<input type="number" value={filters.yearTo} onChange={(e) => update("yearTo", e.target.value)} placeholder="2026" /></label></div>
         <label>审核状态<select value={filters.review} onChange={(e) => update("review", e.target.value)}><option value="">全部状态</option><option value="verified">人工核验核心集</option><option value="auto">自动收录待复核</option></select></label>
         <label>CCF 会议等级<select value={filters.ccf} onChange={(e) => update("ccf", e.target.value)}><option value="">全部会议等级</option><option value="A">CCF-A</option><option value="B">CCF-B</option><option value="C">CCF-C</option></select></label>
-        <div className="ranking-filter"><label>期刊评价<select value={filters.journalSystem} onChange={(e) => update("journalSystem", e.target.value)}><option value="">综合检索</option><option value="CAS">中科院 2025</option><option value="JCR">JCR 2026</option></select></label><label>期刊分区<select value={filters.journal} onChange={(e) => update("journal", e.target.value)}><option value="">全部分区</option><option value="1">一区 / Q1</option><option value="2">二区 / Q2</option><option value="3">三区 / Q3</option><option value="4">四区 / Q4</option><option value="TOP">中科院 TOP</option></select></label></div>
+        <div className="ranking-filter"><label>期刊评价<select value={filters.journalSystem} onChange={(e) => updateJournalSystem(e.target.value)} disabled={!hasJournalRankings}><option value="">{hasJournalRankings ? "综合检索" : "暂无等级数据"}</option><option value="CAS" disabled={!hasCASRankings}>中科院 2025</option><option value="JCR" disabled={!hasJCRRankings}>JCR 2026</option></select></label><label>期刊分区<select value={filters.journal} onChange={(e) => update("journal", e.target.value)} disabled={!hasJournalRankings}><option value="">全部分区</option><option value="1" disabled={!availableZones.has("1")}>一区 / Q1</option><option value="2" disabled={!availableZones.has("2")}>二区 / Q2</option><option value="3" disabled={!availableZones.has("3")}>三区 / Q3</option><option value="4" disabled={!availableZones.has("4")}>四区 / Q4</option><option value="TOP" disabled={!availableZones.has("TOP")}>中科院 TOP</option></select></label>{!hasJournalRankings && <small className="ranking-data-hint">当前公开数据尚未导入可靠期刊分区，筛选已停用以避免误显示 0。</small>}</div>
         <div className="filter-result"><span>当前结果</span><strong>{filtered.length.toLocaleString()}</strong><small>唯一论文</small></div>
         <div className="export-row"><button onClick={() => exportPapers(filtered, "csv")}>CSV</button><button onClick={() => exportPapers(filtered, "json")}>JSON</button><button onClick={() => exportPapers(filtered, "bib")}>BibTeX</button></div>
       </aside>
