@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import re
 
-from atlas.builder import CURATED_DIR, PUBLIC_DIR
+from atlas.builder import CURATED_DIR
 from atlas.jsonl import iter_jsonl
 from atlas.models import utc_now
+from atlas.release import read_catalog
 
 OUT_OF_SCOPE = re.compile(
     r"\b(?:audio|video|speech|voice|text generation|language model|pure ocr|camera model|"
@@ -16,8 +17,7 @@ OUT_OF_SCOPE = re.compile(
 
 
 def bulk_review() -> dict[str, int]:
-    catalog_path = PUBLIC_DIR / "catalog.json"
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog = read_catalog()
     decision_path = CURATED_DIR / "review_decisions.jsonl"
     decisions: dict[str, dict] = {}
     if decision_path.exists():

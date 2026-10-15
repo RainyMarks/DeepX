@@ -6,7 +6,6 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from pathlib import Path
 
 from atlas.dedupe import canonical_arxiv, canonical_doi, normalized_title, stable_id
 from atlas.jsonl import iter_jsonl
@@ -20,14 +19,24 @@ from atlas.models import (
     Venue,
     VenueRanking,
 )
+from atlas.release import (
+    PUBLIC_DIR,
+    ROOT,
+    SCHEMA_VERSION,
+    build_stats,
+    normalize_institution_countries,
+    pack_catalog,
+    read_catalog,
+    read_details,
+    write_catalog_and_details,
+    write_json,
+)
 from atlas.sources.openalex import inverted_abstract
-from atlas.taxonomy import TASK_LABELS, classify_tasks, contribution_type, is_in_scope
+from atlas.taxonomy import classify_tasks, contribution_type, is_in_scope
 
-ROOT = Path(__file__).resolve().parents[1]
 AUTHORIZED_DIR = ROOT / "data" / "authorized"
 CURATED_DIR = ROOT / "data" / "curated"
 RAW_DIR = ROOT / "data" / "raw"
-PUBLIC_DIR = ROOT / "web" / "public" / "data" / "v1"
 
 VENUE_SHORT_NAMES = {
     "ieee transactions on information forensics and security": "TIFS",
@@ -412,8 +421,7 @@ def _apply_decisions(papers: list[Paper]) -> list[Paper]:
 
 def refresh_public_rankings() -> dict[str, int]:
     """Refresh ranking badges without rebuilding the collected publication corpus."""
-    catalog_path = PUBLIC_DIR / "catalog.json"
-    if not catalog_path.exists():
+    if not (PUBLIC_DIR / "catalog.json").exists():
         raise FileNotFoundError("公开数据尚未生成，请先运行 python -m atlas.cli publish")
 
     def update_papers(papers: list[dict]) -> None:
@@ -434,42 +442,47 @@ def refresh_public_rankings() -> dict[str, int]:
             if ranked.short_name:
                 venue["short_name"] = ranked.short_name
 
-    def write(path: Path, value: object) -> None:
-        path.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog = read_catalog()
+    details = read_details()
+    # Packed venues are shared by every paper, so a detail record with ISSN
+    # metadata decides the ranking for the whole venue.
+    detail_venues = {record["venue"]["id"]: record["venue"] for record in details if record.get("venue")}
+    for paper in catalog:
+        if paper.get("venue") and paper["venue"]["id"] in detail_venues:
+            paper["venue"]["issn"] = detail_venues[paper["venue"]["id"]].get("issn", "")
     update_papers(catalog)
-    write(catalog_path, catalog)
-    for path in sorted((PUBLIC_DIR / "details").glob("*.json")):
-        details = json.loads(path.read_text(encoding="utf-8"))
-        update_papers(details)
-        write(path, details)
+    update_papers(details)
+    shards = write_catalog_and_details(catalog, details)
 
-    rankings = [
+    rankings = [ranking for venue in pack_catalog(catalog)["venues"] for ranking in venue["rankings"]]
+    paper_rankings = [
         ranking
         for paper in catalog
         for ranking in (paper.get("venue") or {}).get("rankings", [])
     ]
-    cas = [ranking for ranking in rankings if ranking["system"] == "CAS"]
-    jcr = [ranking for ranking in rankings if ranking["system"] == "JCR"]
+    cas = [ranking for ranking in paper_rankings if ranking["system"] == "CAS"]
+    jcr = [ranking for ranking in paper_rankings if ranking["system"] == "JCR"]
     ranked_papers = sum(bool((paper.get("venue") or {}).get("rankings")) for paper in catalog)
 
     quality_path = PUBLIC_DIR / "quality.json"
     quality = json.loads(quality_path.read_text(encoding="utf-8"))
     quality["dataset_version"] = str(datetime.now(UTC).date())
-    quality["venue_ranking_badge_count"] = len(rankings)
-    write(quality_path, quality)
+    quality["venue_ranking_badge_count"] = len(paper_rankings)
+    write_json(quality_path, quality)
 
     manifest_path = PUBLIC_DIR / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema_version"] = SCHEMA_VERSION
     manifest["dataset_version"] = str(datetime.now(UTC).date())
     manifest["generated_at"] = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    write(manifest_path, manifest)
+    manifest["detail_shards"] = shards
+    write_json(manifest_path, manifest)
 
     return {
         "paper_count": len(catalog),
         "ranked_paper_count": ranked_papers,
-        "ranking_badge_count": len(rankings),
+        "ranking_badge_count": len(paper_rankings),
+        "ranked_venue_badge_count": len(rankings),
         "cas_count": len(cas),
         "cas_zone_1_count": sum(ranking["level"] == "1" for ranking in cas),
         "cas_top_count": sum(ranking["is_top"] for ranking in cas),
@@ -510,7 +523,7 @@ def build_public() -> DatasetManifest:
                 entry.task_counts[task] = entry.task_counts.get(task, 0) + 1
 
     catalog = []
-    details: dict[str, list[dict]] = defaultdict(list)
+    details = []
     for paper in papers:
         rankings = [item.model_dump(mode="json") for item in (paper.venue.rankings if paper.venue else [])]
         catalog.append({
@@ -523,20 +536,13 @@ def build_public() -> DatasetManifest:
             "citation_count": paper.citation_count, "sources": sorted({item.source for item in paper.provenance}),
             "abstract_excerpt": paper.abstract[:240],
         })
-        shard = paper.id[-1]
-        details[shard].append(paper.model_dump(mode="json"))
+        details.append(paper.model_dump(mode="json"))
 
-    task_counts = Counter(task for paper in papers for task in paper.task_tags)
-    year_counts = Counter(str(paper.year) for paper in papers if paper.year)
-    review_counts = Counter(paper.review_status for paper in papers)
-    country_counts = Counter(item.country or item.country_code for item in institutions.values() if item.country or item.country_code)
-    stats = {
-        "tasks": [{"id": key, "label": TASK_LABELS[key], "count": task_counts.get(key, 0)} for key in TASK_LABELS],
-        "years": dict(sorted(year_counts.items())), "reviews": dict(review_counts),
-        "countries": country_counts.most_common(20),
-    }
+    institution_records = [item.model_dump(mode="json") for item in sorted(institutions.values(), key=lambda x: (-len(x.paper_ids), x.name))]
+    normalize_institution_countries(institution_records)
     source_counts = Counter(source for paper in papers for source in {item.source for item in paper.provenance})
     ranking_count = sum(len(paper.venue.rankings) for paper in papers if paper.venue)
+    mapped = [item for item in institution_records if item["latitude"] is not None and item["longitude"] is not None]
     quality = {
         "dataset_version": str(datetime.now(UTC).date()),
         "candidate_count": raw_candidate_count() or len(papers),
@@ -545,42 +551,29 @@ def build_public() -> DatasetManifest:
         "auto_review_count": sum(paper.review_status == "auto" for paper in papers),
         "source_counts": dict(sorted(source_counts.items())),
         "venue_ranking_badge_count": ranking_count,
-        "mapped_institution_count": sum(item.latitude is not None and item.longitude is not None for item in institutions.values()),
+        "mapped_institution_count": len(mapped),
         "strong_identifier_duplicate_policy": "DOI → arXiv → OpenAlex → 标题+年份；模糊匹配不自动合并",
         "scope_policy": "仅公开具有明确图像取证任务证据的记录；宽召回噪声保留在本地候选池",
     }
-
-    def write(name: str, value: object) -> None:
-        (PUBLIC_DIR / name).write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-
-    write("catalog.json", catalog)
-    write("authors.json", [item.model_dump(mode="json") for item in sorted(author_index.values(), key=lambda x: (-len(x.paper_ids), x.name))])
-    write("institutions.json", [item.model_dump(mode="json") for item in sorted(institutions.values(), key=lambda x: (-len(x.paper_ids), x.name))])
-    write("stats.json", stats)
     quality["quality_targets"] = {
         "candidate_2000": quality["candidate_count"] >= 2000,
         "public_1000": len(papers) >= 1000,
         "human_verified_300": quality["verified_paper_count"] >= 300,
     }
     quality["warnings"] = [] if quality["quality_targets"]["human_verified_300"] else ["人工核验核心集尚未达到 300；自动记录不会冒充人工核验"]
-    write("quality.json", quality)
-    detail_dir = PUBLIC_DIR / "details"
-    detail_dir.mkdir(exist_ok=True)
-    for old in detail_dir.glob("*.json"):
-        old.unlink()
-    shard_names = []
-    for shard, values in sorted(details.items()):
-        name = f"details/{shard}.json"
-        write(name, values)
-        shard_names.append(shard)
 
-    candidate_count = raw_candidate_count() or len(papers)
-    mapped = [item for item in institutions.values() if item.latitude is not None and item.longitude is not None]
+    shard_names = write_catalog_and_details(catalog, details)
+    write_json(PUBLIC_DIR / "authors.json", [item.model_dump(mode="json") for item in sorted(author_index.values(), key=lambda x: (-len(x.paper_ids), x.name))])
+    write_json(PUBLIC_DIR / "institutions.json", institution_records)
+    write_json(PUBLIC_DIR / "stats.json", build_stats(catalog, institution_records))
+    write_json(PUBLIC_DIR / "quality.json", quality)
+
     manifest = DatasetManifest(
-        dataset_version=str(datetime.now(UTC).date()), paper_count=len(papers), verified_paper_count=sum(p.review_status == "verified" for p in papers),
-        author_count=len(author_index), institution_count=len(institutions), mapped_institution_count=len(mapped),
-        country_count=len({item.country_code for item in institutions.values() if item.country_code}), candidate_count=candidate_count,
-        detail_shards=shard_names,
+        schema_version=SCHEMA_VERSION,
+        dataset_version=str(datetime.now(UTC).date()), paper_count=len(papers), verified_paper_count=quality["verified_paper_count"],
+        author_count=len(author_index), institution_count=len(institution_records), mapped_institution_count=len(mapped),
+        country_count=len({item["country_code"] for item in institution_records if item["country_code"]}),
+        candidate_count=quality["candidate_count"], detail_shards=shard_names,
     )
-    write("manifest.json", manifest.model_dump(mode="json"))
+    write_json(PUBLIC_DIR / "manifest.json", manifest.model_dump(mode="json"))
     return manifest

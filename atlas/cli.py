@@ -14,6 +14,7 @@ from atlas.admin import create_app
 from atlas.builder import AUTHORIZED_DIR, build_public, refresh_public_rankings
 from atlas.bulk_review import bulk_review
 from atlas.collector import collect_crossref_venues, collect_openalex, collect_secondary
+from atlas.release import repack_public
 from atlas.validation import ValidationError, validate_public
 
 app = typer.Typer(no_args_is_help=True, help="生成图像取证研究图谱数据与审核工具")
@@ -63,6 +64,12 @@ def publish() -> None:
 def refresh_rankings() -> None:
     """只更新现有公开语料的等级映射，不依赖本地采集缓存。"""
     typer.echo(json.dumps(refresh_public_rankings(), ensure_ascii=False, indent=2))
+
+
+@app.command("repack-public")
+def repack_public_command() -> None:
+    """把现有公开数据重写为当前发布格式（venue 去重、细粒度详情分片），不重新采集。"""
+    typer.echo(json.dumps(repack_public(), ensure_ascii=False, indent=2))
 
 
 @app.command("bulk-review")

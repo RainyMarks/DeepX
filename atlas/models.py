@@ -113,7 +113,7 @@ class ReviewDecision(BaseModel):
 
 
 class DatasetManifest(BaseModel):
-    schema_version: str = "1.0.0"
+    schema_version: str = "2.0.0"
     dataset_version: str
     generated_at: str = Field(default_factory=utc_now)
     language: str = "zh-CN"

@@ -11,11 +11,12 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Requ
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from atlas.builder import CURATED_DIR, PUBLIC_DIR, build_public
+from atlas.builder import CURATED_DIR, build_public
 from atlas.collector import collect_openalex, collect_secondary
 from atlas.db import connect
 from atlas.jsonl import iter_jsonl
 from atlas.models import ReviewDecision, utc_now
+from atlas.release import PUBLIC_DIR, read_catalog, read_details
 from atlas.validation import ValidationError, validate_public
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,11 +36,8 @@ def create_app(token: str | None = None) -> FastAPI:
 
     def load_state() -> tuple[dict, list[dict]]:
         manifest = json.loads((PUBLIC_DIR / "manifest.json").read_text(encoding="utf-8")) if (PUBLIC_DIR / "manifest.json").exists() else {}
-        catalog = json.loads((PUBLIC_DIR / "catalog.json").read_text(encoding="utf-8")) if (PUBLIC_DIR / "catalog.json").exists() else []
-        details: dict[str, dict] = {}
-        for shard in (PUBLIC_DIR / "details").glob("*.json"):
-            for item in json.loads(shard.read_text(encoding="utf-8")):
-                details[item["id"]] = item
+        catalog = read_catalog() if (PUBLIC_DIR / "catalog.json").exists() else []
+        details = {item["id"]: item for item in read_details()}
         enriched = []
         for item in catalog:
             detail = details.get(item["id"], {})

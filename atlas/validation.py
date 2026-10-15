@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from atlas.builder import PUBLIC_DIR
 from atlas.dedupe import canonical_arxiv, canonical_doi
+from atlas.release import PUBLIC_DIR, detail_shard, read_catalog, read_details
 
 
 class ValidationError(RuntimeError):
@@ -16,7 +16,7 @@ def validate_public(strict: bool = False) -> dict:
     if not manifest_path.exists() or not catalog_path.exists():
         raise ValidationError("公开数据尚未生成，请先运行 python -m atlas.cli publish")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog = read_catalog()
     errors: list[str] = []
     warnings: list[str] = []
     if manifest.get("paper_count") != len(catalog):
@@ -62,9 +62,14 @@ def validate_public(strict: bool = False) -> dict:
             errors.append(f"机构坐标越界: {institution.get('id')}")
         if not institution.get("coordinate_source"):
             errors.append(f"机构坐标缺少来源: {institution.get('id')}")
-    detail_records = []
+    detail_records = read_details()
+    shards = set(manifest.get("detail_shards", []))
     for path in (PUBLIC_DIR / "details").glob("*.json"):
-        detail_records.extend(json.loads(path.read_text(encoding="utf-8")))
+        if path.stem not in shards:
+            errors.append(f"详情分片未登记在 manifest: {path.name}")
+        for paper in json.loads(path.read_text(encoding="utf-8")):
+            if detail_shard(paper["id"]) != path.stem:
+                errors.append(f"论文位于错误的详情分片: {paper['id']}")
     for paper in detail_records:
         doi = canonical_doi(paper.get("doi", ""))
         arxiv_id = canonical_arxiv(paper.get("arxiv_id", ""))
@@ -76,7 +81,7 @@ def validate_public(strict: bool = False) -> dict:
             if arxiv_id in arxiv_ids:
                 errors.append(f"重复 arXiv: {arxiv_id}")
             arxiv_ids.add(arxiv_id)
-    if len(detail_records) != len(catalog):
+    if {paper["id"] for paper in detail_records} != ids:
         errors.append("详情分片与目录数量不一致")
     if manifest.get("paper_count", 0) < 1000:
         (errors if strict else warnings).append("公开论文数尚未达到 1000")

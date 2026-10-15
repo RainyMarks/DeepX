@@ -1,6 +1,6 @@
 import json
 
-from atlas.builder import PUBLIC_DIR
+from atlas.release import PUBLIC_DIR, read_catalog
 from atlas.validation import validate_public
 
 
@@ -11,14 +11,14 @@ def test_public_preview_exceeds_reference_scale_without_faking_review():
 
 
 def test_every_public_ranking_has_provenance():
-    catalog = json.loads((PUBLIC_DIR / "catalog.json").read_text(encoding="utf-8"))
+    catalog = read_catalog()
     for paper in catalog:
         for ranking in (paper.get("venue") or {}).get("rankings", []):
             assert ranking["version"] and ranking["source_url"]
 
 
 def test_public_release_contains_real_journal_ranking_coverage():
-    catalog = json.loads((PUBLIC_DIR / "catalog.json").read_text(encoding="utf-8"))
+    catalog = read_catalog()
     cas = [
         ranking
         for paper in catalog
