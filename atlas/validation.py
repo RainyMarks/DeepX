@@ -81,6 +81,18 @@ def validate_public(strict: bool = False) -> dict:
             if arxiv_id in arxiv_ids:
                 errors.append(f"重复 arXiv: {arxiv_id}")
             arxiv_ids.add(arxiv_id)
+    alias_path = PUBLIC_DIR / "author_aliases.json"
+    aliases = json.loads(alias_path.read_text(encoding="utf-8"))["aliases"] if alias_path.exists() else {}
+    author_ids = {author["id"] for paper in catalog for author in paper.get("authors", [])}
+    if author_ids & aliases.keys():
+        errors.append("目录中仍有已合并的作者别名 ID")
+    authors_path = PUBLIC_DIR / "authors.json"
+    if authors_path.exists():
+        indexed = {item["id"] for item in json.loads(authors_path.read_text(encoding="utf-8"))}
+        if indexed != author_ids:
+            errors.append("authors.json 与目录中的作者 ID 不一致")
+        if manifest.get("author_count") != len(indexed):
+            errors.append("manifest.author_count 与 authors.json 数量不一致")
     if {paper["id"] for paper in detail_records} != ids:
         errors.append("详情分片与目录数量不一致")
     if manifest.get("paper_count", 0) < 1000:

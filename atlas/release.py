@@ -9,8 +9,10 @@ Release layout (schema 2):
   author ids on every paper, which made up about a third of the payload.
 - ``details/<xx>.json``: full paper records sharded by the last two hex digits
   of the paper id, so opening one record downloads ~1/256 of the corpus.
-- ``institutions.json``, ``authors.json``, ``stats.json``, ``quality.json``,
-  ``manifest.json``.
+- ``authors.json``: one entry per resolved author identity (see
+  ``atlas/identity.py``); ``author_aliases.json`` records every id that was
+  merged into another and the evidence for it.
+- ``institutions.json``, ``stats.json``, ``quality.json``, ``manifest.json``.
 
 Readers accept both the legacy and the current layout so that maintenance
 commands keep working on an unmigrated checkout.
@@ -24,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from atlas.identity import apply_author_identities, resolve_author_identities
 from atlas.taxonomy import TASK_LABELS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -179,6 +182,60 @@ def build_stats(catalog: list[dict], institutions: list[dict]) -> dict:
     }
 
 
+def build_author_index(details: list[dict]) -> list[dict]:
+    """authors.json records built from (already resolved) detail records."""
+    entries: dict[str, dict] = {}
+    names: dict[str, Counter[str]] = defaultdict(Counter)
+    orcids: dict[str, set[str]] = defaultdict(set)
+    for record in details:
+        for author in record.get("authors", []):
+            entry = entries.setdefault(author["id"], {
+                "id": author["id"], "name": "", "orcid": "", "institution_ids": [], "paper_ids": [], "task_counts": {},
+            })
+            names[author["id"]][author["name"]] += 1
+            if author.get("orcid"):
+                orcids[author["id"]].add(author["orcid"])
+            entry["institution_ids"] = sorted(set(entry["institution_ids"]) | set(author.get("institution_ids") or []))
+            if record["id"] not in entry["paper_ids"]:
+                entry["paper_ids"].append(record["id"])
+                for task in record.get("task_tags", []):
+                    entry["task_counts"][task] = entry["task_counts"].get(task, 0) + 1
+    for author_id, entry in entries.items():
+        entry["name"] = names[author_id].most_common(1)[0][0]
+        # An identity with conflicting ORCIDs is ambiguous; publish none.
+        entry["orcid"] = next(iter(orcids[author_id])) if len(orcids[author_id]) == 1 else ""
+    return sorted(entries.values(), key=lambda item: (-len(item["paper_ids"]), item["name"], item["id"]))
+
+
+def unify_authors(catalog: list[dict], details: list[dict], public_dir: Path = PUBLIC_DIR) -> dict:
+    """Merge duplicate author ids in place and write authors.json and author_aliases.json."""
+    # Merged identities pool their coauthors and institutions, which can
+    # expose further evidence; iterate until no merge is added.
+    merged: dict[str, str] = {}
+    edges: list[list[str]] = []
+    for _ in range(10):
+        resolution = resolve_author_identities(details)
+        if not resolution.aliases:
+            break
+        apply_author_identities(details, resolution, rename=False)
+        apply_author_identities(catalog, resolution, rename=False)
+        merged = {alias: resolution.aliases.get(target, target) for alias, target in merged.items()}
+        merged.update(resolution.aliases)
+        edges += [list(edge) for edge in resolution.merges]
+    apply_author_identities(catalog, resolution, rename=True)
+
+    alias_path = public_dir / "author_aliases.json"
+    previous = read_json(alias_path) if alias_path.exists() else {"aliases": {}, "evidence": []}
+    aliases = {alias: merged.get(target, target) for alias, target in previous["aliases"].items()}
+    aliases.update(merged)
+    evidence = previous["evidence"] + edges
+    write_json(alias_path, {"aliases": dict(sorted(aliases.items())), "evidence": evidence})
+
+    authors = build_author_index(details)
+    write_json(public_dir / "authors.json", authors)
+    return {"author_count": len(authors), "merged_author_ids": len(merged), "total_aliases": len(aliases)}
+
+
 def repack_public(public_dir: Path = PUBLIC_DIR) -> dict:
     """Rewrite an existing release in the current layout without re-collecting."""
     catalog = read_catalog(public_dir)
@@ -186,6 +243,7 @@ def repack_public(public_dir: Path = PUBLIC_DIR) -> dict:
     institutions = read_json(public_dir / "institutions.json")
     normalize_institution_countries(institutions)
     write_json(public_dir / "institutions.json", institutions)
+    authors = unify_authors(catalog, details, public_dir)
     shards = write_catalog_and_details(catalog, details, public_dir)
     write_json(public_dir / "stats.json", build_stats(catalog, institutions))
     manifest = read_json(public_dir / "manifest.json")
@@ -193,10 +251,15 @@ def repack_public(public_dir: Path = PUBLIC_DIR) -> dict:
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "country_count": len({item["country_code"] for item in institutions if item.get("country_code")}),
+        "author_count": authors["author_count"],
         "detail_shards": shards,
     })
     write_json(public_dir / "manifest.json", manifest)
+    quality = read_json(public_dir / "quality.json")
+    quality["merged_author_id_count"] = authors["total_aliases"]
+    write_json(public_dir / "quality.json", quality)
     return {
+        **authors,
         "paper_count": len(catalog),
         "venue_count": len({paper["venue"]["id"] for paper in catalog if paper.get("venue")}),
         "detail_shard_count": len(shards),

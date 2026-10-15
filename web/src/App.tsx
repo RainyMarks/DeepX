@@ -5,7 +5,7 @@ import { PaperDrawer } from "./components/PaperDrawer";
 import { PaperList } from "./components/PaperList";
 import { AuthorDrawer, AuthorsView, InstitutionsView } from "./components/People";
 import { formatNumber, Icon } from "./components/ui";
-import { loadAtlasContent, loadAtlasSummary, loadPaperDetail } from "./data";
+import { loadAtlasContent, loadAtlasSummary, loadAuthorAliases, loadPaperDetail } from "./data";
 import { exportPapers } from "./exports";
 import {
   activeFilterCount,
@@ -49,6 +49,7 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detail, setDetail] = useState<DetailState | null>(null);
   const fromHistory = useRef(false);
+  const replaceNext = useRef(false);
   const previous = useRef(state);
   const searchInput = useRef<HTMLInputElement | null>(null);
   const { view, filters, sort } = state;
@@ -92,8 +93,9 @@ export default function App() {
     }
     const url = `${location.pathname}${toSearch(state)}`;
     const navigation = before.view !== state.view || before.paper !== state.paper || before.author !== state.author;
-    if (navigation) history.pushState(null, "", url);
+    if (navigation && !replaceNext.current) history.pushState(null, "", url);
     else history.replaceState(null, "", url);
+    replaceNext.current = false;
     if (before.view !== state.view) scrollTo({ top: 0 });
   }, [state]);
 
@@ -150,6 +152,20 @@ export default function App() {
     return summarizeAuthors(data.papers.filter((paper) => paper.authors.some((author) => author.id === state.author)))
       .find((author) => author.id === state.author) ?? null;
   }, [state.author, data]);
+
+  // Links to an author id that was later merged into another identity.
+  useEffect(() => {
+    if (!state.author || !data || selectedAuthor) return;
+    let cancelled = false;
+    loadAuthorAliases().then((aliases) => {
+      const target = aliases[state.author];
+      if (!cancelled && target) {
+        replaceNext.current = true;
+        setState((current) => (current.author === state.author ? { ...current, author: target } : current));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [state.author, data, selectedAuthor]);
 
   // --- paper detail -----------------------------------------------------
   useEffect(() => {

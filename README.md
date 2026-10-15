@@ -64,7 +64,14 @@ python -m atlas.cli validate-public --strict
 
 - `catalog.json`：`{"venues": [...], "authors": [...], "papers": [...]}`。每个发表渠道（含等级徽章）与作者只存一次，论文通过 `venue_id` 和作者下标引用。
 - `details/<xx>.json`：完整论文记录，按论文 ID 末两位十六进制分为 256 片，打开一篇论文只需下载约 70 KB。
-- `institutions.json`、`authors.json`、`stats.json`、`quality.json`、`manifest.json`。
+- `authors.json`：合并重复身份后的作者索引；`author_aliases.json` 记录每个被合并的旧 ID、合并目标与证据。
+- `institutions.json`、`stats.json`、`quality.json`、`manifest.json`。
+
+### 作者身份合并
+
+OpenAlex 与 Semantic Scholar 提供作者 ID，而 Crossref、DBLP、arXiv 和种子数据只有姓名，同一位学者因此常以多个 ID 出现。发布时 `atlas/identity.py` 只在强证据下合并：相同 ORCID；或姓名规范化后相同且共享作者署名机构；或姓名相同且至少有两位相同合作者。若合并后会出现两个不同 ORCID，或两个 ID 署名在同一篇论文上，则拒绝合并；仅凭同名绝不合并。
+
+维护者可在 [`data/curated/author_identity.json`](data/curated/author_identity.json) 中强制合并（`merge`）或禁止合并（`separate`）指定 ID 对。旧的 `?author=` 链接会通过别名表自动跳转到合并后的学者档案。
 
 公共站首屏只加载 `manifest.json`、`stats.json`、`catalog.json`、`institutions.json`；地图（Leaflet）按需加载。
 

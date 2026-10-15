@@ -113,3 +113,13 @@ test("map clusters open a regional panel and paper records", async ({ page }, te
   await page.getByRole("button", { name: "关闭区域论文" }).click();
   await expect(explorer).not.toHaveClass(/has-selection/);
 });
+
+test("links to a merged author id open the unified profile", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop coverage is sufficient");
+  // author-b4a7147b6c5677 was merged into Jessica Fridrich's OpenAlex identity via a shared ORCID.
+  await ready(page, "/?view=authors&author=author-b4a7147b6c5677");
+  const drawer = page.getByRole("complementary", { name: "学者档案" });
+  await expect(drawer.getByRole("heading", { name: "Jessica Fridrich" })).toBeVisible();
+  await expect(page).toHaveURL(/author=a5081020569/);
+  await expect(drawer.locator(".mini-metrics dd").first()).toHaveText("79");
+});

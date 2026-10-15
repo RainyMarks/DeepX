@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from atlas.dedupe import canonical_arxiv, canonical_doi, normalized_title, stable_id
 from atlas.jsonl import iter_jsonl
 from atlas.models import (
-    AuthorIndex,
     AuthorRef,
     DatasetManifest,
     Institution,
@@ -28,6 +27,7 @@ from atlas.release import (
     pack_catalog,
     read_catalog,
     read_details,
+    unify_authors,
     write_catalog_and_details,
     write_json,
 )
@@ -513,15 +513,6 @@ def build_public() -> DatasetManifest:
                 institutions[institution_id].paper_ids.append(paper.id)
     institutions = {key: value for key, value in institutions.items() if value.paper_ids}
 
-    author_index: dict[str, AuthorIndex] = {}
-    for paper in papers:
-        for author in paper.authors:
-            entry = author_index.setdefault(author.id, AuthorIndex(id=author.id, name=author.name, orcid=author.orcid))
-            entry.paper_ids.append(paper.id)
-            entry.institution_ids = sorted(set(entry.institution_ids + author.institution_ids))
-            for task in paper.task_tags:
-                entry.task_counts[task] = entry.task_counts.get(task, 0) + 1
-
     catalog = []
     details = []
     for paper in papers:
@@ -562,8 +553,11 @@ def build_public() -> DatasetManifest:
     }
     quality["warnings"] = [] if quality["quality_targets"]["human_verified_300"] else ["人工核验核心集尚未达到 300；自动记录不会冒充人工核验"]
 
+    # A fresh build starts from raw source ids, so earlier alias records no longer apply.
+    (PUBLIC_DIR / "author_aliases.json").unlink(missing_ok=True)
+    authors = unify_authors(catalog, details)
+    quality["merged_author_id_count"] = authors["total_aliases"]
     shard_names = write_catalog_and_details(catalog, details)
-    write_json(PUBLIC_DIR / "authors.json", [item.model_dump(mode="json") for item in sorted(author_index.values(), key=lambda x: (-len(x.paper_ids), x.name))])
     write_json(PUBLIC_DIR / "institutions.json", institution_records)
     write_json(PUBLIC_DIR / "stats.json", build_stats(catalog, institution_records))
     write_json(PUBLIC_DIR / "quality.json", quality)
@@ -571,7 +565,7 @@ def build_public() -> DatasetManifest:
     manifest = DatasetManifest(
         schema_version=SCHEMA_VERSION,
         dataset_version=str(datetime.now(UTC).date()), paper_count=len(papers), verified_paper_count=quality["verified_paper_count"],
-        author_count=len(author_index), institution_count=len(institution_records), mapped_institution_count=len(mapped),
+        author_count=authors["author_count"], institution_count=len(institution_records), mapped_institution_count=len(mapped),
         country_count=len({item["country_code"] for item in institution_records if item["country_code"]}),
         candidate_count=quality["candidate_count"], detail_shards=shard_names,
     )

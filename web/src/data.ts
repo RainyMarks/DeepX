@@ -49,3 +49,13 @@ export function loadPaperDetail(id: string, manifest: Pick<Manifest, "detail_sha
   }
   return pending.then((records) => records.get(id) ?? null);
 }
+
+let aliasRequest: Promise<Record<string, string>> | null = null;
+
+/** Map of author ids merged into another identity (old links may still use them). */
+export function loadAuthorAliases(): Promise<Record<string, string>> {
+  aliasRequest ??= readJson<{ aliases: Record<string, string> }>("author_aliases.json")
+    .then((file) => file.aliases)
+    .catch(() => ({}));
+  return aliasRequest;
+}
