@@ -7,6 +7,7 @@ export interface FilterState {
   country: string;
   venue: string;
   source: string;
+  venueType: string;
   task: string;
   contribution: string;
   review: string;
@@ -25,7 +26,7 @@ export interface JournalRankingAvailability {
 }
 
 export const DEFAULT_FILTERS: FilterState = {
-  q: "", author: "", institution: "", country: "", venue: "", source: "",
+  q: "", author: "", institution: "", country: "", venue: "", source: "", venueType: "",
   task: "", contribution: "", review: "", ccf: "", journalSystem: "", journal: "", yearFrom: "", yearTo: "",
 };
 
@@ -80,6 +81,7 @@ export interface PaperSearchEntry {
   authors: string[];
   institutions: string[];
   countryKeys: string[];
+  countryCodes: string[];
   venue: string;
   venueNormalized: string;
   venueNameNormalized: string;
@@ -197,6 +199,7 @@ export function buildPaperSearchIndex(
       authors,
       institutions: institutionNames,
       countryKeys: paperInstitutions.flatMap((item) => [item.country_code, item.country]).filter(Boolean),
+      countryCodes: [...new Set(paperInstitutions.map((item) => item.country_code || item.country).filter(Boolean))],
       venue,
       venueNormalized: normalizeSearchText(venue),
       venueNameNormalized: normalizeSearchText(venueName),
@@ -206,6 +209,145 @@ export function buildPaperSearchIndex(
   }));
 }
 
+export function paperVenueType(paper: CatalogPaper): string {
+  const type = paper.venue?.type ?? "";
+  return type === "journal" || type === "conference" || type === "preprint" || type === "book" ? type : "unknown";
+}
+
+function ccfLevel(paper: CatalogPaper): string {
+  return paper.venue?.type === "conference" ? paper.venue.rankings.find((item) => item.system === "CCF")?.level ?? "" : "";
+}
+
+function journalZones(paper: CatalogPaper, system: string): string[] {
+  if (paper.venue?.type !== "journal") return [];
+  const zones = new Set<string>();
+  for (const ranking of paper.venue.rankings) {
+    if (ranking.system !== "CAS" && ranking.system !== "JCR") continue;
+    if (system && ranking.system !== system) continue;
+    const zone = ranking.level.match(/^Q?([1-4])$/)?.[1];
+    if (zone) zones.add(zone);
+    if (ranking.system === "CAS" && ranking.is_top) zones.add("TOP");
+  }
+  return [...zones];
+}
+
+/** Filters that are shown as option lists with result counts. */
+export type FacetKey = "task" | "contribution" | "venueType" | "ccf" | "journal" | "country" | "source" | "review" | "year";
+export type FacetCounts = Record<FacetKey, Map<string, number>>;
+
+function facetValues(key: FacetKey, paper: CatalogPaper, entry: PaperSearchEntry, journalSystem: string): readonly string[] {
+  switch (key) {
+    case "task": return paper.task_tags;
+    case "contribution": return [paper.contribution_type];
+    case "venueType": return [paperVenueType(paper)];
+    case "ccf": { const level = ccfLevel(paper); return level ? [level] : []; }
+    case "journal": return journalZones(paper, journalSystem);
+    case "country": return entry.countryCodes;
+    case "source": return paper.sources;
+    case "review": return [paper.review_status];
+    case "year": return paper.year ? [String(paper.year)] : [];
+  }
+}
+
+const FACET_KEYS: FacetKey[] = ["task", "contribution", "venueType", "ccf", "journal", "country", "source", "review", "year"];
+
+export type SortKey = "recent" | "citations" | "oldest" | "title";
+
+export const SORTS: Record<SortKey, string> = {
+  recent: "最新发表",
+  citations: "引用最多",
+  oldest: "最早发表",
+  title: "标题 A–Z",
+};
+
+export function sortPapers(papers: CatalogPaper[], sort: SortKey = "recent"): CatalogPaper[] {
+  const byId = (a: CatalogPaper, b: CatalogPaper) => a.id.localeCompare(b.id);
+  const comparators: Record<SortKey, (a: CatalogPaper, b: CatalogPaper) => number> = {
+    recent: (a, b) => (b.year ?? 0) - (a.year ?? 0) || b.citation_count - a.citation_count || byId(a, b),
+    citations: (a, b) => b.citation_count - a.citation_count || (b.year ?? 0) - (a.year ?? 0) || byId(a, b),
+    oldest: (a, b) => (a.year ?? 9999) - (b.year ?? 9999) || b.citation_count - a.citation_count || byId(a, b),
+    title: (a, b) => a.title.localeCompare(b.title, "en") || byId(a, b),
+  };
+  return [...papers].sort(comparators[sort]);
+}
+
+export interface SearchResult {
+  papers: CatalogPaper[];
+  /** For each facet: option counts under every *other* active filter. */
+  facets: FacetCounts;
+  /** Filters after venue/ranking conflicts were resolved. */
+  effective: FilterState;
+}
+
+/**
+ * Filter, count facets and sort in a single pass. A paper rejected by exactly
+ * one facet still counts towards that facet's options, so every option shows
+ * how many results selecting it would give (disjunctive faceting).
+ */
+export function searchPapers(
+  papers: CatalogPaper[],
+  filters: FilterState,
+  index: PaperSearchIndex,
+  sort: SortKey = "recent",
+): SearchResult {
+  const effective = reconcileVenueRankingFilters(filters, papers, index).filters;
+  const query = effective.q.trim().toLowerCase();
+  const queryNormalized = normalizeSearchText(correctedVenueQuery(effective.q));
+  const authorQuery = effective.author.trim().toLowerCase();
+  const institutionQuery = effective.institution.trim().toLowerCase();
+  const venueQuery = correctedVenueQuery(effective.venue).toLowerCase();
+  const venueQueryNormalized = normalizeSearchText(venueQuery);
+  const yearFrom = effective.yearFrom ? Number(effective.yearFrom) : null;
+  const yearTo = effective.yearTo ? Number(effective.yearTo) : null;
+
+  type Check = [FacetKey | "text", (paper: CatalogPaper, entry: PaperSearchEntry) => boolean];
+  const checks: Check[] = [];
+  if (query) checks.push(["text", (_, entry) => entry.searchable.includes(query) || (queryNormalized !== "" && entry.searchableNormalized.includes(queryNormalized))]);
+  if (authorQuery) checks.push(["text", (_, entry) => entry.authors.some((item) => item.includes(authorQuery))]);
+  if (institutionQuery) checks.push(["text", (_, entry) => entry.institutions.some((item) => item.includes(institutionQuery))]);
+  if (venueQuery) checks.push(["text", (_, entry) => entry.venue.includes(venueQuery) || (venueQueryNormalized !== "" && entry.venueNormalized.includes(venueQueryNormalized))]);
+  if (effective.country) checks.push(["country", (_, entry) => entry.countryKeys.includes(effective.country)]);
+  if (effective.source) checks.push(["source", (paper) => paper.sources.includes(effective.source)]);
+  if (effective.venueType) checks.push(["venueType", (paper) => paperVenueType(paper) === effective.venueType]);
+  if (effective.task) checks.push(["task", (paper) => paper.task_tags.includes(effective.task as TaskId)]);
+  if (effective.contribution) checks.push(["contribution", (paper) => paper.contribution_type === effective.contribution]);
+  if (effective.review) checks.push(["review", (paper) => paper.review_status === effective.review]);
+  if (effective.ccf) checks.push(["ccf", (paper) => ccfLevel(paper) === effective.ccf]);
+  if (effective.journalSystem || effective.journal) {
+    checks.push(["journal", (paper) => journalRankingMatches(paper, effective.journalSystem, effective.journal)]);
+  }
+  if (yearFrom !== null || yearTo !== null) {
+    checks.push(["year", (paper) => (yearFrom === null || (paper.year ?? 0) >= yearFrom) && (yearTo === null || (paper.year ?? 9999) <= yearTo)]);
+  }
+
+  const facets = Object.fromEntries(FACET_KEYS.map((key) => [key, new Map<string, number>()])) as FacetCounts;
+  const count = (key: FacetKey, paper: CatalogPaper, entry: PaperSearchEntry) => {
+    const counts = facets[key];
+    for (const value of facetValues(key, paper, entry, effective.journalSystem)) counts.set(value, (counts.get(value) ?? 0) + 1);
+  };
+
+  const matched: CatalogPaper[] = [];
+  for (const paper of papers) {
+    const entry = index.get(paper.id);
+    if (!entry) continue;
+    let failed: FacetKey | "text" | null = null;
+    let failures = 0;
+    for (const [key, check] of checks) {
+      if (check(paper, entry)) continue;
+      failed = key;
+      failures += 1;
+      if (failures > 1) break;
+    }
+    if (failures === 0) {
+      matched.push(paper);
+      for (const key of FACET_KEYS) count(key, paper, entry);
+    } else if (failures === 1 && failed !== "text") {
+      count(failed as FacetKey, paper, entry);
+    }
+  }
+  return { papers: sortPapers(matched, sort), facets, effective };
+}
+
 export function filterPapers(
   papers: CatalogPaper[],
   filters: FilterState,
@@ -213,30 +355,11 @@ export function filterPapers(
   searchIndex?: PaperSearchIndex,
 ): CatalogPaper[] {
   const index = searchIndex ?? buildPaperSearchIndex(papers, institutions);
-  const effectiveFilters = reconcileVenueRankingFilters(filters, papers, index).filters;
-  const query = effectiveFilters.q.trim().toLowerCase();
-  const queryNormalized = normalizeSearchText(correctedVenueQuery(effectiveFilters.q));
-  const authorQuery = filters.author.trim().toLowerCase();
-  const institutionQuery = filters.institution.trim().toLowerCase();
-  const venueQuery = correctedVenueQuery(effectiveFilters.venue).toLowerCase();
-  const venueQueryNormalized = normalizeSearchText(venueQuery);
-  return papers.filter((paper) => {
-    const search = index.get(paper.id);
-    if (!search) return false;
-    const ccf = paper.venue?.type === "conference" ? paper.venue.rankings.find((item) => item.system === "CCF")?.level ?? "" : "";
-    const journal = journalRankingMatches(paper, effectiveFilters.journalSystem, effectiveFilters.journal);
-    return (!query || search.searchable.includes(query) || search.searchableNormalized.includes(queryNormalized))
-      && (!authorQuery || search.authors.some((item) => item.includes(authorQuery)))
-      && (!institutionQuery || search.institutions.some((item) => item.includes(institutionQuery)))
-      && (!effectiveFilters.country || search.countryKeys.includes(effectiveFilters.country))
-      && (!venueQuery || search.venue.includes(venueQuery) || search.venueNormalized.includes(venueQueryNormalized))
-      && (!effectiveFilters.source || paper.sources.includes(effectiveFilters.source))
-      && (!effectiveFilters.task || paper.task_tags.includes(effectiveFilters.task as TaskId))
-      && (!effectiveFilters.contribution || paper.contribution_type === effectiveFilters.contribution)
-      && (!effectiveFilters.review || paper.review_status === effectiveFilters.review)
-      && (!effectiveFilters.ccf || ccf === effectiveFilters.ccf)
-      && journal
-      && (!effectiveFilters.yearFrom || (paper.year ?? 0) >= Number(effectiveFilters.yearFrom))
-      && (!effectiveFilters.yearTo || (paper.year ?? 9999) <= Number(effectiveFilters.yearTo));
-  }).sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || b.citation_count - a.citation_count || a.id.localeCompare(b.id));
+  return searchPapers(papers, filters, index).papers;
+}
+
+/** Number of user-facing filters that are set. */
+export function activeFilterCount(filters: FilterState): number {
+  return Object.entries(filters).filter(([key, value]) => value && key !== "journalSystem").length
+    + (filters.journalSystem && !filters.journal ? 1 : 0);
 }

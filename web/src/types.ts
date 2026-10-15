@@ -8,6 +8,8 @@ export type TaskId =
   | "image_steganalysis"
   | "digital_watermarking";
 
+export type ContributionType = "method" | "dataset" | "benchmark" | "survey" | "analysis";
+
 export interface Ranking {
   system: "CCF" | "JCR" | "CAS";
   level: string;
@@ -27,16 +29,22 @@ export interface Venue {
   rankings: Ranking[];
 }
 
+export interface AuthorRef {
+  id: string;
+  name: string;
+}
+
+/** A catalog paper with its venue and authors resolved. */
 export interface CatalogPaper {
   id: string;
   title: string;
-  title_zh: string;
+  title_zh?: string;
   year: number | null;
-  authors: { id: string; name: string }[];
+  authors: AuthorRef[];
   institution_ids: string[];
   venue: Venue | null;
   task_tags: TaskId[];
-  contribution_type: "method" | "dataset" | "benchmark" | "survey" | "analysis";
+  contribution_type: ContributionType;
   review_status: "verified" | "auto";
   primary_url: string;
   citation_count: number;
@@ -44,21 +52,20 @@ export interface CatalogPaper {
   abstract_excerpt: string;
 }
 
-export interface PaperDetail extends CatalogPaper {
+/** catalog.json as published: venues and authors are stored once. */
+export interface PackedCatalog {
+  venues: Venue[];
+  authors: AuthorRef[];
+  papers: (Omit<CatalogPaper, "venue" | "authors"> & { venue_id: string | null; authors: number[] })[];
+}
+
+export interface PaperDetail extends Omit<CatalogPaper, "authors"> {
+  authors: (AuthorRef & { orcid?: string; institution_ids?: string[] })[];
   abstract: string;
   doi: string;
   arxiv_id: string;
   publication_date: string;
   provenance: { source: string; source_id: string; url: string; query: string; retrieved_at: string }[];
-}
-
-export interface Author {
-  id: string;
-  name: string;
-  orcid: string;
-  institution_ids: string[];
-  paper_ids: string[];
-  task_counts: Record<TaskId, number>;
 }
 
 export interface Institution {
@@ -91,17 +98,19 @@ export interface Manifest {
   data_notice: string;
 }
 
-export interface AtlasData {
-  manifest: Manifest;
-  papers: CatalogPaper[];
-  authors: Author[];
-  institutions: Institution[];
-  stats: {
-    tasks: { id: TaskId; label: string; count: number }[];
-    years: Record<string, number>;
-    reviews: Record<string, number>;
-    countries: [string, number][];
-  };
+export interface Stats {
+  tasks: { id: TaskId; label: string; count: number }[];
+  years: Record<string, number>;
+  reviews: Record<string, number>;
+  countries: [string, number][];
 }
 
-export type AtlasSummary = Pick<AtlasData, "manifest" | "stats">;
+export interface AtlasSummary {
+  manifest: Manifest;
+  stats: Stats;
+}
+
+export interface AtlasData extends AtlasSummary {
+  papers: CatalogPaper[];
+  institutions: Institution[];
+}

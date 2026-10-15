@@ -1,4 +1,4 @@
-import type { AtlasData, AtlasSummary, PaperDetail } from "./types";
+import type { AtlasData, AtlasSummary, CatalogPaper, Institution, Manifest, PackedCatalog, PaperDetail, Stats } from "./types";
 
 const base = `${import.meta.env.BASE_URL}data/v1`;
 
@@ -9,26 +9,43 @@ async function readJson<T>(path: string): Promise<T> {
 }
 
 export async function loadAtlasSummary(): Promise<AtlasSummary> {
-  const [manifest, stats] = await Promise.all([
-    readJson<AtlasData["manifest"]>("manifest.json"),
-    readJson<AtlasData["stats"]>("stats.json"),
-  ]);
+  const [manifest, stats] = await Promise.all([readJson<Manifest>("manifest.json"), readJson<Stats>("stats.json")]);
   return { manifest, stats };
 }
 
-export async function loadAtlasContent(summary: AtlasSummary): Promise<AtlasData> {
-  const [papers, authors, institutions] = await Promise.all([
-    readJson<AtlasData["papers"]>("catalog.json"),
-    readJson<AtlasData["authors"]>("authors.json"),
-    readJson<AtlasData["institutions"]>("institutions.json"),
-  ]);
-  return { ...summary, papers, authors, institutions };
+/** Resolve the shared venue/author tables of catalog.json (also accepts the legacy flat list). */
+export function unpackCatalog(raw: PackedCatalog | CatalogPaper[]): CatalogPaper[] {
+  if (Array.isArray(raw)) return raw;
+  const venues = new Map(raw.venues.map((venue) => [venue.id, venue]));
+  return raw.papers.map(({ venue_id, authors, ...paper }) => ({
+    ...paper,
+    venue: venue_id ? venues.get(venue_id) ?? null : null,
+    authors: authors.map((index) => raw.authors[index]),
+  }));
 }
 
-const detailCache = new Map<string, PaperDetail[]>();
+export async function loadAtlasContent(summary: AtlasSummary): Promise<AtlasData> {
+  const [catalog, institutions] = await Promise.all([
+    readJson<PackedCatalog | CatalogPaper[]>("catalog.json"),
+    readJson<Institution[]>("institutions.json"),
+  ]);
+  return { ...summary, papers: unpackCatalog(catalog), institutions };
+}
 
-export async function loadPaperDetail(id: string): Promise<PaperDetail | null> {
-  const shard = id.at(-1) ?? "0";
-  if (!detailCache.has(shard)) detailCache.set(shard, await readJson<PaperDetail[]>(`details/${shard}.json`));
-  return detailCache.get(shard)?.find((paper) => paper.id === id) ?? null;
+const shardCache = new Map<string, Promise<Map<string, PaperDetail>>>();
+
+export function detailShard(id: string, manifest: Pick<Manifest, "detail_shards">): string {
+  const length = manifest.detail_shards[0]?.length ?? 1;
+  return id.slice(-length);
+}
+
+export function loadPaperDetail(id: string, manifest: Pick<Manifest, "detail_shards">): Promise<PaperDetail | null> {
+  const shard = detailShard(id, manifest);
+  let pending = shardCache.get(shard);
+  if (!pending) {
+    pending = readJson<PaperDetail[]>(`details/${shard}.json`).then((records) => new Map(records.map((record) => [record.id, record])));
+    pending.catch(() => shardCache.delete(shard));
+    shardCache.set(shard, pending);
+  }
+  return pending.then((records) => records.get(id) ?? null);
 }

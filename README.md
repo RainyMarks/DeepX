@@ -36,6 +36,9 @@ python -m atlas.cli collect-secondary --max-per-query 40
 # 合并、去重、分类并生成 web/public/data/v1
 python -m atlas.cli publish
 
+# 不重新采集，仅把现有公开数据重写为当前发布格式
+python -m atlas.cli repack-public
+
 # 发布前门禁
 python -m atlas.cli validate-public --strict
 ```
@@ -44,10 +47,31 @@ python -m atlas.cli validate-public --strict
 
 严格门禁同时检查 2,000 条候选、1,000 篇公开论文和 300 篇人工核验。前两项可由数据管线完成；人工核验未达标时命令会如实失败，不能用自动记录补足。
 
+## 公共站
+
+公共站包含五个视图，筛选条件、排序和打开的论文/学者都会写入 URL，可直接分享：
+
+- **概览**：研究方向卡片（含近 16 年趋势）、年度发表趋势、高被引论文、主要发表渠道、活跃机构与国家/地区，统计随当前筛选范围变化。
+- **论文库**：分面筛选（研究方向、年份、渠道类型、CCF/中科院/JCR 等级、贡献类型、国家/地区、来源），每个选项显示选中后的结果数；支持排序与 CSV/BibTeX/JSON 导出。
+- **学者 / 机构**：按当前筛选范围统计；学者档案包含方向分布、年度产出、署名机构与合作者。
+- **研究地图**：机构聚类与合作连线，点击节点查看区域论文。
+
+支持浅色/深色模式；按 `/` 聚焦搜索框。
+
+## 公开数据格式
+
+`web/public/data/v1/` 由 `atlas/release.py` 统一读写（schema 2.0.0）：
+
+- `catalog.json`：`{"venues": [...], "authors": [...], "papers": [...]}`。每个发表渠道（含等级徽章）与作者只存一次，论文通过 `venue_id` 和作者下标引用。
+- `details/<xx>.json`：完整论文记录，按论文 ID 末两位十六进制分为 256 片，打开一篇论文只需下载约 70 KB。
+- `institutions.json`、`authors.json`、`stats.json`、`quality.json`、`manifest.json`。
+
+公共站首屏只加载 `manifest.json`、`stats.json`、`catalog.json`、`institutions.json`；地图（Leaflet）按需加载。
+
 ## 项目结构
 
 - `web/`：React、TypeScript、Vite 公共站。
-- `atlas/`：多源采集、数据规范化、审核后台和静态导出。
+- `atlas/`：多源采集、数据规范化、审核后台和静态导出（`release.py` 负责公开数据格式）。
 - `data/authorized/`：经授权导入的种子数据。
 - `data/curated/`：可审计的人工决定和 venue 等级。
 - `web/public/data/v1/`：公开站读取的确定性导出。

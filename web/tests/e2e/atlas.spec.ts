@@ -1,96 +1,115 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-test("loads the atlas and switches core views", async ({ page, isMobile }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "生成图像取证研究图谱" })).toBeVisible();
-  await expect(page.locator(".dataset-stamp small")).toContainText("篇论文");
+async function ready(page: Page, url: string) {
+  await page.goto(url);
   await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
-  await page.getByRole("button", { name: "论文库" }).click();
-  await expect(page.getByRole("heading", { name: "论文库" })).toBeVisible();
-  if (isMobile) await page.getByRole("button", { name: /筛选与导出/ }).click();
-  await page.getByLabel("研究任务").selectOption("scene_text_forgery");
-  await expect(page.locator(".paper-card").first()).toBeVisible();
+}
+
+const resultCount = (page: Page) => page.getByTestId("result-count");
+
+test("overview links into a filtered paper library", async ({ page }) => {
+  await ready(page, "/");
+  await expect(page.getByRole("heading", { level: 1, name: "生成图像取证研究图谱" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "研究方向" })).toBeVisible();
+  await page.locator(".task-card", { hasText: "场景文本图像伪造" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "论文库" })).toBeVisible();
+  await expect(page).toHaveURL(/view=papers/);
+  await expect(page).toHaveURL(/task=scene_text_forgery/);
+  await expect(page.getByRole("button", { name: "移除筛选：场景文本图像伪造" })).toBeVisible();
+  await expect(page.locator(".paper-row").first()).toBeVisible();
+});
+
+test("search from the top bar switches to results", async ({ page }) => {
+  await ready(page, "/");
+  await page.getByRole("searchbox", { name: "搜索论文" }).fill("steganalysis");
+  await expect(page).toHaveURL(/view=papers/);
+  await expect(page.locator(".paper-row").first()).toContainText(/stegan/i);
 });
 
 test("mobile exposes the filter drawer", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.includes("mobile"), "mobile-only assertion");
-  await page.goto("/");
-  await page.getByRole("button", { name: /筛选与导出/ }).click();
-  await expect(page.getByLabel("关键词")).toBeVisible();
+  await ready(page, "/?view=papers");
+  const panel = page.getByRole("complementary", { name: "筛选条件" });
+  await expect(panel).not.toBeInViewport();
+  await page.getByRole("button", { name: /^筛选/ }).click();
+  await expect(panel.getByRole("group", { name: "研究方向" })).toBeInViewport();
+  await panel.getByRole("button", { name: /深度伪造与人脸操纵/ }).click();
+  await panel.getByRole("button", { name: /^查看 .* 条结果$/ }).click();
+  await expect(panel).not.toBeInViewport();
+  await expect(page).toHaveURL(/task=deepfake_detection/);
 });
 
-test("opens an author record with trends and collaborations", async ({ page }, testInfo) => {
+test("opens an author profile with trends and collaborators", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "desktop coverage is sufficient");
-  await page.goto("/?view=authors");
-  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
-  await page.getByRole("button", { name: "打开作者档案 →" }).first().click();
-  await expect(page.getByRole("complementary", { name: "作者档案" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "年度趋势" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "主要合作作者" })).toBeVisible();
+  await ready(page, "/?view=authors");
+  await page.locator(".data-table .row-link").first().click();
+  const drawer = page.getByRole("complementary", { name: "学者档案" });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "年度产出" })).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "主要合作者" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
 });
 
 test("restores a shared filter URL and exports CSV", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "desktop coverage is sufficient");
-  await page.goto("/?view=papers&task=scene_text_forgery");
-  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole("heading", { name: "论文库" })).toBeVisible();
-  await expect(page.getByLabel("研究任务")).toHaveValue("scene_text_forgery");
+  await ready(page, "/?view=papers&task=scene_text_forgery");
+  const option = page.getByRole("group", { name: "研究方向" }).getByRole("button", { name: /场景文本图像伪造/ });
+  await expect(option).toHaveAttribute("aria-pressed", "true");
+  await page.getByText("导出").click();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "CSV" }).click();
-  expect((await download).suggestedFilename()).toContain(".csv");
+  await page.getByRole("menuitem", { name: "CSV 表格" }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.csv$/);
 });
 
 test("filters real CAS TOP, CAS zone 1 and JCR Q1 records", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "desktop filter regression coverage");
-  await page.goto("/?view=papers&journalSystem=CAS&journal=TOP");
-  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByLabel("期刊评价")).toBeEnabled();
-  await expect(page.getByLabel("期刊分区")).toBeEnabled();
-  await expect(page.getByLabel("期刊评价")).toHaveValue("CAS");
-  await expect(page.getByLabel("期刊分区")).toHaveValue("TOP");
-  await expect(page.locator(".filter-result strong")).toHaveText("585");
+  await ready(page, "/?view=papers&journalSystem=CAS&journal=TOP");
+  const zones = page.getByRole("group", { name: "期刊分区" });
+  await expect(page.getByRole("radio", { name: "中科院 2025" })).toHaveAttribute("aria-checked", "true");
+  await expect(zones.getByRole("button", { name: /中科院 TOP/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(resultCount(page)).toHaveText("585");
 
-  await page.getByLabel("期刊分区").selectOption("1");
-  await expect(page.locator(".filter-result strong")).toHaveText("517");
-  await page.getByLabel("期刊评价").selectOption("JCR");
-  await expect(page.locator(".filter-result strong")).toHaveText("627");
+  await zones.getByRole("button", { name: /一区 \/ Q1/ }).click();
+  await expect(resultCount(page)).toHaveText("517");
+  await page.getByRole("radio", { name: "JCR 2026" }).click();
+  await expect(resultCount(page)).toHaveText("627");
 });
 
-test("opens an efficient cluster intelligence dock without covering the map", async ({ page }, testInfo) => {
+test("opens a paper record from a deep link and closes it with history", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop coverage is sufficient");
+  await ready(page, "/?view=papers");
+  await page.locator(".paper-title").first().click();
+  const drawer = page.getByRole("complementary", { name: "论文详情" });
+  await expect(drawer.locator(".record-title")).toBeVisible();
+  await expect(page).toHaveURL(/paper=paper-/);
+  const url = page.url();
+
+  await page.goBack();
+  await expect(drawer).toHaveCount(0);
+
+  await ready(page, url);
+  await expect(page.getByRole("complementary", { name: "论文详情" }).locator(".record-title")).toBeVisible();
+});
+
+test("map clusters open a regional panel and paper records", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "desktop interaction coverage");
-  await page.goto("/?view=map");
-  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
-  const node = page.locator(".signal-node-host").first();
-  await expect(node).toBeVisible();
-  await node.click();
-  await expect(page.getByRole("complementary", { name: "区域论文情报舱" })).toBeVisible();
-  await expect(page.locator(".cluster-abstract").first()).toBeVisible();
-  await expect(page.locator(".map-explorer")).toHaveClass(/has-cluster/);
-});
-
-test("uses the full map workbench and keeps paper details reversible", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name.includes("mobile"), "desktop map workbench coverage");
-  await page.goto("/?view=map");
-  await expect(page.locator('[data-atlas-ready="true"]')).toBeVisible({ timeout: 45_000 });
-  await expect(page.locator(".stats-column")).toHaveCount(0);
+  await ready(page, "/?view=map");
   await expect(page.locator("footer")).toHaveCount(0);
-
   const explorer = page.locator(".map-explorer");
-  const explorerBox = await explorer.boundingBox();
-  const viewport = page.viewportSize();
-  expect(explorerBox).not.toBeNull();
-  expect(viewport).not.toBeNull();
-  expect(explorerBox!.width).toBeGreaterThan(viewport!.width - 310);
-  expect(Math.abs(explorerBox!.y + explorerBox!.height - viewport!.height)).toBeLessThan(24);
+  const box = await explorer.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box!.width).toBeGreaterThan(viewport.width - 340);
+  expect(Math.abs(box!.y + box!.height - viewport.height)).toBeLessThan(24);
 
-  await page.locator(".signal-node-host").first().click();
-  await page.locator(".cluster-paper-open").first().click();
+  await page.locator(".map-node-host").last().click();
+  const panel = page.getByRole("complementary", { name: "区域论文" });
+  await expect(panel).toBeVisible();
+  await panel.locator(".map-papers button").first().click();
   await expect(page.getByRole("complementary", { name: "论文详情" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "区域论文情报舱" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "← 返回区域论文" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("complementary", { name: "论文详情" })).toHaveCount(0);
-  await expect(page.getByRole("complementary", { name: "区域论文情报舱" })).toBeVisible();
-  await page.getByRole("button", { name: "关闭区域情报舱" }).click();
-  await expect(explorer).not.toHaveClass(/has-cluster/);
+  await expect(panel).toBeVisible();
+  await page.getByRole("button", { name: "关闭区域论文" }).click();
+  await expect(explorer).not.toHaveClass(/has-selection/);
 });

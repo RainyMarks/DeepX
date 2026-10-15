@@ -1,280 +1,373 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AtlasMap } from "./components/AtlasMap";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { FilterPanel } from "./components/FilterPanel";
+import { Overview } from "./components/Overview";
+import { PaperDrawer } from "./components/PaperDrawer";
+import { PaperList } from "./components/PaperList";
+import { AuthorDrawer, AuthorsView, InstitutionsView } from "./components/People";
+import { formatNumber, Icon } from "./components/ui";
 import { loadAtlasContent, loadAtlasSummary, loadPaperDetail } from "./data";
 import { exportPapers } from "./exports";
 import {
-  availableJournalZones,
-  correctedVenueQuery,
+  activeFilterCount,
+  buildPaperSearchIndex,
   DEFAULT_FILTERS,
-  filterPapers,
   getJournalRankingAvailability,
   reconcileJournalRankingAvailability,
+  searchPapers,
+  SORTS,
   type FilterState,
+  type SortKey,
 } from "./filters";
-import { CONTRIBUTIONS, TASKS } from "./task";
-import type { AtlasData, AtlasSummary, Author, CatalogPaper, Institution, PaperDetail, TaskId } from "./types";
+import { summarizeAuthors } from "./insights";
+import { CONTRIBUTIONS, countryName, SOURCES, TASKS, VENUE_TYPES } from "./task";
+import type { AtlasData, AtlasSummary, Institution, PaperDetail, TaskId } from "./types";
+import { readUrlState, toSearch, VIEWS, type UrlState, type View } from "./url";
 
-type View = "map" | "papers" | "authors" | "institutions";
+const AtlasMap = lazy(() => import("./components/AtlasMap"));
 
-function readInitialState(): { view: View; filters: FilterState } {
-  const params = new URLSearchParams(location.search);
-  const view = (["map", "papers", "authors", "institutions"].includes(params.get("view") ?? "") ? params.get("view") : "map") as View;
-  const filters = { ...DEFAULT_FILTERS };
-  Object.keys(filters).forEach((key) => { filters[key as keyof FilterState] = params.get(key) ?? ""; });
-  return { view, filters };
-}
+type Theme = "light" | "dark";
+type DetailState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; detail: PaperDetail };
 
-function rankingLabel(paper: CatalogPaper, system: string) {
-  const ranking = paper.venue?.rankings.find((item) => item.system === system);
-  if (!ranking) return "";
-  if (system === "CAS") return `中科院${ranking.scope || ""} · ${ranking.version} ${ranking.level}区${ranking.is_top ? " · TOP" : ""}`;
-  if (system === "JCR") return `JCR ${ranking.level}`;
-  return `${system}-${ranking.level}`;
-}
+const REPO = "https://github.com/RainyMarks/DeepX";
 
-function PaperCard({ paper, onOpen }: { paper: CatalogPaper; onOpen: () => void }) {
-  const ccf = rankingLabel(paper, "CCF");
-  const cas = rankingLabel(paper, "CAS");
-  const jcr = rankingLabel(paper, "JCR");
-  return <article className="paper-card" tabIndex={0} onClick={onOpen} onKeyDown={(event) => event.key === "Enter" && onOpen()}>
-    <div className="paper-card-top"><span className={`review-dot ${paper.review_status}`}>{paper.review_status === "verified" ? "已核验" : "待复核"}</span><span>{paper.year ?? "年份待补"}</span></div>
-    <h3>{paper.title}</h3>
-    <p className="paper-authors">{paper.authors.slice(0, 5).map((item) => item.name).join("，")}{paper.authors.length > 5 ? " 等" : ""}</p>
-    {paper.abstract_excerpt && <p className="paper-abstract">{paper.abstract_excerpt}</p>}
-    <div className="paper-venue"><strong>{paper.venue?.short_name || paper.venue?.name || "来源待补"}</strong><span>{CONTRIBUTIONS[paper.contribution_type]}</span></div>
-    <div className="tag-row">{paper.task_tags.slice(0, 3).map((task) => <span key={task} style={{ "--tag": TASKS[task].color } as React.CSSProperties}>{TASKS[task].short}</span>)}{[ccf, cas, jcr].filter(Boolean).map((item) => <b key={item}>{item}</b>)}</div>
-  </article>;
-}
-
-function DetailPanel({ detail, onClose, mapMode = false }: { detail: PaperDetail | null; onClose: () => void; mapMode?: boolean }) {
-  useEffect(() => {
-    if (!detail) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [detail, onClose]);
-
-  if (!detail) return null;
-  return <aside className={`detail-panel paper-detail-panel ${mapMode ? "map-detail-panel" : ""}`} aria-label="论文详情">
-    <div className="detail-toolbar">
-      <button className="detail-back" type="button" onClick={onClose}>{mapMode ? "← 返回区域论文" : "← 关闭详情"}</button>
-      <span>ESC</span>
-      <button className="detail-close" type="button" onClick={onClose} aria-label="关闭详情">×</button>
-    </div>
-    <div className="detail-scroll">
-      <span className="detail-index">PAPER RECORD · {detail.year ?? "N.D."}</span>
-      <h2>{detail.title}</h2>
-      <p className="detail-authors">{detail.authors.map((item) => item.name).join(" · ")}</p>
-      <div className="detail-badges"><span className={detail.review_status}>{detail.review_status === "verified" ? "人工核验核心集" : "自动收录 · 待复核"}</span>{detail.venue?.rankings.map((rank) => <a key={`${rank.system}-${rank.version}`} href={rank.source_url} target="_blank" rel="noreferrer">{rank.system === "CAS" ? `中科院${rank.scope || ""} ${rank.level}区${rank.is_top ? " TOP" : ""} · ${rank.version}` : `${rank.system} ${rank.level} · ${rank.version}`}</a>)}</div>
-      <section><h3>摘要</h3><p>{detail.abstract || "当前来源未提供摘要。"}</p></section>
-      <section><h3>任务归类</h3><div className="task-stack">{detail.task_tags.map((task) => <span key={task} style={{ borderColor: TASKS[task].color }}>{TASKS[task].label}</span>)}</div></section>
-      <section><h3>书目信息</h3><dl><div><dt>Venue</dt><dd>{detail.venue?.name || "待补"}</dd></div><div><dt>DOI</dt><dd>{detail.doi || "—"}</dd></div><div><dt>arXiv</dt><dd>{detail.arxiv_id || "—"}</dd></div><div><dt>引用快照</dt><dd>{detail.citation_count}</dd></div></dl></section>
-      <section><h3>数据来源</h3>{detail.provenance.map((item, index) => <p className="source-line" key={`${item.source}-${index}`}><strong>{item.source}</strong><span>{item.source_id}</span><small>{item.retrieved_at}</small></p>)}</section>
-      <a className="primary-link" href={detail.primary_url} target="_blank" rel="noreferrer">访问论文原始页面 ↗</a>
-    </div>
-  </aside>;
-}
-
-function AuthorPanel({ author, papers, institutions, onPaper, onAllPapers, onClose }: {
-  author: Author | null;
-  papers: CatalogPaper[];
-  institutions: Institution[];
-  onPaper: (id: string) => void;
-  onAllPapers: (name: string) => void;
-  onClose: () => void;
-}) {
-  if (!author) return null;
-  const paperIds = new Set(author.paper_ids);
-  const authored = papers.filter((paper) => paperIds.has(paper.id));
-  const coauthorCounts = new Map<string, { name: string; count: number }>();
-  authored.forEach((paper) => paper.authors.filter((item) => item.id !== author.id).forEach((item) => {
-    const current = coauthorCounts.get(item.id);
-    coauthorCounts.set(item.id, { name: item.name, count: (current?.count ?? 0) + 1 });
-  }));
-  const coauthors = [...coauthorCounts.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 12);
-  const institutionIds = new Set([...author.institution_ids, ...authored.flatMap((paper) => paper.institution_ids)]);
-  const authorInstitutions = institutions.filter((item) => institutionIds.has(item.id));
-  const years = new Map<number, number>();
-  authored.forEach((paper) => paper.year && years.set(paper.year, (years.get(paper.year) ?? 0) + 1));
-  const timeline = [...years.entries()].sort((a, b) => a[0] - b[0]);
-  const maxYear = Math.max(...timeline.map((item) => item[1]), 1);
-  return <aside className="detail-panel author-panel" aria-label="作者档案">
-    <button className="detail-close" type="button" onClick={onClose} aria-label="关闭作者档案">×</button>
-    <div className="detail-scroll">
-      <span className="detail-index">AUTHOR RECORD · 同领域论文限定</span>
-      <h2>{author.name}</h2>
-      <p className="detail-authors">{authored.length} 篇图谱内论文 · {coauthors.length} 位主要合作者</p>
-      <section><h3>任务分布</h3><div className="task-stack">{Object.entries(author.task_counts).sort((a, b) => b[1] - a[1]).map(([task, count]) => <span key={task} style={{ borderColor: TASKS[task as TaskId]?.color }}>{TASKS[task as TaskId]?.label} · {count}</span>)}</div></section>
-      <section><h3>年度趋势</h3><div className="year-timeline">{timeline.map(([year, count]) => <div key={year}><span>{year}</span><i style={{ width: `${Math.max(8, count / maxYear * 100)}%` }} /><b>{count}</b></div>)}</div></section>
-      <section><h3>机构经历（图谱元数据）</h3>{authorInstitutions.length ? <div className="author-institutions">{authorInstitutions.map((item) => <p key={item.id}><strong>{item.name}</strong><span>{[item.city, item.country].filter(Boolean).join(" · ")}</span></p>)}</div> : <p>当前公开来源未解析出可靠机构。</p>}</section>
-      <section><h3>主要合作作者</h3><div className="coauthor-list">{coauthors.map((item) => <span key={item.name}>{item.name}<b>{item.count}</b></span>)}</div></section>
-      <section><h3>同领域论文</h3><div className="author-paper-list">{authored.slice(0, 30).map((paper) => <button key={paper.id} type="button" onClick={() => onPaper(paper.id)}><span>{paper.year ?? "—"}</span>{paper.title}</button>)}</div></section>
-      <button className="primary-link author-all-button" type="button" onClick={() => onAllPapers(author.name)}>在论文库查看全部 {authored.length} 篇 →</button>
-    </div>
-  </aside>;
+function initialTheme(): Theme {
+  try {
+    const saved = localStorage.getItem("atlas-theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    // Storage may be unavailable; fall back to the system preference.
+  }
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 export default function App() {
-  const initial = useMemo(readInitialState, []);
   const [summary, setSummary] = useState<AtlasSummary | null>(null);
   const [data, setData] = useState<AtlasData | null>(null);
   const [error, setError] = useState("");
-  const [view, setView] = useState<View>(initial.view);
-  const [filters, setFilters] = useState<FilterState>(initial.filters);
-  const [detail, setDetail] = useState<PaperDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState("");
-  const [selectedAuthorId, setSelectedAuthorId] = useState("");
-  const [mobileFilters, setMobileFilters] = useState(false);
-  const detailRequest = useRef(0);
+  const [state, setState] = useState<UrlState>(() => readUrlState());
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [detail, setDetail] = useState<DetailState | null>(null);
+  const fromHistory = useRef(false);
+  const previous = useRef(state);
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const { view, filters, sort } = state;
 
+  // --- data -------------------------------------------------------------
   useEffect(() => {
     loadAtlasSummary()
-      .then((nextSummary) => {
-        setSummary(nextSummary);
-        return loadAtlasContent(nextSummary);
+      .then((next) => {
+        setSummary(next);
+        return loadAtlasContent(next);
       })
       .then(setData)
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
+
+  // --- theme ------------------------------------------------------------
   useEffect(() => {
-    const params = new URLSearchParams();
-    params.set("view", view);
-    Object.entries(filters).forEach(([key, value]) => value && params.set(key, value));
-    history.replaceState(null, "", `${location.pathname}?${params}`);
-  }, [view, filters]);
-
-  const journalRankingAvailability = useMemo(
-    () => getJournalRankingAvailability(data?.papers ?? []),
-    [data],
-  );
-  const effectiveFilters = useMemo(
-    () => reconcileJournalRankingAvailability(filters, journalRankingAvailability),
-    [filters, journalRankingAvailability],
-  );
-  useEffect(() => {
-    if (data && effectiveFilters !== filters) setFilters(effectiveFilters);
-  }, [data, effectiveFilters, filters]);
-
-  const filtered = useMemo(() => {
-    if (!data) return [];
-    return filterPapers(data.papers, effectiveFilters, data.institutions);
-  }, [data, effectiveFilters]);
-
-  const filteredIds = useMemo(() => new Set(filtered.map((paper) => paper.id)), [filtered]);
-  const visibleAuthors = useMemo(() => data?.authors.map((author) => ({ ...author, visible: author.paper_ids.filter((id) => filteredIds.has(id)) })).filter((author) => author.visible.length).sort((a, b) => b.visible.length - a.visible.length) ?? [], [data, filteredIds]);
-  const visibleInstitutions = useMemo(() => data?.institutions.map((institution) => ({ ...institution, visible: institution.paper_ids.filter((id) => filteredIds.has(id)) })).filter((institution) => institution.visible.length).sort((a, b) => b.visible.length - a.visible.length) ?? [], [data, filteredIds]);
-  const selectedAuthor = useMemo(() => data?.authors.find((author) => author.id === selectedAuthorId) ?? null, [data, selectedAuthorId]);
-  const countryOptions = useMemo(() => [...new Map((data?.institutions ?? []).filter((item) => item.country_code || item.country).map((item) => [item.country_code || item.country, item.country || item.country_code])).entries()].sort((a, b) => a[1].localeCompare(b[1], "zh-CN")), [data]);
-  const sourceOptions = useMemo(() => [...new Set((data?.papers ?? []).flatMap((paper) => paper.sources))].sort(), [data]);
-  const hasCASRankings = journalRankingAvailability.CAS.size > 0;
-  const hasJCRRankings = journalRankingAvailability.JCR.size > 0;
-  const hasJournalRankings = hasCASRankings || hasJCRRankings;
-  const availableZones = availableJournalZones(journalRankingAvailability, filters.journalSystem);
-
-  async function openPaper(id: string) {
-    const request = ++detailRequest.current;
-    setSelectedAuthorId("");
-    setDetail(null);
-    setDetailError("");
-    setDetailLoading(true);
+    document.documentElement.dataset.theme = theme;
     try {
-      const nextDetail = await loadPaperDetail(id);
-      if (request === detailRequest.current) setDetail(nextDetail);
-    } catch (cause) {
-      if (request === detailRequest.current) setDetailError(cause instanceof Error ? cause.message : "论文记录加载失败");
-    } finally {
-      if (request === detailRequest.current) setDetailLoading(false);
+      localStorage.setItem("atlas-theme", theme);
+    } catch {
+      // Ignore: the toggle still works for this visit.
     }
+  }, [theme]);
+
+  // --- URL <-> state ----------------------------------------------------
+  useEffect(() => {
+    const onPop = () => {
+      fromHistory.current = true;
+      setState(readUrlState());
+    };
+    addEventListener("popstate", onPop);
+    return () => removeEventListener("popstate", onPop);
+  }, []);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = state;
+    if (fromHistory.current) {
+      fromHistory.current = false;
+      return;
+    }
+    const url = `${location.pathname}${toSearch(state)}`;
+    const navigation = before.view !== state.view || before.paper !== state.paper || before.author !== state.author;
+    if (navigation) history.pushState(null, "", url);
+    else history.replaceState(null, "", url);
+    if (before.view !== state.view) scrollTo({ top: 0 });
+  }, [state]);
+
+  const patchState = useCallback((patch: Partial<UrlState>) => setState((current) => ({ ...current, ...patch })), []);
+  const updateFilters = useCallback((patch: Partial<FilterState>, nextView?: View) => {
+    setState((current) => ({ ...current, filters: { ...current.filters, ...patch }, ...(nextView ? { view: nextView, paper: "", author: "" } : {}) }));
+  }, []);
+  const changeView = useCallback((next: View) => {
+    setFiltersOpen(false);
+    patchState({ view: next, paper: "", author: "" });
+  }, [patchState]);
+  const openPaper = useCallback((id: string) => patchState({ paper: id, author: "" }), [patchState]);
+  const openAuthor = useCallback((id: string) => patchState({ author: id, paper: "" }), [patchState]);
+  const closeDrawer = useCallback(() => patchState({ paper: "", author: "" }), [patchState]);
+  const filterInstitution = useCallback((name: string) => updateFilters({ institution: name }, "papers"), [updateFilters]);
+
+  // --- search -----------------------------------------------------------
+  const journalAvailability = useMemo(() => getJournalRankingAvailability(data?.papers ?? []), [data]);
+  useEffect(() => {
+    if (!data) return;
+    const reconciled = reconcileJournalRankingAvailability(filters, journalAvailability);
+    if (reconciled !== filters) setState((current) => ({ ...current, filters: reconciled }));
+  }, [data, filters, journalAvailability]);
+
+  const institutionsById = useMemo(() => new Map((data?.institutions ?? []).map((item) => [item.id, item])), [data]);
+  const searchIndex = useMemo(() => (data ? buildPaperSearchIndex(data.papers, data.institutions) : null), [data]);
+  const deferredFilters = useDeferredValue(filters);
+  const result = useMemo(
+    () => (data && searchIndex ? searchPapers(data.papers, deferredFilters, searchIndex, sort) : null),
+    [data, searchIndex, deferredFilters, sort],
+  );
+  const scoped = activeFilterCount(filters) > 0;
+  const countries = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const item of data?.institutions ?? []) {
+      const code = item.country_code || item.country;
+      if (code && !names.has(code)) names.set(code, item.country || code);
+    }
+    return [...names.entries()].map(([code, name]) => ({ code, name }));
+  }, [data]);
+
+  const visibleAuthors = useMemo(() => (view === "authors" && result ? summarizeAuthors(result.papers) : []), [view, result]);
+  const visibleInstitutions = useMemo(() => {
+    if (view !== "institutions" || !result) return [];
+    const counts = new Map<string, number>();
+    for (const paper of result.papers) for (const id of paper.institution_ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+    return [...counts.entries()]
+      .map(([id, count]) => ({ institution: institutionsById.get(id), count }))
+      .filter((row): row is { institution: Institution; count: number } => Boolean(row.institution))
+      .sort((a, b) => b.count - a.count || a.institution.name.localeCompare(b.institution.name));
+  }, [view, result, institutionsById]);
+  const selectedAuthor = useMemo(() => {
+    if (!state.author || !data) return null;
+    return summarizeAuthors(data.papers.filter((paper) => paper.authors.some((author) => author.id === state.author)))
+      .find((author) => author.id === state.author) ?? null;
+  }, [state.author, data]);
+
+  // --- paper detail -----------------------------------------------------
+  useEffect(() => {
+    if (!state.paper || !summary) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetail({ status: "loading" });
+    loadPaperDetail(state.paper, summary.manifest)
+      .then((record) => {
+        if (cancelled) return;
+        setDetail(record ? { status: "ready", detail: record } : { status: "error", message: "未找到该论文记录" });
+      })
+      .catch((cause) => {
+        if (!cancelled) setDetail({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
+      });
+    return () => { cancelled = true; };
+  }, [state.paper, summary]);
+
+  // --- keyboard ---------------------------------------------------------
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "/" || target?.closest("input, textarea, select")) return;
+      event.preventDefault();
+      searchInput.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (error) {
+    return <main className="load-screen" role="alert">
+      <p className="eyebrow">数据加载失败</p>
+      <h1>公开数据未能加载</h1>
+      <p>{error}</p>
+      <button className="button" type="button" onClick={() => location.reload()}>重新加载</button>
+    </main>;
   }
-  function closeDetail() {
-    detailRequest.current += 1;
-    setDetail(null);
-    setDetailLoading(false);
-    setDetailError("");
-  }
-  function changeView(nextView: View) {
-    closeDetail();
-    setSelectedAuthorId("");
-    setMobileFilters(false);
-    setView(nextView);
-  }
-  function update<K extends keyof FilterState>(key: K, value: FilterState[K]) { setFilters((current) => ({ ...current, [key]: value })); }
-  function updateJournalSystem(value: string) {
-    setFilters((current) => reconcileJournalRankingAvailability(
-      { ...current, journalSystem: value },
-      journalRankingAvailability,
-    ));
+  if (!summary) {
+    return <main className="load-screen" aria-busy="true"><span className="spinner" /><p>正在载入研究图谱…</p></main>;
   }
 
-  if (error) return <main className="load-state"><span>DATA LOAD ERROR</span><h1>公开数据未能加载</h1><p>{error}</p><code>python -m atlas.cli publish</code></main>;
-  if (!summary) return <main className="load-state"><div className="loading-orbit" /><span>正在展开研究图谱</span><h1>装订论文、作者与机构关系…</h1></main>;
-  if (!data) return <div className="app-shell summary-shell" aria-busy="true">
-    <header className="masthead">
-      <div className="brand-block"><span className="brand-seal">鉴</span><div><p>GENERATIVE IMAGE FORENSICS · 中文研究基础设施</p><h1>生成图像取证研究图谱</h1></div></div>
-      <nav aria-label="主视图"><button className="active" disabled>世界地图</button><button disabled>论文库</button><button disabled>作者图谱</button><button disabled>机构图谱</button></nav>
-      <div className="dataset-stamp"><strong>DATASET</strong><span>{summary.manifest.dataset_version}</span><small>{summary.manifest.paper_count.toLocaleString()} 篇论文</small></div>
+  const paperCount = result?.papers.length ?? summary.manifest.paper_count;
+  const pending = deferredFilters !== filters;
+
+  return <div className={`app view-${view}`} data-atlas-ready={data ? "true" : undefined}>
+    <a className="skip-link" href="#main">跳到主要内容</a>
+    <header className="topbar">
+      <button className="brand" type="button" onClick={() => changeView("overview")} aria-label="生成图像取证研究图谱 · 返回概览">
+        <span className="brand-mark" aria-hidden="true">鉴</span>
+        <span className="brand-text"><strong>生成图像取证研究图谱</strong><small>Synthetic Image Forensics Atlas</small></span>
+      </button>
+      <nav className="tabs" aria-label="主视图">
+        {(Object.keys(VIEWS) as View[]).map((item) => <button
+          key={item}
+          type="button"
+          className={view === item ? "is-active" : ""}
+          aria-current={view === item ? "page" : undefined}
+          onClick={() => changeView(item)}
+        >{VIEWS[item]}</button>)}
+      </nav>
+      <label className="search">
+        <Icon name="search" size={17} />
+        <span className="sr-only">搜索论文</span>
+        <input
+          ref={searchInput}
+          type="search"
+          value={filters.q}
+          placeholder="搜索标题、作者、机构或会议期刊"
+          onChange={(event) => updateFilters({ q: event.target.value }, view === "overview" ? "papers" : undefined)}
+        />
+        <kbd aria-hidden="true">/</kbd>
+      </label>
+      <div className="topbar-actions">
+        <button className="icon-button" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}>
+          <Icon name={theme === "dark" ? "sun" : "moon"} />
+        </button>
+        <a className="icon-button" href={REPO} target="_blank" rel="noreferrer" aria-label="GitHub 仓库"><Icon name="github" /></a>
+      </div>
     </header>
-    <section className="hero-strip">
-      <div><span>FORENSIC SIGNAL OBSERVATORY</span><h2>从生成痕迹，到隐写、水印与可信来源。</h2><p>把检测、归因、篡改定位、隐写分析和数字水印放在同一张可检索的证据网络中。</p></div>
-      <dl><div><dt>论文</dt><dd>{summary.manifest.paper_count.toLocaleString()}</dd></div><div><dt>已核验</dt><dd>{summary.manifest.verified_paper_count.toLocaleString()}</dd></div><div><dt>作者</dt><dd>{summary.manifest.author_count.toLocaleString()}</dd></div><div><dt>国家/地区</dt><dd>{summary.manifest.country_count}</dd></div></dl>
-    </section>
-    <main className="load-state content-loading"><div className="loading-orbit" /><span>摘要已就绪</span><h2>正在按需装载论文、作者与机构索引…</h2></main>
-  </div>;
 
-  return <div className={`app-shell ${view === "map" ? "map-shell" : ""} ${(detail && view !== "map") || selectedAuthor ? "has-detail" : ""}`} data-atlas-ready="true">
-    <header className="masthead">
-      <div className="brand-block"><span className="brand-seal">鉴</span><div><p>GENERATIVE IMAGE FORENSICS · 中文研究基础设施</p><h1>生成图像取证研究图谱</h1></div></div>
-      <nav aria-label="主视图">{(["map", "papers", "authors", "institutions"] as View[]).map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => changeView(item)}>{({ map: "世界地图", papers: "论文库", authors: "作者图谱", institutions: "机构图谱" } as Record<View, string>)[item]}</button>)}</nav>
-      <div className="dataset-stamp"><strong>DATASET</strong><span>{data.manifest.dataset_version}</span><small>{data.manifest.paper_count.toLocaleString()} 篇论文</small></div>
-    </header>
-
-    <section className="hero-strip">
-      <div><span>FORENSIC SIGNAL OBSERVATORY</span><h2>从生成痕迹，到隐写、水印与可信来源。</h2><p>把检测、归因、篡改定位、隐写分析和数字水印放在同一张可检索的证据网络中。</p></div>
-      <dl><div><dt>论文</dt><dd>{data.manifest.paper_count.toLocaleString()}</dd></div><div><dt>已核验</dt><dd>{data.manifest.verified_paper_count.toLocaleString()}</dd></div><div><dt>作者</dt><dd>{data.manifest.author_count.toLocaleString()}</dd></div><div><dt>国家/地区</dt><dd>{data.manifest.country_count}</dd></div></dl>
-    </section>
-
-    <button className="mobile-filter-button" onClick={() => setMobileFilters((value) => !value)}>筛选与导出 · {filtered.length}</button>
-    <div className={`workspace ${view === "map" ? "map-workspace" : ""}`}>
-      <aside className={`filter-rail ${mobileFilters ? "open" : ""}`}>
-        <div className="filter-heading"><span>FILTER INDEX</span><h2>筛选索引</h2><button onClick={() => setFilters(DEFAULT_FILTERS)}>清空</button></div>
-        <label>关键词<input value={filters.q} onChange={(e) => update("q", e.target.value)} placeholder="标题、作者、机构、Venue" /></label>
-        <label>作者<input value={filters.author} onChange={(e) => update("author", e.target.value)} placeholder="作者姓名" /></label>
-        <label>机构<input value={filters.institution} onChange={(e) => update("institution", e.target.value)} placeholder="机构名称" /></label>
-        <label>国家/地区<select value={filters.country} onChange={(e) => update("country", e.target.value)}><option value="">全部国家/地区</option>{countryOptions.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-        <label>Venue / Source<input value={filters.venue} onChange={(e) => update("venue", e.target.value)} placeholder="CVPR、TIFS、arXiv…" />{filters.venue.trim() && correctedVenueQuery(filters.venue) !== filters.venue.trim() && <small className="filter-hint">已按 {correctedVenueQuery(filters.venue)} 检索</small>}</label>
-        <label>数据源<select value={filters.source} onChange={(e) => update("source", e.target.value)}><option value="">全部数据源</option>{sourceOptions.map((source) => <option key={source} value={source}>{source}</option>)}</select></label>
-        <label>研究任务<select value={filters.task} onChange={(e) => update("task", e.target.value)}><option value="">全部任务</option>{Object.entries(TASKS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>
-        <label>贡献类型<select value={filters.contribution} onChange={(e) => update("contribution", e.target.value)}><option value="">全部类型</option>{Object.entries(CONTRIBUTIONS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
-        <div className="split-filter"><label>起始年份<input type="number" value={filters.yearFrom} onChange={(e) => update("yearFrom", e.target.value)} placeholder="2000" /></label><label>结束年份<input type="number" value={filters.yearTo} onChange={(e) => update("yearTo", e.target.value)} placeholder="2026" /></label></div>
-        <label>审核状态<select value={filters.review} onChange={(e) => update("review", e.target.value)}><option value="">全部状态</option><option value="verified">人工核验核心集</option><option value="auto">自动收录待复核</option></select></label>
-        <label>CCF 会议等级<select value={filters.ccf} onChange={(e) => update("ccf", e.target.value)}><option value="">全部会议等级</option><option value="A">CCF-A</option><option value="B">CCF-B</option><option value="C">CCF-C</option></select></label>
-        <div className="ranking-filter"><label>期刊评价<select value={filters.journalSystem} onChange={(e) => updateJournalSystem(e.target.value)} disabled={!hasJournalRankings}><option value="">{hasJournalRankings ? "综合检索" : "暂无等级数据"}</option><option value="CAS" disabled={!hasCASRankings}>中科院 2025（大类）</option><option value="JCR" disabled={!hasJCRRankings}>JCR 2026</option></select></label><label>期刊分区<select value={filters.journal} onChange={(e) => update("journal", e.target.value)} disabled={!hasJournalRankings}><option value="">全部分区</option><option value="1" disabled={!availableZones.has("1")}>一区 / Q1</option><option value="2" disabled={!availableZones.has("2")}>二区 / Q2</option><option value="3" disabled={!availableZones.has("3")}>三区 / Q3</option><option value="4" disabled={!availableZones.has("4")}>四区 / Q4</option><option value="TOP" disabled={!availableZones.has("TOP")}>中科院大类 TOP</option></select></label>{!hasJournalRankings && <small className="ranking-data-hint">当前公开数据尚未导入可靠期刊分区，筛选已停用以避免误显示 0。</small>}</div>
-        <div className="filter-result"><span>当前结果</span><strong>{filtered.length.toLocaleString()}</strong><small>唯一论文</small></div>
-        <div className="export-row"><button onClick={() => exportPapers(filtered, "csv")}>CSV</button><button onClick={() => exportPapers(filtered, "json")}>JSON</button><button onClick={() => exportPapers(filtered, "bib")}>BibTeX</button></div>
-      </aside>
-
-      <main className={`content-stage ${view === "map" ? "map-stage" : ""}`}>
-        {view === "map" && <section className="map-view">
-          <div className="map-frame">
-            <div className="map-caption"><span>单击信号节点直接浏览机构与论文摘要</span><span>点击地图空白处关闭区域列表 · 连线表示合作强度</span></div>
-            <AtlasMap papers={filtered} institutions={data.institutions} onPaper={openPaper} onInstitution={(name) => update("institution", name)} detailOpen={Boolean(detail) || detailLoading} />
-            <DetailPanel detail={detail} onClose={closeDetail} mapMode />
-            {detailLoading && <div className="detail-load-status" role="status"><i /><span>正在装载论文记录…</span><button type="button" onClick={closeDetail}>取消</button></div>}
-            {detailError && <div className="detail-load-status detail-load-error" role="alert"><span>论文记录加载失败</span><small>{detailError}</small><button type="button" onClick={closeDetail}>关闭</button></div>}
+    {view === "overview" ? <main id="main" className="page">
+      {scoped && <ActiveFilters filters={filters} onChange={updateFilters} onReset={() => patchState({ filters: DEFAULT_FILTERS })} lead="概览统计已限定在当前筛选范围：" />}
+      <Overview
+        manifest={summary.manifest}
+        stats={summary.stats}
+        papers={result?.papers ?? null}
+        scoped={scoped}
+        institutions={institutionsById}
+        onFilter={updateFilters}
+        onView={changeView}
+        onPaper={openPaper}
+      />
+    </main> : <div className="workspace">
+      <FilterPanel
+        filters={filters}
+        facets={result?.facets ?? null}
+        countries={countries}
+        journalAvailability={journalAvailability}
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        onChange={updateFilters}
+        onReset={() => patchState({ filters: DEFAULT_FILTERS })}
+        resultCount={paperCount}
+      />
+      {filtersOpen && <div className="drawer-scrim filter-scrim" onClick={() => setFiltersOpen(false)} />}
+      <main id="main" className={`results${pending ? " is-pending" : ""}`}>
+        <div className="results-head">
+          <div>
+            <h1>{VIEWS[view]}</h1>
+            <p className="results-count" aria-live="polite">
+              {view === "authors" ? <><strong>{formatNumber(visibleAuthors.length)}</strong> 位学者 · 来自 </> : view === "institutions" ? <><strong>{formatNumber(visibleInstitutions.length)}</strong> 个机构 · 来自 </> : null}
+              <strong data-testid="result-count">{formatNumber(paperCount)}</strong> 篇论文
+            </p>
           </div>
-        </section>}
-        {view === "papers" && <section className="library-view"><div className="view-heading"><div><span>PAPER LIBRARY</span><h2>论文库</h2></div><p>按年份与引用快照排序，点击卡片查看摘要、来源和等级版本。</p></div><div className="paper-grid">{filtered.slice(0, 600).map((paper) => <PaperCard key={paper.id} paper={paper} onOpen={() => openPaper(paper.id)} />)}</div>{filtered.length > 600 && <p className="limit-note">当前展示前 600 条；导出包含全部 {filtered.length} 条结果。</p>}</section>}
-        {view === "authors" && <section className="directory-view"><div className="view-heading"><div><span>AUTHOR ATLAS</span><h2>作者图谱</h2></div><p>仅统计图谱范围内的同领域论文，不混入作者其他研究方向。</p></div><div className="directory-grid">{visibleAuthors.slice(0, 240).map((author, index) => <article key={author.id}><span className="directory-rank">{String(index + 1).padStart(2, "0")}</span><h3>{author.name}</h3><strong>{author.visible.length} 篇同领域论文</strong><div className="mini-tasks">{Object.entries(author.task_counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([task, count]) => <span key={task}>{TASKS[task as TaskId]?.short} {count}</span>)}</div><button onClick={() => setSelectedAuthorId(author.id)}>打开作者档案 →</button></article>)}</div></section>}
-        {view === "institutions" && <section className="directory-view"><div className="view-heading"><div><span>INSTITUTION INDEX</span><h2>机构图谱</h2></div><p>坐标必须具有来源；未经确认的坐标不会用于地图定位。</p></div><div className="institution-list">{visibleInstitutions.slice(0, 300).map((institution, index) => <article key={institution.id}><span>{String(index + 1).padStart(3, "0")}</span><div><h3>{institution.name}</h3><p>{[institution.city, institution.country].filter(Boolean).join(" · ") || "地点待核验"}</p></div><strong>{institution.visible.length}<small>篇论文</small></strong><b className={institution.latitude != null ? "mapped" : "unmapped"}>{institution.latitude != null ? "已定位" : "待定位"}</b></article>)}</div></section>}
+          <div className="results-tools">
+            <button className="button filter-toggle" type="button" onClick={() => setFiltersOpen(true)}>
+              <Icon name="filter" size={16} />筛选{activeFilterCount(filters) ? `（${activeFilterCount(filters)}）` : ""}
+            </button>
+            {view === "papers" && <label className="sort">
+              <span>排序</span>
+              <select value={sort} onChange={(event) => patchState({ sort: event.target.value as SortKey })}>
+                {Object.entries(SORTS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>}
+            {(view === "papers" || view === "map") && result && <ExportMenu onExport={(format) => exportPapers(result.papers, format)} />}
+          </div>
+        </div>
+        <ActiveFilters filters={filters} onChange={updateFilters} onReset={() => patchState({ filters: DEFAULT_FILTERS })} />
+        {!result ? <div className="loading-block" role="status"><span className="spinner" />正在载入论文、作者与机构索引…</div> : <>
+          {view === "papers" && <PaperList papers={result.papers} onPaper={openPaper} onAuthor={openAuthor} selectedId={state.paper} />}
+          {view === "authors" && <AuthorsView authors={visibleAuthors} onAuthor={openAuthor} />}
+          {view === "institutions" && <InstitutionsView rows={visibleInstitutions} onInstitution={filterInstitution} />}
+          {view === "map" && data && <Suspense fallback={<div className="loading-block"><span className="spinner" />正在载入地图…</div>}>
+            <AtlasMap papers={result.papers} institutions={data.institutions} theme={theme} covered={Boolean(state.paper || state.author)} onPaper={openPaper} onInstitution={filterInstitution} />
+          </Suspense>}
+        </>}
       </main>
+    </div>}
+
+    {view !== "map" && <footer className="footer">
+      <div>
+        <strong>生成图像取证研究图谱</strong>
+        <span>数据版本 {summary.manifest.dataset_version} · {summary.manifest.data_notice}</span>
+      </div>
+      <nav aria-label="页脚">
+        <a href={`${import.meta.env.BASE_URL}methodology.html`}>数据方法</a>
+        <a href={`${import.meta.env.BASE_URL}data/v1/catalog.json`}>下载目录 JSON</a>
+        <a href={`${import.meta.env.BASE_URL}data/v1/quality.json`}>质量报告</a>
+        <a href={`${REPO}/issues/new/choose`} target="_blank" rel="noreferrer">补充与纠错</a>
+        <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </footer>}
+
+    {state.paper && detail && <PaperDrawer state={detail} institutions={institutionsById} onClose={closeDrawer} onAuthor={openAuthor} onInstitution={filterInstitution} />}
+    {state.author && data && <AuthorDrawer
+      author={selectedAuthor}
+      institutions={institutionsById}
+      onClose={closeDrawer}
+      onPaper={openPaper}
+      onAuthor={openAuthor}
+      onAllPapers={(name) => updateFilters({ author: name }, "papers")}
+    />}
+  </div>;
+}
+
+function ExportMenu({ onExport }: { onExport: (format: "csv" | "json" | "bib") => void }) {
+  return <details className="menu">
+    <summary className="button"><Icon name="download" size={16} />导出</summary>
+    <div className="menu-items" role="menu" onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); }}>
+      <button type="button" role="menuitem" onClick={() => onExport("csv")}>CSV 表格</button>
+      <button type="button" role="menuitem" onClick={() => onExport("bib")}>BibTeX</button>
+      <button type="button" role="menuitem" onClick={() => onExport("json")}>JSON</button>
     </div>
-    {view !== "map" && <footer><div><strong>生成图像取证研究图谱</strong><span>数据不是完整书目，等级也不代表单篇论文质量。</span></div><nav><a href={`${import.meta.env.BASE_URL}methodology.html`}>数据方法</a><a href={`${import.meta.env.BASE_URL}data/v1/manifest.json`}>Manifest</a><a href={`${import.meta.env.BASE_URL}data/v1/catalog.json`}>论文 JSON</a><a href={`${import.meta.env.BASE_URL}data/v1/quality.json`}>质量报告</a><a href="https://github.com/RainyMarks/DeepX/issues/new" target="_blank" rel="noreferrer">补充/纠错</a><a href="https://github.com/RainyMarks/DeepX" target="_blank" rel="noreferrer">GitHub</a></nav></footer>}
-    {view !== "map" && <DetailPanel detail={detail} onClose={closeDetail} />}
-    {view !== "map" && detailLoading && <div className="detail-load-status page-detail-status" role="status"><i /><span>正在装载论文记录…</span><button type="button" onClick={closeDetail}>取消</button></div>}
-    {view !== "map" && detailError && <div className="detail-load-status detail-load-error page-detail-status" role="alert"><span>论文记录加载失败</span><button type="button" onClick={closeDetail}>关闭</button></div>}
-    <AuthorPanel author={selectedAuthor} papers={data.papers} institutions={data.institutions} onPaper={(id) => { setSelectedAuthorId(""); void openPaper(id); }} onAllPapers={(name) => { update("author", name); setView("papers"); setSelectedAuthorId(""); }} onClose={() => setSelectedAuthorId("")} />
+  </details>;
+}
+
+const ZONE_LABELS: Record<string, string> = { "1": "一区/Q1", "2": "二区/Q2", "3": "三区/Q3", "4": "四区/Q4", TOP: "TOP" };
+
+function filterChips(filters: FilterState): { label: string; clear: Partial<FilterState> }[] {
+  const chips: { label: string; clear: Partial<FilterState> }[] = [];
+  if (filters.q) chips.push({ label: `关键词：${filters.q}`, clear: { q: "" } });
+  if (filters.task) chips.push({ label: TASKS[filters.task as TaskId]?.label ?? filters.task, clear: { task: "" } });
+  if (filters.yearFrom || filters.yearTo) {
+    const label = filters.yearFrom === filters.yearTo ? `${filters.yearFrom} 年` : `${filters.yearFrom || "最早"}–${filters.yearTo || "至今"}`;
+    chips.push({ label, clear: { yearFrom: "", yearTo: "" } });
+  }
+  if (filters.venue) chips.push({ label: `渠道：${filters.venue}`, clear: { venue: "" } });
+  if (filters.venueType) chips.push({ label: VENUE_TYPES[filters.venueType] ?? filters.venueType, clear: { venueType: "" } });
+  if (filters.ccf) chips.push({ label: `CCF-${filters.ccf}`, clear: { ccf: "" } });
+  if (filters.journal || filters.journalSystem) {
+    const system = filters.journalSystem === "CAS" ? "中科院" : filters.journalSystem === "JCR" ? "JCR" : "期刊";
+    chips.push({ label: `${system} ${filters.journal ? ZONE_LABELS[filters.journal] ?? filters.journal : "有分区"}`, clear: { journal: "", journalSystem: "" } });
+  }
+  if (filters.contribution) chips.push({ label: CONTRIBUTIONS[filters.contribution as keyof typeof CONTRIBUTIONS] ?? filters.contribution, clear: { contribution: "" } });
+  if (filters.author) chips.push({ label: `作者：${filters.author}`, clear: { author: "" } });
+  if (filters.institution) chips.push({ label: `机构：${filters.institution}`, clear: { institution: "" } });
+  if (filters.country) chips.push({ label: countryName(filters.country, filters.country), clear: { country: "" } });
+  if (filters.source) chips.push({ label: `来源：${SOURCES[filters.source] ?? filters.source}`, clear: { source: "" } });
+  if (filters.review) chips.push({ label: filters.review === "verified" ? "人工核验" : "待复核", clear: { review: "" } });
+  return chips;
+}
+
+function ActiveFilters({ filters, onChange, onReset, lead }: {
+  filters: FilterState;
+  onChange: (patch: Partial<FilterState>) => void;
+  onReset: () => void;
+  lead?: string;
+}) {
+  const chips = filterChips(filters);
+  if (!chips.length) return null;
+  return <div className="active-filters" aria-label="已选筛选条件">
+    {lead && <span className="muted">{lead}</span>}
+    {chips.map((chip) => <button key={chip.label} type="button" className="chip is-active" onClick={() => onChange(chip.clear)} aria-label={`移除筛选：${chip.label}`}>
+      {chip.label}<Icon name="close" size={13} />
+    </button>)}
+    <button type="button" className="link-button" onClick={onReset}>清除全部</button>
   </div>;
 }
