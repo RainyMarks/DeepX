@@ -31,10 +31,10 @@ interface Collaboration {
   count: number;
 }
 
-const TILES = {
-  light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-};
+// OpenStreetMap's standard tiles need no API key. Both themes use the same
+// tiles; styles.css tones them down (light) or inverts them (dark) so the
+// research-direction colours of the nodes stay the strongest signal.
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 function gridSize(zoom: number) {
   return zoom <= 2 ? 20 : zoom <= 4 ? 9 : zoom <= 6 ? 3.5 : zoom <= 8 ? 1.2 : 0.3;
@@ -150,10 +150,10 @@ export default function AtlasMap({ papers, institutions, theme, covered, onPaper
       aria-label="研究机构世界地图"
     >
       <TileLayer
-        key={theme}
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={TILES[theme]}
-        subdomains="abcd"
+        className="base-tiles"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url={TILE_URL}
+        maxZoom={19}
         updateWhenZooming={false}
         keepBuffer={3}
       />

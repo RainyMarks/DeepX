@@ -605,9 +605,12 @@ a.rank-badge:hover { border-color: var(--accent); text-decoration: none; }
 .leaflet-control-attribution { font-size: 10.5px; }
 :root[data-theme="dark"] .leaflet-control-attribution { background: rgba(28, 30, 33, 0.8); color: var(--muted); }
 :root[data-theme="dark"] .leaflet-control-attribution a { color: var(--accent); }
-.leaflet-bar a { background: var(--surface); color: var(--text); border-color: var(--border); }
-.leaflet-bar a:hover { background: var(--surface-2); }
+.atlas-map .leaflet-bar a { background: var(--surface); color: var(--text); border-color: var(--border); }
+.atlas-map .leaflet-bar a:hover { background: var(--surface-2); }
+.atlas-map .leaflet-bar a.leaflet-disabled { background: var(--surface-2); color: var(--muted); }
 
+.base-tiles { filter: grayscale(0.85) contrast(0.92) brightness(1.04); }
+:root[data-theme="dark"] .base-tiles { filter: invert(1) hue-rotate(180deg) grayscale(0.7) brightness(0.82) contrast(0.9); }
 .map-node-host { background: none; border: 0; }
 .map-node {
   display: grid;
