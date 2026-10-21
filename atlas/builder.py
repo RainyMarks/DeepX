@@ -149,7 +149,7 @@ SATELLITE_MARKERS = frozenset({"workshop", "workshops", "findings", "companion"}
 # Words that proceedings titles put around a conference's own name:
 # "Proceedings of the Thirty-Seventh AAAI ...", "2004 IEEE ... (IEEE Cat. No.04TH8763)".
 WRAPPER_WORDS = frozenset({
-    "proceedings", "proceeding", "proc", "of", "the", "ieee", "acm", "cvf", "cat", "no", "annual", "volume", "vol",
+    "proceedings", "proceeding", "proc", "of", "on", "the", "ieee", "acm", "cvf", "cat", "no", "annual", "volume", "vol",
     "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
     "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
     "eighteenth", "nineteenth", "twentieth", "thirtieth", "fortieth", "fiftieth",
@@ -237,13 +237,14 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                 if " ".join(alias_tokens) in variants:
                     matched = True
                     break
-                # Long conference names may be embedded in strings such as
-                # "Proceedings of the 2025 ...". Journal titles must match
-                # exactly: "International Journal of Computer Vision and
-                # Image Processing" is not IJCV. Short acronyms and partial
-                # titles must match exactly to avoid assigning CVPR to
-                # Pattern Recognition or NeurIPS to Information.
-                if item_type == "conference" and len(alias_tokens) >= 4 and any(
+                # Conference names of three or more words may be embedded in
+                # strings such as "Proceedings of the 2025 ..." or "ACM
+                # Multimedia Asia 2023", with only proceedings wrapping around
+                # them. Journal titles must match exactly: "International
+                # Journal of Computer Vision and Image Processing" is not IJCV.
+                # Acronyms and two-word names must match exactly to avoid
+                # assigning CVPR to Pattern Recognition or NeurIPS to Information.
+                if item_type == "conference" and len(alias_tokens) >= 3 and any(
                     _embeds_name(form, alias_tokens, acronyms) for form in forms
                 ):
                     matched = True

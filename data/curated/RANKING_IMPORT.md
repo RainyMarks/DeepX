@@ -28,11 +28,13 @@ venue_name,short_name,venue_type,system,level,category,scope,is_top,version,sour
 | ICME | B | 计算机图形学与多媒体 | 48 | 2026-10-21 |
 | ICIP | C | 计算机图形学与多媒体 | 49 | 2026-10-21 |
 | IH&MMSec | C | 网络与信息安全 | 22 | 2026-10-21 |
+| ICMR | B | 计算机图形学与多媒体 | 48 | 2026-10-21 |
+| MMAsia | C | 计算机图形学与多媒体 | 49 | 2026-10-21 |
 
 匹配规则：
 
 - 渠道名先解码 HTML 实体（`IH&amp;MMSec` 按 `IH&MMSec` 匹配）。
-- 会议全称可以嵌在论文集标题中，但全称之外只能是年份、届次、Proceedings、出版社名或该会议缩写；“International Conference on Image Processing, Computer Vision and Machine Learning”不是 ICIP。
+- 三个词及以上的会议全称可以嵌在论文集标题中（如“ACM Multimedia Asia 2023”），但全称之外只能是年份、届次、Proceedings、出版社名或该会议缩写；“International Conference on Image Processing, Computer Vision and Machine Learning”不是 ICIP。
 - 名称含 workshop/workshops/findings/companion 的渠道不继承主会等级，除非已收录会议的名称本身就含这个词（如 IH&MMSec）。
 
 导入完成后必须执行：

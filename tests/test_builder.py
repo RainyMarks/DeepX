@@ -188,8 +188,6 @@ def test_conference_names_inside_other_conference_names_do_not_match():
     for name in (
         "2025 4th International Conference on Image Processing, Computer Vision and Machine Learning (ICICML)",
         "2024 IEEE Thirteenth International Conference on Image Processing Theory, Tools and Applications (IPTA)",
-        "Proceedings of the 6th ACM International Conference on Multimedia in Asia",
-        "Proceedings of the 2023 ACM International Conference on Multimedia Retrieval",
         "2020 19th IEEE International Conference on Machine Learning and Applications (ICMLA)",
         "2025 6th International Conference on Computer Vision, Image and Deep Learning (CVIDL)",
         "2025 IEEE 10th European Symposium on Security and Privacy (EuroS&amp;amp;P)",
@@ -197,6 +195,14 @@ def test_conference_names_inside_other_conference_names_do_not_match():
     ):
         venue = apply_venue_ranking(name, "conference")
         assert venue and venue.rankings == [], name
+    # ACM MM's name is part of MMAsia's and ICMR's, which have their own (lower) CCF ranks.
+    for name, short_name, level in (
+        ("Proceedings of the 6th ACM International Conference on Multimedia in Asia", "MMAsia", "C"),
+        ("Proceedings of the 2023 ACM International Conference on Multimedia Retrieval", "ICMR", "B"),
+    ):
+        venue = apply_venue_ranking(name, "conference")
+        assert venue and venue.short_name == short_name, name
+        assert [(item.system, item.level) for item in venue.rankings] == [("CCF", level)], name
     # Proceedings wrapping, and even a glued ordinal, around the full name still match.
     ijcai = apply_venue_ranking("Proceedings of the Thirty-ThirdInternational Joint Conference on Artificial Intelligence", "conference")
     assert ijcai and [(item.system, item.level) for item in ijcai.rankings] == [("CCF", "B")]
@@ -289,3 +295,24 @@ def test_same_title_and_year_with_different_dois_stay_apart():
     # A preprint DOI is another version of the same work, not a different work.
     preprint = _record(2025, doi="10.48550/arxiv.2601.00001", venue="arXiv")
     assert len(_merge_exact([article, preprint])) == 1
+
+
+def test_ccf_seventh_edition_icmr_and_mmasia():
+    expected = {
+        "International Conference on Multimedia Retrieval": ("ICMR", "B"),
+        "Proceedings of the 2026 International Conference on Multimedia Retrieval (ICMR)": ("ICMR", "B"),
+        # ACM's "Proceedings of the 2019 on ..." titles.
+        "Proceedings of the 2019 on International Conference on Multimedia Retrieval": ("ICMR", "B"),
+        "ACM International Conference on Multimedia in Asia (MMAsia)": ("MMAsia", "C"),
+        "Proceedings of the 7th ACM International Conference on Multimedia in Asia": ("MMAsia", "C"),
+        # A three-word name with a year around it.
+        "ACM Multimedia Asia 2023": ("MMAsia", "C"),
+        "ACM Multimedia Asia": ("MMAsia", "C"),
+    }
+    for name, (short_name, level) in expected.items():
+        venue = apply_venue_ranking(name, "conference")
+        assert venue and venue.short_name == short_name, name
+        assert [(item.system, item.level, item.version) for item in venue.rankings] == [("CCF", level, "第七版（2026）")], name
+    assert apply_venue_ranking("ACM Multimedia", "conference").short_name == "ACM MM"
+    assert apply_venue_ranking("ACM Multimedia Asia Workshops", "conference").rankings == []
+    assert apply_venue_ranking("ACM Multimedia Asia Pacific Forum", "conference").rankings == []

@@ -142,5 +142,21 @@
     "type": "conference",
     "aliases": ["Information Hiding and Multimedia Security Workshop", "IH&MMSec"],
     "rankings": [{"system": "CCF", "level": "C", "category": "网络与信息安全", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
+  },
+  {
+    "id": "venue-icmr",
+    "name": "ACM SIGMM International Conference on Multimedia Retrieval",
+    "short_name": "ICMR",
+    "type": "conference",
+    "aliases": ["ACM International Conference on Multimedia Retrieval", "International Conference on Multimedia Retrieval", "ICMR"],
+    "rankings": [{"system": "CCF", "level": "B", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
+  },
+  {
+    "id": "venue-mmasia",
+    "name": "ACM Multimedia Asia",
+    "short_name": "MMAsia",
+    "type": "conference",
+    "aliases": ["ACM International Conference on Multimedia in Asia", "MMAsia"],
+    "rankings": [{"system": "CCF", "level": "C", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
   }
 ]
