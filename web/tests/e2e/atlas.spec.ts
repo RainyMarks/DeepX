@@ -134,4 +134,120 @@ test("links to a merged author id open the unified profile", async ({ page }, te
   await expect(drawer.getByRole("heading", { name: "Jessica Fridrich" })).toBeVisible();
   await expect(page).toHaveURL(/author=a5081020569/);
   await expect(drawer.locator(".mini-metrics dd").first()).toHaveText("79");
+
+  // The profile lists twelve papers until it is expanded.
+  const papers = drawer.locator(".compact-papers li");
+  await expect(papers).toHaveCount(12);
+  await drawer.getByRole("button", { name: "展开全部 79 篇" }).click();
+  await expect(papers).toHaveCount(79);
+  await drawer.getByRole("button", { name: "收起" }).click();
+  await expect(papers).toHaveCount(12);
+});
+
+test("paper rows expand in place with the full abstract, institutions and links", async ({ page }) => {
+  await ready(page, "/?view=papers&q=forgery%20localization&sort=citations");
+  const row = page.locator(".paper-row").first();
+  const excerpt = (await row.locator(".paper-abstract").textContent()) ?? "";
+  const toggle = row.getByRole("button", { name: /^展开/ });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+
+  const more = row.getByRole("region", { name: "摘要、机构与链接" });
+  const abstract = more.locator(".paper-abstract-full");
+  await expect(abstract).toBeVisible();
+  expect(((await abstract.textContent()) ?? "").length).toBeGreaterThanOrEqual(excerpt.length);
+  await expect(more.getByRole("link", { name: /原始页面/ })).toHaveAttribute("href", /^https?:/);
+  await expect(row.locator(".paper-abstract")).toHaveCount(0);
+
+  const collapse = row.getByRole("button", { name: /^收起/ });
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
+  await collapse.click();
+  await expect(more).toHaveCount(0);
+});
+
+test("mobile cards keep the venue and citations on one line", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "phone layout");
+  await ready(page, "/?view=papers");
+  const rows = page.locator(".paper-row");
+  for (let index = 0; index < 6; index += 1) {
+    const line = rows.nth(index).locator(".paper-venue");
+    await expect(line.locator(".paper-cites")).toBeVisible();
+    expect((await line.boundingBox())!.height).toBeLessThan(34);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
+test("filter groups remember whether they are open and count their filters", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop coverage is sufficient");
+  await ready(page, "/?view=papers&task=image_forgery&yearFrom=2020&yearTo=2024");
+  const group = (title: string) => page.locator("details.filter-group").filter({ has: page.locator("summary", { hasText: title }) });
+  await expect(group("研究方向").locator(".group-count")).toHaveText("1");
+  await expect(group("发表年份").locator(".group-count")).toHaveText("1");
+  await expect(group("发表渠道").locator(".group-count")).toHaveCount(0);
+
+  await group("研究方向").locator("summary").click();
+  await group("数据来源").locator("summary").click();
+  await expect(group("研究方向")).not.toHaveAttribute("open", "");
+  await ready(page, "/?view=papers&task=image_forgery");
+  await expect(group("研究方向")).not.toHaveAttribute("open", "");
+  await expect(group("研究方向").locator(".group-count")).toHaveText("1");
+  await expect(group("数据来源")).toHaveAttribute("open", "");
+});
+
+test("the desktop filter sidebar folds away and is remembered", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop-only control");
+  await ready(page, "/?view=papers");
+  const panel = page.getByRole("complementary", { name: "筛选条件" });
+  const list = page.locator(".paper-list");
+  const narrow = (await list.boundingBox())!.width;
+
+  await page.getByRole("button", { name: "收起筛选栏" }).click();
+  await expect(panel).toBeHidden();
+  const expand = page.getByRole("button", { name: /展开筛选/ });
+  await expect(expand).toBeFocused();
+  expect((await list.boundingBox())!.width).toBeGreaterThan(narrow + 200);
+
+  await ready(page, "/?view=papers");
+  await expect(panel).toBeHidden();
+  await expand.click();
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole("button", { name: "收起筛选栏" })).toBeFocused();
+});
+
+test("map regions preview six institutions and page their papers", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "desktop interaction coverage");
+  await ready(page, "/?view=map");
+  await page.locator(".map-node-host").last().click();
+  const panel = page.getByRole("complementary", { name: "区域论文" });
+  await expect(panel.locator(".chip")).toHaveCount(6);
+  await panel.getByRole("button", { name: /^展开全部 \d+ 个机构$/ }).click();
+  expect(await panel.locator(".chip").count()).toBeGreaterThan(6);
+  await expect(panel.locator(".map-papers li")).toHaveCount(20);
+  await panel.getByRole("button", { name: /^显示更多/ }).click();
+  await expect(panel.locator(".map-papers li")).toHaveCount(40);
+});
+
+test("the phone map starts over the papers and opens regions as a bottom sheet", async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.includes("mobile"), "phone layout");
+  await ready(page, "/?view=map");
+  const map = (await page.locator(".map-explorer").boundingBox())!;
+  // The busiest region is on the first screen.
+  const largest = page.locator(".map-node-host").last();
+  const node = (await largest.boundingBox())!;
+  expect(node.x).toBeGreaterThanOrEqual(map.x);
+  expect(node.x + node.width).toBeLessThanOrEqual(map.x + map.width);
+
+  await largest.click();
+  const panel = page.getByRole("complementary", { name: "区域论文" });
+  const sheet = (await panel.boundingBox())!;
+  expect(Math.abs(sheet.y + sheet.height - (map.y + map.height))).toBeLessThan(4);
+  const [panelLayer, controlLayer] = await page.evaluate(() => [".map-panel", ".leaflet-top"]
+    .map((selector) => Number(getComputedStyle(document.querySelector(selector)!).zIndex)));
+  expect(panelLayer).toBeGreaterThan(controlLayer);
+  await expectOnTop(page, ".map-panel-head");
+
+  await panel.getByRole("button", { name: "收起区域论文" }).click();
+  await expect(panel.locator(".map-panel-scroll")).toBeHidden();
+  await panel.getByRole("button", { name: "展开区域论文" }).click();
+  await expect(panel.locator(".map-papers li").first()).toBeVisible();
 });

@@ -363,3 +363,23 @@ export function activeFilterCount(filters: FilterState): number {
   return Object.entries(filters).filter(([key, value]) => value && key !== "journalSystem").length
     + (filters.journalSystem && !filters.journal ? 1 : 0);
 }
+
+export type FilterGroupId = "task" | "year" | "venue" | "rank" | "contribution" | "people" | "source";
+
+/**
+ * Active filters per filter-panel group, one per removable chip: a year range
+ * and a journal system with its zone each count once. The keyword search
+ * lives in the top bar and belongs to no group.
+ */
+export function groupFilterCounts(filters: FilterState): Record<FilterGroupId, number> {
+  const count = (...values: unknown[]) => values.filter(Boolean).length;
+  return {
+    task: count(filters.task),
+    year: count(filters.yearFrom || filters.yearTo),
+    venue: count(filters.venue, filters.venueType),
+    rank: count(filters.ccf, filters.journal || filters.journalSystem),
+    contribution: count(filters.contribution),
+    people: count(filters.author, filters.institution, filters.country),
+    source: count(filters.source, filters.review),
+  };
+}

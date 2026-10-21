@@ -2,6 +2,7 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useState } from "react";
 import { divIcon } from "leaflet";
 import { MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { weightedLongitude } from "../insights";
 import { countryName, TASKS } from "../task";
 import type { CatalogPaper, Institution, TaskId } from "../types";
 import { formatNumber, Icon, RankingBadges, TaskTag, useEscape } from "./ui";
@@ -35,6 +36,22 @@ interface Collaboration {
 // tiles; styles.css tones them down (light) or inverts them (dark) so the
 // research-direction colours of the nodes stay the strongest signal.
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+const PHONE = "(max-width: 640px)";
+const DEFAULT_CENTER: [number, number] = [28, 20];
+const INSTITUTION_PREVIEW = 6;
+const PAPER_BATCH = 20;
+
+/**
+ * A phone shows well under half the world at the minimum zoom, so the default
+ * centre (Europe/Africa) leaves East Asia off screen. Phones centre on the
+ * paper-weighted longitude of the papers on the map instead.
+ */
+function initialCenter(papers: CatalogPaper[], institutions: Map<string, Institution>): [number, number] {
+  const phone = typeof matchMedia === "function" && matchMedia(PHONE).matches;
+  const longitude = phone ? weightedLongitude(papers, institutions) : null;
+  return longitude === null ? DEFAULT_CENTER : [DEFAULT_CENTER[0], longitude];
+}
 
 function gridSize(zoom: number) {
   return zoom <= 2 ? 20 : zoom <= 4 ? 9 : zoom <= 6 ? 3.5 : zoom <= 8 ? 1.2 : 0.3;
@@ -78,6 +95,7 @@ export default function AtlasMap({ papers, institutions, theme, covered, onPaper
   const [selectedKey, setSelectedKey] = useState("");
   const paperMap = useMemo(() => new Map(papers.map((paper) => [paper.id, paper])), [papers]);
   const institutionMap = useMemo(() => new Map(institutions.map((item) => [item.id, item])), [institutions]);
+  const [center] = useState(() => initialCenter(papers, institutionMap));
 
   const located = useMemo(() => {
     const visible = new Set(papers.flatMap((paper) => paper.institution_ids));
@@ -139,7 +157,7 @@ export default function AtlasMap({ papers, institutions, theme, covered, onPaper
 
   return <div className={`map-explorer${selected ? " has-selection" : ""}`}>
     <MapContainer
-      center={[28, 20]}
+      center={center}
       zoom={2}
       minZoom={2}
       maxZoom={12}
@@ -178,7 +196,7 @@ export default function AtlasMap({ papers, institutions, theme, covered, onPaper
       <strong>{formatNumber(located.length)}</strong> 个已定位机构 · 节点数字为论文数，颜色为主导研究方向{zoom >= 3 ? " · 连线为机构合作" : " · 放大后显示机构合作"}
     </div>
 
-    {selected && <ClusterPanel cluster={selected} paperMap={paperMap} onClose={() => setSelectedKey("")} onPaper={onPaper} onInstitution={onInstitution} />}
+    {selected && <ClusterPanel key={selected.key} cluster={selected} paperMap={paperMap} onClose={() => setSelectedKey("")} onPaper={onPaper} onInstitution={onInstitution} />}
   </div>;
 }
 
@@ -189,6 +207,10 @@ function ClusterPanel({ cluster, paperMap, onClose, onPaper, onInstitution }: {
   onPaper: (id: string) => void;
   onInstitution: (name: string) => void;
 }) {
+  // On phones the panel is a bottom sheet that can be folded down to its header.
+  const [collapsed, setCollapsed] = useState(false);
+  const [allInstitutions, setAllInstitutions] = useState(false);
+  const [paperLimit, setPaperLimit] = useState(PAPER_BATCH);
   const papers = cluster.paperIds
     .map((id) => paperMap.get(id)!)
     .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || b.citation_count - a.citation_count);
@@ -203,23 +225,37 @@ function ClusterPanel({ cluster, paperMap, onClose, onPaper, onInstitution }: {
         ? `${countries[0]}（${cities.size} 座城市）`
         : `${countries.slice(0, 3).join("、")}${countries.length > 3 ? ` 等 ${countries.length} 个国家/地区` : ""}`;
 
-  return <aside className="map-panel" aria-label="区域论文">
+  const shownInstitutions = allInstitutions ? cluster.items : cluster.items.slice(0, INSTITUTION_PREVIEW);
+
+  return <aside className={`map-panel${collapsed ? " is-collapsed" : ""}`} aria-label="区域论文">
     <header className="map-panel-head">
       <div>
         <p className="eyebrow">{cluster.items.length} 个机构 · {cluster.paperIds.length} 篇论文</p>
         <h2>{place}</h2>
       </div>
-      <button className="icon-button" type="button" onClick={onClose} aria-label="关闭区域论文"><Icon name="close" /></button>
+      <div className="map-panel-actions">
+        <button
+          className="icon-button map-panel-toggle"
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          aria-expanded={!collapsed}
+          aria-controls="map-panel-body"
+          aria-label={collapsed ? "展开区域论文" : "收起区域论文"}
+        ><Icon name="chevron" /></button>
+        <button className="icon-button" type="button" onClick={onClose} aria-label="关闭区域论文"><Icon name="close" /></button>
+      </div>
     </header>
-    <div className="map-panel-scroll">
+    <div id="map-panel-body" className="map-panel-scroll">
       <div className="chip-row">
-        {cluster.items.slice(0, 12).map((item) => <button key={item.id} type="button" className="chip" onClick={() => onInstitution(item.name)} title="在论文库中只看该机构">
+        {shownInstitutions.map((item) => <button key={item.id} type="button" className="chip" onClick={() => onInstitution(item.name)} title="在论文库中只看该机构">
           {item.name}<small>{item.paper_ids.filter((id) => paperMap.has(id)).length}</small>
         </button>)}
-        {cluster.items.length > 12 && <span className="muted">等 {cluster.items.length} 个机构</span>}
+        {cluster.items.length > INSTITUTION_PREVIEW && <button type="button" className="link-button" aria-expanded={allInstitutions} onClick={() => setAllInstitutions((value) => !value)}>
+          {allInstitutions ? "收起机构" : `展开全部 ${cluster.items.length} 个机构`}
+        </button>}
       </div>
       <ol className="map-papers">
-        {papers.slice(0, 40).map((paper) => <li key={paper.id}>
+        {papers.slice(0, paperLimit).map((paper) => <li key={paper.id}>
           <button type="button" onClick={() => onPaper(paper.id)}>
             <span className="map-paper-meta">{paper.year ?? "—"} · {paper.venue?.short_name || paper.venue?.name || "来源待补"} <RankingBadges venue={paper.venue} /></span>
             <strong>{paper.title}</strong>
@@ -227,7 +263,9 @@ function ClusterPanel({ cluster, paperMap, onClose, onPaper, onInstitution }: {
           </button>
         </li>)}
       </ol>
-      {papers.length > 40 && <p className="muted small">仅显示最新 40 篇；点击上方机构可在论文库中查看全部。</p>}
+      {papers.length > paperLimit && <button className="button block" type="button" onClick={() => setPaperLimit((value) => value + PAPER_BATCH)}>
+        显示更多（已显示 {formatNumber(paperLimit)} / {formatNumber(papers.length)}）
+      </button>}
     </div>
   </aside>;
 }

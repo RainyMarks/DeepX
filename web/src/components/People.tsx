@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { coauthors, type AuthorSummary } from "../insights";
 import { countryName, TASKS } from "../task";
 import type { Institution } from "../types";
@@ -50,6 +50,8 @@ export function InstitutionsView({ rows, onInstitution }: {
   </>;
 }
 
+const AUTHOR_PAPER_PREVIEW = 12;
+
 export function AuthorDrawer({ author, institutions, onClose, onPaper, onAuthor, onAllPapers }: {
   author: AuthorSummary | null;
   institutions: Map<string, Institution>;
@@ -58,6 +60,7 @@ export function AuthorDrawer({ author, institutions, onClose, onPaper, onAuthor,
   onAuthor: (id: string) => void;
   onAllPapers: (name: string) => void;
 }) {
+  const [allPapers, setAllPapers] = useState(false);
   const profile = useMemo(() => {
     if (!author) return null;
     const years = new Map<number, number>();
@@ -129,14 +132,21 @@ export function AuthorDrawer({ author, institutions, onClose, onPaper, onAuthor,
 
       <section className="record-section">
         <h3>论文（{author.papers.length}）</h3>
-        <ul className="compact-papers">
-          {profile.papers.slice(0, 40).map((paper) => <li key={paper.id}>
+        <ul className="compact-papers" id="author-papers">
+          {(allPapers ? profile.papers : profile.papers.slice(0, AUTHOR_PAPER_PREVIEW)).map((paper) => <li key={paper.id}>
             <button type="button" onClick={() => onPaper(paper.id)}>
               <span>{paper.year ?? "—"}</span>
               <span>{paper.title}</span>
             </button>
           </li>)}
         </ul>
+        {profile.papers.length > AUTHOR_PAPER_PREVIEW && <button
+          className="link-button list-toggle"
+          type="button"
+          aria-expanded={allPapers}
+          aria-controls="author-papers"
+          onClick={() => setAllPapers((value) => !value)}
+        >{allPapers ? "收起" : `展开全部 ${profile.papers.length} 篇`}</button>}
         <button className="button block" type="button" onClick={() => onAllPapers(author.name)}>在论文库中查看全部 <Icon name="arrow" size={16} /></button>
       </section>
     </div>}

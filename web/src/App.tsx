@@ -19,6 +19,7 @@ import {
   type SortKey,
 } from "./filters";
 import { summarizeAuthors } from "./insights";
+import { readStoredFlag, writeStored } from "./storage";
 import { CONTRIBUTIONS, countryName, SOURCES, TASKS, VENUE_TYPES } from "./task";
 import type { AtlasData, AtlasSummary, Institution, PaperDetail, TaskId } from "./types";
 import { readUrlState, toSearch, VIEWS, type UrlState, type View } from "./url";
@@ -29,6 +30,7 @@ type Theme = "light" | "dark";
 type DetailState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; detail: PaperDetail };
 
 const REPO = "https://github.com/RainyMarks/DeepX";
+const SIDEBAR_KEY = "atlas-filters-collapsed";
 
 function initialTheme(): Theme {
   try {
@@ -47,11 +49,14 @@ export default function App() {
   const [state, setState] = useState<UrlState>(() => readUrlState());
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Desktop only: the filter sidebar can be hidden to give results the full width.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredFlag(SIDEBAR_KEY));
   const [detail, setDetail] = useState<DetailState | null>(null);
   const fromHistory = useRef(false);
   const replaceNext = useRef(false);
   const previous = useRef(state);
   const searchInput = useRef<HTMLInputElement | null>(null);
+  const expandFilters = useRef<HTMLButtonElement | null>(null);
   const { view, filters, sort } = state;
 
   // --- data -------------------------------------------------------------
@@ -74,6 +79,16 @@ export default function App() {
       // Ignore: the toggle still works for this visit.
     }
   }, [theme]);
+
+  const toggleSidebar = useCallback((collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    writeStored(SIDEBAR_KEY, collapsed ? "1" : "0");
+    // Keep keyboard focus on the control that undoes the action.
+    requestAnimationFrame(() => {
+      if (collapsed) expandFilters.current?.focus();
+      else document.querySelector<HTMLButtonElement>(".filter-panel-collapse")?.focus();
+    });
+  }, []);
 
   // --- URL <-> state ----------------------------------------------------
   useEffect(() => {
@@ -261,7 +276,7 @@ export default function App() {
         onView={changeView}
         onPaper={openPaper}
       />
-    </main> : <div className="workspace">
+    </main> : <div className={`workspace${sidebarCollapsed ? " filters-collapsed" : ""}`}>
       <FilterPanel
         filters={filters}
         facets={result?.facets ?? null}
@@ -269,6 +284,7 @@ export default function App() {
         journalAvailability={journalAvailability}
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
+        onCollapse={() => toggleSidebar(true)}
         onChange={updateFilters}
         onReset={() => patchState({ filters: DEFAULT_FILTERS })}
         resultCount={paperCount}
@@ -287,6 +303,17 @@ export default function App() {
             <button className="button filter-toggle" type="button" onClick={() => setFiltersOpen(true)}>
               <Icon name="filter" size={16} />筛选{activeFilterCount(filters) ? `（${activeFilterCount(filters)}）` : ""}
             </button>
+            <button
+              ref={expandFilters}
+              className="button filter-expand"
+              type="button"
+              onClick={() => toggleSidebar(false)}
+              aria-controls="filter-panel"
+              aria-expanded="false"
+              title="展开筛选栏"
+            >
+              <Icon name="sidebar" size={16} />展开筛选{activeFilterCount(filters) ? `（${activeFilterCount(filters)}）` : ""}
+            </button>
             {view === "papers" && <label className="sort">
               <span>排序</span>
               <select value={sort} onChange={(event) => patchState({ sort: event.target.value as SortKey })}>
@@ -298,7 +325,15 @@ export default function App() {
         </div>
         <ActiveFilters filters={filters} onChange={updateFilters} onReset={() => patchState({ filters: DEFAULT_FILTERS })} />
         {!result ? <div className="loading-block" role="status"><span className="spinner" />正在载入论文、作者与机构索引…</div> : <>
-          {view === "papers" && <PaperList papers={result.papers} onPaper={openPaper} onAuthor={openAuthor} selectedId={state.paper} />}
+          {view === "papers" && <PaperList
+            papers={result.papers}
+            manifest={summary.manifest}
+            institutions={institutionsById}
+            onPaper={openPaper}
+            onAuthor={openAuthor}
+            onInstitution={filterInstitution}
+            selectedId={state.paper}
+          />}
           {view === "authors" && <AuthorsView authors={visibleAuthors} onAuthor={openAuthor} />}
           {view === "institutions" && <InstitutionsView rows={visibleInstitutions} onInstitution={filterInstitution} />}
           {view === "map" && data && <Suspense fallback={<div className="loading-block"><span className="spinner" />正在载入地图…</div>}>
@@ -324,6 +359,7 @@ export default function App() {
 
     {state.paper && detail && <PaperDrawer state={detail} institutions={institutionsById} onClose={closeDrawer} onAuthor={openAuthor} onInstitution={filterInstitution} />}
     {state.author && data && <AuthorDrawer
+      key={state.author}
       author={selectedAuthor}
       institutions={institutionsById}
       onClose={closeDrawer}

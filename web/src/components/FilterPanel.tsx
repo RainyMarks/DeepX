@@ -1,5 +1,14 @@
-import type { CSSProperties, ReactNode } from "react";
-import { correctedVenueQuery, type FacetCounts, type FacetKey, type FilterState, type JournalRankingAvailability } from "../filters";
+import { useCallback, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  correctedVenueQuery,
+  groupFilterCounts,
+  type FacetCounts,
+  type FacetKey,
+  type FilterGroupId,
+  type FilterState,
+  type JournalRankingAvailability,
+} from "../filters";
+import { readStoredJson, writeStored } from "../storage";
 import { CONTRIBUTIONS, countryName, SOURCES, TASK_ORDER, TASKS, VENUE_TYPES } from "../task";
 import { formatNumber, Icon } from "./ui";
 
@@ -10,6 +19,8 @@ interface Props {
   journalAvailability: JournalRankingAvailability;
   open: boolean;
   onClose: () => void;
+  /** Hide the whole panel (desktop). */
+  onCollapse: () => void;
   onChange: (patch: Partial<FilterState>) => void;
   onReset: () => void;
   resultCount: number;
@@ -28,6 +39,32 @@ const YEAR_PRESETS: [string, string][] = [
   ["2020 年以来", "2020"],
 ];
 
+const GROUPS_KEY = "atlas-filter-groups";
+const DEFAULT_GROUPS: Record<FilterGroupId, boolean> = {
+  task: true, year: true, venue: true, rank: true, contribution: true, people: true, source: false,
+};
+
+/** Which filter groups are open, remembered across visits. */
+function useOpenGroups() {
+  const [groups, setGroups] = useState<Record<FilterGroupId, boolean>>(() => {
+    const saved = readStoredJson<Record<FilterGroupId, boolean>>(GROUPS_KEY);
+    const merged = { ...DEFAULT_GROUPS };
+    for (const id of Object.keys(DEFAULT_GROUPS) as FilterGroupId[]) {
+      if (typeof saved[id] === "boolean") merged[id] = saved[id]!;
+    }
+    return merged;
+  });
+  const setOpen = useCallback((id: FilterGroupId, open: boolean) => {
+    setGroups((current) => {
+      if (current[id] === open) return current;
+      const next = { ...current, [id]: open };
+      writeStored(GROUPS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  return [groups, setOpen] as const;
+}
+
 const ZONES: Option[] = [
   { value: "1", label: "一区 / Q1" },
   { value: "2", label: "二区 / Q2" },
@@ -36,7 +73,10 @@ const ZONES: Option[] = [
   { value: "TOP", label: "中科院 TOP" },
 ];
 
-export function FilterPanel({ filters, facets, countries, journalAvailability, open, onClose, onChange, onReset, resultCount }: Props) {
+export function FilterPanel({ filters, facets, countries, journalAvailability, open, onClose, onCollapse, onChange, onReset, resultCount }: Props) {
+  const [groups, setGroupOpen] = useOpenGroups();
+  const active = groupFilterCounts(filters);
+  const group = (id: FilterGroupId) => ({ open: groups[id], count: active[id], onToggle: (next: boolean) => setGroupOpen(id, next) });
   const counts = (key: FacetKey) => facets?.[key] ?? new Map<string, number>();
   const correctedVenue = filters.venue.trim() ? correctedVenueQuery(filters.venue) : "";
   const hasCAS = journalAvailability.CAS.size > 0;
@@ -48,15 +88,18 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
   const countryCounts = counts("country");
   const sourceCounts = counts("source");
 
-  return <aside className={`filter-panel${open ? " is-open" : ""}`} aria-label="筛选条件">
+  return <aside id="filter-panel" className={`filter-panel${open ? " is-open" : ""}`} aria-label="筛选条件">
     <div className="filter-panel-head">
       <h2>筛选</h2>
       <button className="link-button" type="button" onClick={onReset}>全部清除</button>
+      <button className="icon-button filter-panel-collapse" type="button" onClick={onCollapse} aria-label="收起筛选栏" aria-controls="filter-panel" aria-expanded="true" title="收起筛选栏">
+        <Icon name="sidebar" />
+      </button>
       <button className="icon-button filter-panel-close" type="button" onClick={onClose} aria-label="关闭筛选"><Icon name="close" /></button>
     </div>
 
     <div className="filter-scroll">
-      <FilterGroup title="研究方向">
+      <FilterGroup title="研究方向" {...group("task")}>
         <OptionList
           label="研究方向"
           options={TASK_ORDER.map((task) => ({ value: task, label: TASKS[task].label, color: TASKS[task].color }))}
@@ -66,7 +109,7 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
         />
       </FilterGroup>
 
-      <FilterGroup title="发表年份">
+      <FilterGroup title="发表年份" {...group("year")}>
         <div className="year-inputs">
           <label><span className="sr-only">起始年份</span><input type="number" inputMode="numeric" min={1990} max={CURRENT_YEAR + 1} value={filters.yearFrom} placeholder="起始" aria-label="起始年份" onChange={(event) => onChange({ yearFrom: event.target.value })} /></label>
           <span aria-hidden="true">—</span>
@@ -82,7 +125,7 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
         </div>
       </FilterGroup>
 
-      <FilterGroup title="发表渠道">
+      <FilterGroup title="发表渠道" {...group("venue")}>
         <label className="field">
           <span>会议 / 期刊名称</span>
           <input value={filters.venue} placeholder="如 CVPR、TIFS、arXiv" onChange={(event) => onChange({ venue: event.target.value })} />
@@ -98,7 +141,7 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
         />
       </FilterGroup>
 
-      <FilterGroup title="学术等级">
+      <FilterGroup title="学术等级" {...group("rank")}>
         <p className="group-label">CCF 推荐会议</p>
         <OptionList
           label="CCF 会议等级"
@@ -131,7 +174,7 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
         {!hasCAS && !hasJCR && <small className="field-hint">当前数据尚未导入可靠期刊分区。</small>}
       </FilterGroup>
 
-      <FilterGroup title="贡献类型">
+      <FilterGroup title="贡献类型" {...group("contribution")}>
         <OptionList
           label="贡献类型"
           options={Object.entries(CONTRIBUTIONS).map(([value, label]) => ({ value, label }))}
@@ -142,7 +185,7 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
         />
       </FilterGroup>
 
-      <FilterGroup title="作者与机构">
+      <FilterGroup title="作者与机构" {...group("people")}>
         <label className="field"><span>作者</span><input value={filters.author} placeholder="作者姓名" onChange={(event) => onChange({ author: event.target.value })} /></label>
         <label className="field"><span>机构</span><input value={filters.institution} placeholder="机构名称" onChange={(event) => onChange({ institution: event.target.value })} /></label>
         <label className="field">
@@ -159,7 +202,7 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
         </label>
       </FilterGroup>
 
-      <FilterGroup title="数据来源" collapsed>
+      <FilterGroup title="数据来源" {...group("source")}>
         <label className="field">
           <span>元数据来源</span>
           <select value={filters.source} onChange={(event) => onChange({ source: event.target.value })}>
@@ -184,9 +227,21 @@ export function FilterPanel({ filters, facets, countries, journalAvailability, o
   </aside>;
 }
 
-function FilterGroup({ title, children, collapsed = false }: { title: string; children: ReactNode; collapsed?: boolean }) {
-  return <details className="filter-group" open={!collapsed}>
-    <summary>{title}</summary>
+function FilterGroup({ title, open, count, onToggle, children }: {
+  title: string;
+  open: boolean;
+  /** Filters set in this group, shown next to the title so a closed group still tells. */
+  count: number;
+  onToggle: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  return <details className="filter-group" open={open} onToggle={(event) => onToggle(event.currentTarget.open)}>
+    <summary>
+      <span className="filter-group-title">
+        {title}
+        {count > 0 && <><b className="group-count" aria-hidden="true">{count}</b><span className="sr-only">（已选 {count} 项）</span></>}
+      </span>
+    </summary>
     <div className="filter-group-body">{children}</div>
   </details>;
 }

@@ -78,6 +78,32 @@ export function topCountries(papers: CatalogPaper[], institutions: Map<string, I
   return top(counts, limit).map(([code, count]) => [{ code, name: names.get(code) ?? code }, count]);
 }
 
+/**
+ * Mean longitude of the papers' located institutions, each paper weighing one
+ * (split across its institutions). Longitudes are averaged as directions
+ * because the map wraps around: Americas and East Asia meet over the Pacific
+ * rather than cancelling out over Africa. Null when nothing is located or the
+ * papers are spread so evenly around the globe that no direction dominates.
+ */
+export function weightedLongitude(papers: CatalogPaper[], institutions: Map<string, Institution>): number | null {
+  let x = 0;
+  let y = 0;
+  let weight = 0;
+  for (const paper of papers) {
+    const located = paper.institution_ids
+      .map((id) => institutions.get(id)?.longitude)
+      .filter((longitude): longitude is number => typeof longitude === "number");
+    for (const longitude of located) {
+      const angle = (longitude * Math.PI) / 180;
+      x += Math.cos(angle) / located.length;
+      y += Math.sin(angle) / located.length;
+      weight += 1 / located.length;
+    }
+  }
+  if (!weight || Math.hypot(x, y) < 0.1 * weight) return null;
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
 export function summarizeAuthors(papers: CatalogPaper[]): AuthorSummary[] {
   const authors = new Map<string, AuthorSummary & { taskCounts: Map<TaskId, number> }>();
   for (const paper of papers) {
