@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from atlas.jsonl import iter_jsonl
 from atlas.models import utc_now
 from atlas.sources import ArxivSource, CrossrefSource, DblpSource, OpenAlexSource, SemanticScholarSource
+from atlas.sources.crossref import crossref_year
 from atlas.sources.openalex import (
     COLLECTION_QUERIES,
     DEFAULT_QUERIES,
@@ -104,6 +106,55 @@ def _secondary_record_key(envelope: dict) -> str:
     if isinstance(identity, list):
         identity = identity[0] if identity else ""
     return f"{source}:{str(identity).strip().lower()}"
+
+
+def _store_secondary(records: dict[str, dict], envelope: dict) -> None:
+    """Add a candidate, or refresh the fields of one collected earlier.
+
+    The first query and retrieval date are kept: they are the provenance of
+    the published record, and a changed value would list the source twice.
+    """
+    key = _secondary_record_key(envelope)
+    previous = records.get(key)
+    if previous is None:
+        records[key] = envelope
+    else:
+        previous["record"] = {**(previous.get("record") or {}), **(envelope.get("record") or {})}
+
+
+FUTURE_DATE_REFRESH_LIMIT = 200
+
+
+def refresh_future_crossref_records(
+    records: dict[str, dict], source: CrossrefSource, limit: int = FUTURE_DATE_REFRESH_LIMIT
+) -> dict:
+    """Re-fetch Crossref candidates dated after the current year.
+
+    Candidates collected before the date fields were requested only carry the
+    issue date (``published``), so articles in future issues look like next
+    year's papers; the full record adds ``published-online`` and ``created``.
+    """
+    this_year = datetime.now(UTC).year
+    stale = [
+        envelope for envelope in records.values()
+        if envelope.get("source") == "crossref"
+        and (envelope.get("record") or {}).get("DOI")
+        and "created" not in envelope["record"]
+        and (crossref_year(envelope["record"]) or 0) > this_year
+    ][:limit]
+    refreshed = 0
+    errors: list[dict] = []
+    for envelope in stale:
+        if _out_of_time() or len(errors) >= MAX_CONSECUTIVE_ERRORS:
+            break
+        doi = envelope["record"]["DOI"]
+        try:
+            envelope["record"] = {**envelope["record"], **source.work(doi)}
+            refreshed += 1
+        except Exception as exc:  # noqa: BLE001 - a failed lookup keeps the stored record
+            errors.append({"source": source.name, "doi": doi, "error": str(exc)[:300]})
+        time.sleep(0.35)
+    return {"stale": len(stale), "refreshed": refreshed, "errors": errors}
 
 
 def _existing_secondary_records() -> dict[str, dict]:
@@ -221,6 +272,9 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
     existing_count = len(records)
     errors: list[dict] = []
     stopped: dict[str, str] = {}
+    crossref = next((source for source in sources if source.name == "crossref"), None)
+    future_dates = refresh_future_crossref_records(records, crossref) if crossref else {"stale": 0, "refreshed": 0, "errors": []}
+    errors.extend(future_dates["errors"])
     for source in sources:
         queries = DEFAULT_QUERIES if source.name == "arxiv" else SECONDARY_QUERIES
         consecutive_errors = 0
@@ -234,8 +288,7 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
                 break
             try:
                 for row in source.search(query, max_per_query):
-                    envelope = {"source": source.name, "query": query, "retrieved_at": utc_now(), "record": row}
-                    records.setdefault(_secondary_record_key(envelope), envelope)
+                    _store_secondary(records, {"source": source.name, "query": query, "retrieved_at": utc_now(), "record": row})
                 consecutive_errors = 0
             except Exception as exc:  # noqa: BLE001 - adapters are optional and independently recoverable
                 errors.append({"source": source.name, "query": query, "error": str(exc)[:300]})
@@ -254,6 +307,7 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
         "records": len(output),
         "new_records": max(0, len(output) - existing_count),
         "source_counts": source_counts,
+        "refreshed_future_dates": future_dates["refreshed"],
         "query_count": len(SECONDARY_QUERIES),
         "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
@@ -295,7 +349,7 @@ def collect_crossref_venues(max_per_query: int = 300) -> dict:
                         "retrieved_at": utc_now(),
                         "record": row,
                     }
-                    records.setdefault(_secondary_record_key(envelope), envelope)
+                    _store_secondary(records, envelope)
                 consecutive_errors = 0
             except Exception as exc:  # noqa: BLE001 - one venue query must not abort the sweep
                 errors.append({"source": source.name, "query": label, "error": str(exc)[:300]})

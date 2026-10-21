@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 from collections import Counter, defaultdict
@@ -31,6 +32,7 @@ from atlas.release import (
     write_catalog_and_details,
     write_json,
 )
+from atlas.sources.crossref import crossref_year
 from atlas.sources.openalex import inverted_abstract
 from atlas.taxonomy import TASK_LABELS, classify, classify_tasks, contribution_type, is_in_scope
 
@@ -143,32 +145,79 @@ def _name_variants(name: str) -> set[str]:
     return {variant for part in parts if (variant := normalized_title(MEDIUM_SUFFIX.sub(" ", part)))}
 
 
+SATELLITE_MARKERS = frozenset({"workshop", "workshops", "findings", "companion"})
+# Words that proceedings titles put around a conference's own name:
+# "Proceedings of the Thirty-Seventh AAAI ...", "2004 IEEE ... (IEEE Cat. No.04TH8763)".
+WRAPPER_WORDS = frozenset({
+    "proceedings", "proceeding", "proc", "of", "the", "ieee", "acm", "cvf", "cat", "no",
+    "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+    "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+    "eighteenth", "nineteenth", "twentieth", "thirtieth", "fortieth", "fiftieth",
+    "twenty", "thirty", "forty", "fifty", "sixty",
+})
+
+
+def _acronym_tokens(item: dict) -> set[str]:
+    """Words of a ranked venue's acronyms and short aliases, also joined:
+    "S&P" gives s, p and sp; "ACM Multimedia" gives acm and multimedia."""
+    tokens: set[str] = set()
+    for alias in [item.get("short_name", ""), *item.get("aliases", [])]:
+        words = normalized_title(alias).split()
+        if alias == item.get("short_name") or len(words) <= 2:
+            tokens.update(words)
+            tokens.add("".join(words))
+    return tokens
+
+
+def _embeds_name(tokens: list[str], alias: list[str], acronyms: set[str]) -> bool:
+    """True when ``alias`` occurs in ``tokens`` and everything around it is
+    proceedings wrapping (years, ordinals, publisher, acronym). "International
+    Conference on Image Processing, Computer Vision and Machine Learning"
+    contains ICIP's name but is a different conference.
+
+    The text around the name is split at the match, so a glued typo such as
+    "Thirty-ThirdInternational Joint Conference ..." still leaves "third".
+    """
+    text, needle = " ".join(tokens), " ".join(alias)
+    start = text.find(needle)
+    while start != -1:
+        rest = f"{text[:start]} {text[start + len(needle):]}".split()
+        if all(word in WRAPPER_WORDS or word in acronyms or any(char.isdigit() for char in word) for word in rest):
+            return True
+        start = text.find(needle, start + 1)
+    return False
+
+
 def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") -> Venue | None:
-    name = " ".join((name or "").split())
+    # Some sources deliver escaped names: "IH&amp;MMSec", "Theory, Tools &amp;amp; Applications".
+    name = " ".join(html.unescape(html.unescape(name or "")).split())
     if not name:
         return None
     normalized = normalized_title(name)
+    tokens = normalized.split()
     variants = _name_variants(name)
     venue_type = infer_venue_type(name, venue_type)
     venue_id = _slug(normalized, "venue")
     known_short_name = VENUE_SHORT_NAMES.get(normalized, "")
-    if any(marker in normalized.split() for marker in ("workshop", "workshops", "findings", "companion")):
-        return Venue(id=venue_id, name=name, type=venue_type, issn=issn)
+    # Workshops, findings and companion volumes do not inherit the main venue's
+    # rank; only a ranked venue whose own name has the marker (IH&MMSec) matches.
+    markers = SATELLITE_MARKERS.intersection(tokens)
     for item in load_rankings():
         item_type = item.get("type", venue_type)
         if venue_type in {"conference", "journal"} and item_type in {"conference", "journal"} and item_type != venue_type:
             continue
         aliases = [item["name"], item.get("short_name", ""), *item.get("aliases", [])]
         item_issns = {value.lower() for value in [item.get("issn", ""), *item.get("issns", [])] if value}
-        if issn and issn.lower() in item_issns:
+        if issn and issn.lower() in item_issns and not markers:
             matched = True
         else:
             matched = False
+            acronyms = _acronym_tokens(item) if item_type == "conference" else set()
             for alias in aliases:
-                normalized_alias = normalized_title(alias)
-                if not normalized_alias or not normalized:
+                alias_tokens = normalized_title(alias).split()
+                if not alias_tokens or not tokens or not markers <= set(alias_tokens):
                     continue
-                if normalized_alias in variants:
+                if " ".join(alias_tokens) in variants:
                     matched = True
                     break
                 # Long conference names may be embedded in strings such as
@@ -177,7 +226,7 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                 # Image Processing" is not IJCV. Short acronyms and partial
                 # titles must match exactly to avoid assigning CVPR to
                 # Pattern Recognition or NeurIPS to Information.
-                if item_type == "conference" and len(normalized_alias.split()) >= 4 and normalized_alias in normalized:
+                if item_type == "conference" and len(alias_tokens) >= 4 and _embeds_name(tokens, alias_tokens, acronyms):
                     matched = True
                     break
         if matched:
@@ -345,8 +394,7 @@ def secondary_papers() -> list[Paper]:
         if source_name == "crossref":
             title_value = row.get("title") or []
             title = (title_value[0] if title_value else "") if isinstance(title_value, list) else str(title_value)
-            date_parts = ((row.get("published") or {}).get("date-parts") or [[]])[0]
-            year = int(date_parts[0]) if date_parts else None
+            year = crossref_year(row)
             abstract = re.sub(r"<[^>]+>", " ", row.get("abstract", ""))
             doi = canonical_doi(row.get("DOI", ""))
             primary_url = row.get("URL", "")
@@ -424,6 +472,7 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
         if not current.authors and paper.authors:
             current.authors = paper.authors
         _prefer_formal_version(current, paper)
+        _prefer_earlier_year(current, paper)
         current.institution_ids = sorted(set(current.institution_ids + paper.institution_ids))
         current.task_tags = sorted(set(current.task_tags + paper.task_tags))
         current.citation_count = max(current.citation_count, paper.citation_count)
@@ -452,6 +501,18 @@ def _prefer_formal_version(current: Paper, other: Paper) -> None:
         current.venue = other.venue
     if current.year is None:
         current.year = other.year
+
+
+def _prefer_earlier_year(current: Paper, other: Paper) -> None:
+    """Two formal records of one work (same DOI/OpenAlex id) keep the earlier year.
+
+    Sources disagree when an article appeared online before its issue: a
+    release built from issue dates (2027) is corrected by a source that
+    reports the online year, and the result does not depend on merge order.
+    """
+    if current.year and other.year and other.year < current.year and is_formal(current) and is_formal(other):
+        current.year = other.year
+        current.publication_date = other.publication_date
 
 
 def _version_key(paper: Paper) -> str:

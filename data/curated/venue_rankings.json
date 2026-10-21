@@ -110,5 +110,37 @@
     "type": "conference",
     "aliases": ["Computer Vision ECCV", "ECCV"],
     "rankings": [{"system": "CCF", "level": "B", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
+  },
+  {
+    "id": "venue-icassp",
+    "name": "IEEE International Conference on Acoustics, Speech and Signal Processing",
+    "short_name": "ICASSP",
+    "type": "conference",
+    "aliases": ["International Conference on Acoustics, Speech and Signal Processing", "IIEEE International Conference on Acoustics Speech and Signal Processing", "ICASSP"],
+    "rankings": [{"system": "CCF", "level": "B", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
+  },
+  {
+    "id": "venue-icme",
+    "name": "IEEE International Conference on Multimedia and Expo",
+    "short_name": "ICME",
+    "type": "conference",
+    "aliases": ["IEEE International Conference on Multimedia & Expo", "International Conference on Multimedia and Expo", "ICME"],
+    "rankings": [{"system": "CCF", "level": "B", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
+  },
+  {
+    "id": "venue-icip",
+    "name": "IEEE International Conference on Image Processing",
+    "short_name": "ICIP",
+    "type": "conference",
+    "aliases": ["International Conference on Image Processing", "ICIP"],
+    "rankings": [{"system": "CCF", "level": "C", "category": "计算机图形学与多媒体", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
+  },
+  {
+    "id": "venue-ihmmsec",
+    "name": "ACM Workshop on Information Hiding and Multimedia Security",
+    "short_name": "IH&MMSec",
+    "type": "conference",
+    "aliases": ["Information Hiding and Multimedia Security Workshop", "IH&MMSec"],
+    "rankings": [{"system": "CCF", "level": "C", "category": "网络与信息安全", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-10-21"}]
   }
 ]

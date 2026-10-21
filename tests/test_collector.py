@@ -95,3 +95,70 @@ def test_crossref_candidates_become_classified_papers(tmp_path, monkeypatch):
     assert paper.task_tags == ["image_forgery"]
     assert paper.venue and paper.venue.short_name == "TIFS" and paper.venue.rankings
     assert paper.review_status == "auto"
+
+
+def test_crossref_year_uses_first_appearance_and_registration_year():
+    from atlas.sources.crossref import crossref_year
+
+    # A future issue with no online date: the DOI was registered in 2025.
+    future_issue = {"published": {"date-parts": [[2027]]}, "published-print": {"date-parts": [[2027]]},
+                    "issued": {"date-parts": [[2027]]}, "created": {"date-parts": [[2025, 9, 20]]}}
+    assert crossref_year(future_issue) == 2025
+    online_first = {"published-online": {"date-parts": [[2025, 11, 2]]}, "published-print": {"date-parts": [[2026, 1]]},
+                    "issued": {"date-parts": [[2025, 11, 2]]}, "created": {"date-parts": [[2025, 10, 30]]}}
+    assert crossref_year(online_first) == 2025
+    # Records collected before the date fields were requested.
+    assert crossref_year({"published": {"date-parts": [[2024, 3]]}}) == 2024
+    assert crossref_year({"issued": {"date-parts": [[None]]}, "created": {"date-parts": [[2023, 1, 2]]}}) == 2023
+    assert crossref_year({}) is None
+
+
+class _RefreshingCrossref:
+    name = "crossref"
+
+    def __init__(self):
+        self.looked_up = []
+
+    def search(self, query, limit=100):
+        return [{"DOI": "10.1000/known", "title": ["Known"], "is-referenced-by-count": 9}]
+
+    def work(self, doi):
+        self.looked_up.append(doi)
+        return {"DOI": doi, "published-print": {"date-parts": [[2027]]}, "created": {"date-parts": [[2025, 9, 20]]}}
+
+
+def _pool(tmp_path, *envelopes):
+    (tmp_path / "secondary_candidates.jsonl").write_text("".join(json.dumps(item) + "\n" for item in envelopes), encoding="utf-8")
+
+
+def test_refetched_candidates_refresh_fields_but_keep_their_provenance(tmp_path, monkeypatch):
+    monkeypatch.setattr(collector, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(collector, "SECONDARY_QUERIES", ["image forgery"])
+    _pool(tmp_path, {"source": "crossref", "query": "first query", "retrieved_at": "2026-07-01T00:00:00Z",
+                     "record": {"DOI": "10.1000/known", "title": ["Known"], "abstract": "kept", "is-referenced-by-count": 1}})
+    stub = _RefreshingCrossref()
+    monkeypatch.setattr(collector, "CrossrefSource", lambda **_: stub)
+    report = collector.collect_secondary(5, {"crossref"})
+    [stored] = [json.loads(line) for line in (tmp_path / "secondary_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert stored["record"]["is-referenced-by-count"] == 9 and stored["record"]["abstract"] == "kept"
+    assert (stored["query"], stored["retrieved_at"]) == ("first query", "2026-07-01T00:00:00Z")
+    assert report["new_records"] == 0 and stub.looked_up == []
+
+
+def test_future_dated_crossref_candidates_are_looked_up_again(tmp_path, monkeypatch):
+    monkeypatch.setattr(collector, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(collector, "SECONDARY_QUERIES", [])
+    issue_dated = {"DOI": "10.1504/ijesdf.2027.1", "title": ["Forgery"], "published": {"date-parts": [[2027]]}}
+    current = {"DOI": "10.1000/current", "title": ["Current"], "published": {"date-parts": [[2025, 4]]}}
+    _pool(tmp_path, *({"source": "crossref", "query": "q", "retrieved_at": "2026-07-01T00:00:00Z", "record": row}
+                      for row in (issue_dated, current)))
+    stub = _RefreshingCrossref()
+    monkeypatch.setattr(collector, "CrossrefSource", lambda **_: stub)
+    report = collector.collect_secondary(5, {"crossref"})
+    assert stub.looked_up == ["10.1504/ijesdf.2027.1"]
+    assert report["refreshed_future_dates"] == 1
+    stored = {json.loads(line)["record"]["DOI"]: json.loads(line)["record"]
+              for line in (tmp_path / "secondary_candidates.jsonl").read_text(encoding="utf-8").splitlines()}
+    from atlas.sources.crossref import crossref_year
+    assert crossref_year(stored["10.1504/ijesdf.2027.1"]) == 2025
+    assert stored["10.1504/ijesdf.2027.1"]["title"] == ["Forgery"]

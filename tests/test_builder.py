@@ -1,4 +1,9 @@
-from atlas.builder import apply_venue_ranking, authorized_papers, load_rankings
+import json
+
+from atlas import builder
+from atlas.builder import _merge_exact, apply_venue_ranking, authorized_papers, load_rankings
+from atlas.dedupe import stable_id
+from atlas.models import Paper, Provenance
 
 
 def test_authorized_seed_preserves_human_review_status():
@@ -149,3 +154,88 @@ def test_latest_ccf_catalog_treats_ijcai_as_b_and_iclr_as_a():
     assert ijcai and ijcai.rankings[0].level == "B"
     assert iclr and iclr.rankings[0].level == "A"
     assert ijcai.rankings[0].version == "第七版（2026）"
+
+
+def test_ccf_seventh_edition_signal_processing_multimedia_and_hiding_venues():
+    expected = {
+        "ICASSP 2026 - 2026 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)": ("ICASSP", "B"),
+        "Proceedings. (ICASSP '05). IEEE International Conference on Acoustics, Speech, and Signal Processing, 2005.": ("ICASSP", "B"),
+        "2004 IEEE International Conference on Multimedia and Expo (ICME) (IEEE Cat. No.04TH8763)": ("ICME", "B"),
+        "IEEE International Conference on Multimedia and Expo": ("ICME", "B"),
+        "2008 15th IEEE International Conference on Image Processing": ("ICIP", "C"),
+        "Proceedings 2000 International Conference on Image Processing (Cat. No.00CH37101)": ("ICIP", "C"),
+        # IH&MMSec is a ranked workshop: its own name carries the marker.
+        "Proceedings of the 2022 ACM Workshop on Information Hiding and Multimedia Security": ("IH&MMSec", "C"),
+        "Proceedings of the ACM Workshop on Information Hiding and Multimedia Security - IH&amp;MMSec'19": ("IH&MMSec", "C"),
+        "Information Hiding and Multimedia Security Workshop": ("IH&MMSec", "C"),
+        "IH&amp;MMSec": ("IH&MMSec", "C"),
+    }
+    for name, (short_name, level) in expected.items():
+        venue = apply_venue_ranking(name, "unknown")
+        assert venue and venue.type == "conference" and venue.short_name == short_name, name
+        assert [(item.system, item.level, item.version) for item in venue.rankings] == [("CCF", level, "第七版（2026）")], name
+    assert apply_venue_ranking("IH&amp;MMSec").name == "IH&MMSec"
+
+
+def test_conference_names_inside_other_conference_names_do_not_match():
+    for name in (
+        "2025 4th International Conference on Image Processing, Computer Vision and Machine Learning (ICICML)",
+        "2024 IEEE Thirteenth International Conference on Image Processing Theory, Tools and Applications (IPTA)",
+        "Proceedings of the 6th ACM International Conference on Multimedia in Asia",
+        "Proceedings of the 2023 ACM International Conference on Multimedia Retrieval",
+        "2020 19th IEEE International Conference on Machine Learning and Applications (ICMLA)",
+        "2025 6th International Conference on Computer Vision, Image and Deep Learning (CVIDL)",
+        "2025 IEEE 10th European Symposium on Security and Privacy (EuroS&amp;amp;P)",
+        "2025 IEEE International Conference on Multimedia and Expo Workshops (ICMEW)",
+    ):
+        venue = apply_venue_ranking(name, "conference")
+        assert venue and venue.rankings == [], name
+    # Proceedings wrapping, and even a glued ordinal, around the full name still match.
+    ijcai = apply_venue_ranking("Proceedings of the Thirty-ThirdInternational Joint Conference on Artificial Intelligence", "conference")
+    assert ijcai and [(item.system, item.level) for item in ijcai.rankings] == [("CCF", "B")]
+    mm = apply_venue_ranking("Proceedings of the ninth ACM international conference on Multimedia - MULTIMEDIA '01", "conference")
+    assert mm and mm.short_name == "ACM MM" and mm.rankings[0].level == "A"
+
+
+def test_escaped_venue_names_are_decoded_before_matching():
+    venue = apply_venue_ranking("Computers, Materials &amp; Continua", "journal")
+    assert venue and venue.name == "Computers, Materials & Continua" and venue.short_name == "CMC" and venue.rankings
+
+
+def _record(year, *, source="crossref", doi="10.1016/j.ipm.2026.104992", venue="Information Processing & Management"):
+    title = "Towards generalizable detection of AI-generated images"
+    return Paper(
+        id=stable_id(title, year, doi), title=title, year=year, doi=doi,
+        venue=apply_venue_ranking(venue, "journal" if venue != "arXiv" else "preprint"),
+        primary_url=f"https://doi.org/{doi}" if doi else "https://arxiv.org/abs/2601.00001",
+        provenance=[Provenance(source=source, source_id=doi, retrieved_at="2026-10-01T00:00:00Z")],
+    )
+
+
+def test_formal_records_of_one_work_keep_the_earlier_year_in_any_order():
+    for first, second in ((2027, 2026), (2026, 2027)):
+        [merged] = _merge_exact([_record(first), _record(second, source="openalex")])
+        assert merged.year == 2026
+    # A preprint never moves the formal year back.
+    formal, preprint = _record(2024), _record(2023, source="arxiv", doi="", venue="arXiv")
+    formal.arxiv_id = preprint.arxiv_id = "2601.00001"
+    [merged] = _merge_exact([formal, preprint])
+    assert merged.year == 2024
+
+
+def test_future_issue_crossref_articles_use_their_registration_year(tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "RAW_DIR", tmp_path)
+    record = {
+        "DOI": "10.1016/j.sigpro.2026.110781",
+        "title": ["Copy-Move Forgery Localization with Transformers"],
+        "container-title": ["Signal Processing"],
+        "type": "journal-article",
+        "published": {"date-parts": [[2027, 1]]},
+        "published-print": {"date-parts": [[2027, 1]]},
+        "issued": {"date-parts": [[2027, 1]]},
+        "created": {"date-parts": [[2026, 6, 20]]},
+    }
+    envelope = {"source": "crossref", "query": "q", "retrieved_at": "2026-10-21T00:00:00Z", "record": record}
+    (tmp_path / "secondary_candidates.jsonl").write_text(json.dumps(envelope) + "\n", encoding="utf-8")
+    [paper] = builder.secondary_papers()
+    assert paper.year == 2026
