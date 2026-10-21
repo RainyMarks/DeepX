@@ -78,7 +78,7 @@ PREPRINT_DOI_PREFIXES = ("10.48550/", "10.2139/", "10.21203/", "10.36227/", "10.
 CONFERENCE_VENUE = re.compile(
     r"\b(?:conference|symposium|workshop|workshops|congress|summit|colloquium|annual meeting|spie|lecture notes"
     r"|communications in computer and information science|advances in intelligent systems and computing"
-    r"|smart innovation systems and technologies|ifip advances)\b"
+    r"|smart innovation systems and technologies|ifip advances|advances in neural information processing systems)\b"
 )
 JOURNAL_VENUE = re.compile(r"\b(?:journal|transactions|letters|magazine|reviews?|annals|bulletin|quarterly|archives|acta|access|reports)\b")
 VENUE_TYPES = {"conference", "journal", "preprint", "book"}
@@ -133,11 +133,22 @@ def load_rankings() -> list[dict]:
     return rankings
 
 
+MEDIUM_SUFFIX = re.compile(r"\((?:print|online|electronic|internet)\)", re.IGNORECASE)
+
+
+def _name_variants(name: str) -> set[str]:
+    """Normalized forms of a venue name, including each half of OpenAlex's
+    "Title/Title (Print)" display names."""
+    parts = [name, *name.split("/")] if "/" in name else [name]
+    return {variant for part in parts if (variant := normalized_title(MEDIUM_SUFFIX.sub(" ", part)))}
+
+
 def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") -> Venue | None:
     name = " ".join((name or "").split())
     if not name:
         return None
     normalized = normalized_title(name)
+    variants = _name_variants(name)
     venue_type = infer_venue_type(name, venue_type)
     venue_id = _slug(normalized, "venue")
     known_short_name = VENUE_SHORT_NAMES.get(normalized, "")
@@ -157,14 +168,16 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                 normalized_alias = normalized_title(alias)
                 if not normalized_alias or not normalized:
                     continue
-                if normalized_alias == normalized:
+                if normalized_alias in variants:
                     matched = True
                     break
-                # Long canonical names may be embedded in strings such as
-                # "Proceedings of the 2025 ...". Short acronyms and partial
+                # Long conference names may be embedded in strings such as
+                # "Proceedings of the 2025 ...". Journal titles must match
+                # exactly: "International Journal of Computer Vision and
+                # Image Processing" is not IJCV. Short acronyms and partial
                 # titles must match exactly to avoid assigning CVPR to
                 # Pattern Recognition or NeurIPS to Information.
-                if len(normalized_alias.split()) >= 4 and normalized_alias in normalized:
+                if item_type == "conference" and len(normalized_alias.split()) >= 4 and normalized_alias in normalized:
                     matched = True
                     break
         if matched:

@@ -79,16 +79,56 @@ def test_all_curated_journals_use_audited_2025_large_categories():
         "NN": ("2", True),
         "EAAI": ("1", True),
         "IoTJ": ("2", True),
+        "Neurocomputing": ("2", False),
+        "Signal Processing": ("2", False),
+        "CVIU": ("3", False),
+        "SPL": ("3", False),
+        "SPIC": ("3", False),
+        "JISA": ("3", False),
+        "IEEE Access": ("4", False),
+        "JVCIR": ("4", False),
     }
     journals = [item for item in load_rankings() if item.get("type") == "journal"]
     actual = {}
     for item in journals:
-        cas = next(ranking for ranking in item["rankings"] if ranking["system"] == "CAS")
-        jcr = next(ranking for ranking in item["rankings"] if ranking["system"] == "JCR")
-        assert cas["version"] == "2025" and cas["scope"] == "大类"
-        assert jcr["version"] == "2026" and jcr["level"] == "Q1"
-        actual[item["short_name"]] = (cas["level"], cas["is_top"])
-    assert actual == expected
+        [cas] = [ranking for ranking in item["rankings"] if ranking["system"] == "CAS"]
+        assert cas["version"] == "2025" and cas["scope"] == "大类" and cas["level"] in {"1", "2", "3", "4"}
+        for jcr in (ranking for ranking in item["rankings"] if ranking["system"] == "JCR"):
+            assert jcr["version"] == "2026" and jcr["level"] in {"Q1", "Q2", "Q3", "Q4"}
+        assert {ranking["system"] for ranking in item["rankings"]} <= {"CAS", "JCR"}
+        assert all("iikx.com" in ranking["source_url"] for ranking in item["rankings"])
+        actual[item["short_name"] or item["name"]] = (cas["level"], cas["is_top"])
+    assert expected.items() <= actual.items()
+    assert len({item["id"] for item in journals}) == len(journals)
+
+
+def test_journal_titles_match_exactly_but_tolerate_openalex_print_suffixes():
+    lookalike = apply_venue_ranking("International Journal of Computer Vision and Image Processing", "journal")
+    assert lookalike and lookalike.rankings == []
+    lookalike = apply_venue_ranking("International Journal of Intelligent Systems and Applications in Engineering", "journal")
+    assert lookalike and lookalike.rankings == []
+    print_edition = apply_venue_ranking("IEEE transactions on circuits and systems for video technology (Print)", "journal")
+    assert print_edition and print_edition.short_name == "TCSVT" and print_edition.rankings
+    doubled = apply_venue_ranking("Computers, materials & continua/Computers, materials & continua (Print)", "journal")
+    assert doubled and doubled.short_name == "CMC" and doubled.rankings[0].level == "4"
+
+
+def test_journal_name_variants_share_one_venue():
+    colon = apply_venue_ranking("Signal Processing: Image Communication", "journal")
+    plain = apply_venue_ranking("Signal Processing Image Communication", "journal")
+    assert colon and plain and colon.id == plain.id == "venue-spic"
+    assert apply_venue_ranking("Signal Processing", "journal").id == "venue-signal-processing"
+    assert apply_venue_ranking("Digital Signal Processing", "journal").id == "venue-dsp"
+    by_issn = apply_venue_ranking("Journal of Information Security & Applications", "journal", "2214-2126")
+    assert by_issn and by_issn.short_name == "JISA"
+    unranked = apply_venue_ranking("Multimedia Tools and Applications", "journal")
+    assert unranked and unranked.rankings == [] and unranked.short_name == "MTAP"
+
+
+def test_neurips_proceedings_are_conferences():
+    venue = apply_venue_ranking("Advances in Neural Information Processing Systems 37", "journal")
+    assert venue and venue.type == "conference"
+    assert [(ranking.system, ranking.level) for ranking in venue.rankings] == [("CCF", "A")]
 
 
 def test_security_ccf_a_conferences_are_curated_explicitly():

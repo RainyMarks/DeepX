@@ -178,5 +178,333 @@
       {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": true, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/19389.html", "verified_at": "2026-08-12"},
       {"system": "JCR", "level": "Q1", "category": "Computer Science; Engineering; Telecommunications", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/19389.html", "verified_at": "2026-08-12"}
     ]
+  },
+  {
+    "id": "venue-ieee-access",
+    "name": "IEEE Access",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2169-3536",
+    "aliases": [],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/19214.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Computer Science; Engineering; Telecommunications", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/19214.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-iet-ip",
+    "name": "IET Image Processing",
+    "short_name": "IET IP",
+    "type": "journal",
+    "issn": "1751-9659",
+    "issns": ["1751-9667"],
+    "aliases": ["IET Image Process."],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13081.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q3", "category": "Computer Science; Engineering; Imaging Science", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/13081.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-jisa",
+    "name": "Journal of Information Security and Applications",
+    "short_name": "JISA",
+    "type": "journal",
+    "issn": "2214-2126",
+    "aliases": ["J. Inf. Secur. Appl."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/33737.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Computer Science, Information Systems", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/33737.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-spic",
+    "name": "Signal Processing: Image Communication",
+    "short_name": "SPIC",
+    "type": "journal",
+    "issn": "0923-5965",
+    "issns": ["1879-2677"],
+    "aliases": ["Signal Process. Image Commun.", "Signal Processing-Image Communication"],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/17073.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-spl",
+    "name": "IEEE Signal Processing Letters",
+    "short_name": "SPL",
+    "type": "journal",
+    "issn": "1070-9908",
+    "issns": ["1558-2361"],
+    "aliases": ["IEEE Signal Process. Lett."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/12987.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Engineering, Electrical & Electronic", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/12987.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-jvcir",
+    "name": "Journal of Visual Communication and Image Representation",
+    "short_name": "JVCIR",
+    "type": "journal",
+    "issn": "1047-3203",
+    "issns": ["1095-9076"],
+    "aliases": ["J. Vis. Commun. Image Represent."],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/15055.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-electronics",
+    "name": "Electronics",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2079-9292",
+    "aliases": ["Electronics-Switzerland"],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/other/19640.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-applied-sciences",
+    "name": "Applied Sciences",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2076-3417",
+    "aliases": ["Applied Sciences-Basel", "Appl. Sci."],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "综合性期刊", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/19151.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Engineering, Multidisciplinary", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/19151.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-sivp",
+    "name": "Signal, Image and Video Processing",
+    "short_name": "SIVP",
+    "type": "journal",
+    "issn": "1863-1703",
+    "issns": ["1863-1711"],
+    "aliases": ["Signal Image Video Process."],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/17772.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q3", "category": "Engineering, Electrical & Electronic; Imaging Science", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/17772.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-signal-processing",
+    "name": "Signal Processing",
+    "short_name": "",
+    "type": "journal",
+    "issn": "0165-1684",
+    "issns": ["1872-7557"],
+    "aliases": ["Signal Process."],
+    "rankings": [
+      {"system": "CAS", "level": "2", "category": "工程技术", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/17072.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Engineering, Electrical & Electronic", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/17072.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-multimedia-systems",
+    "name": "Multimedia Systems",
+    "short_name": "",
+    "type": "journal",
+    "issn": "0942-4962",
+    "issns": ["1432-1882"],
+    "aliases": [],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/15624.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-neurocomputing",
+    "name": "Neurocomputing",
+    "short_name": "",
+    "type": "journal",
+    "issn": "0925-2312",
+    "issns": ["1872-8286"],
+    "aliases": [],
+    "rankings": [
+      {"system": "CAS", "level": "2", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/15751.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q1", "category": "Computer Science, Artificial Intelligence", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/15751.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-prl",
+    "name": "Pattern Recognition Letters",
+    "short_name": "PRL",
+    "type": "journal",
+    "issn": "0167-8655",
+    "issns": ["1872-7344"],
+    "aliases": ["Pattern Recognit. Lett."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/16116.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Computer Science, Artificial Intelligence", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/16116.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-cviu",
+    "name": "Computer Vision and Image Understanding",
+    "short_name": "CVIU",
+    "type": "journal",
+    "issn": "1077-3142",
+    "issns": ["1090-235X"],
+    "aliases": ["Comput. Vis. Image Underst."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/11644.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Computer Science, Artificial Intelligence; Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/11644.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-ivc",
+    "name": "Image and Vision Computing",
+    "short_name": "IVC",
+    "type": "journal",
+    "issn": "0262-8856",
+    "issns": ["1872-8138"],
+    "aliases": ["Image Vis. Comput."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13105.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-dsp",
+    "name": "Digital Signal Processing",
+    "short_name": "DSP",
+    "type": "journal",
+    "issn": "1051-2004",
+    "issns": ["1095-4333"],
+    "aliases": ["Digit. Signal Process."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "工程技术", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/11952.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-jei",
+    "name": "Journal of Electronic Imaging",
+    "short_name": "JEI",
+    "type": "journal",
+    "issn": "1017-9909",
+    "issns": ["1560-229X"],
+    "aliases": ["J. Electron. Imaging"],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/14070.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-visual-computer",
+    "name": "The Visual Computer",
+    "short_name": "",
+    "type": "journal",
+    "issn": "0178-2789",
+    "issns": ["1432-2315"],
+    "aliases": ["Visual Computer", "Vis. Comput."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/17613.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Computer Science, Software Engineering", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/17613.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-scientific-reports",
+    "name": "Scientific Reports",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2045-2322",
+    "aliases": ["Sci. Rep."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "综合性期刊", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/comprehensives/18231.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q1", "category": "Multidisciplinary Sciences", "version": "2026", "source_url": "https://www.iikx.com/sci/comprehensives/18231.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-cmc",
+    "name": "Computers, Materials & Continua",
+    "short_name": "CMC",
+    "type": "journal",
+    "issn": "1546-2218",
+    "issns": ["1546-2226"],
+    "aliases": ["CMC-Computers Materials & Continua", "Computers, materials & continua/Computers, materials & continua (Print)"],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/11515.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-mathematics",
+    "name": "Mathematics",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2227-7390",
+    "aliases": [],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "数学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/mathematics/37958.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q1", "category": "Mathematics", "version": "2026", "source_url": "https://www.iikx.com/sci/mathematics/37958.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-sensors",
+    "name": "Sensors",
+    "short_name": "",
+    "type": "journal",
+    "issn": "1424-8220",
+    "aliases": ["Sensors-Basel"],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "综合性期刊", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/17040.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q2", "category": "Chemistry, Analytical; Engineering; Instruments & Instrumentation", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/17040.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-symmetry",
+    "name": "Symmetry",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2073-8994",
+    "aliases": ["Symmetry-Basel"],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "综合性期刊", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/comprehensives/18848.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-entropy",
+    "name": "Entropy",
+    "short_name": "",
+    "type": "journal",
+    "issn": "1099-4300",
+    "aliases": [],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "物理与天体物理", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/physics/12175.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-ksii-tiis",
+    "name": "KSII Transactions on Internet and Information Systems",
+    "short_name": "KSII TIIS",
+    "type": "journal",
+    "issn": "1976-7277",
+    "aliases": [],
+    "rankings": [
+      {"system": "CAS", "level": "4", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/15131.html", "verified_at": "2026-10-21"},
+      {"system": "JCR", "level": "Q4", "category": "Computer Science, Information Systems; Telecommunications", "version": "2026", "source_url": "https://www.iikx.com/sci/technology/15131.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-ijis",
+    "name": "International Journal of Intelligent Systems",
+    "short_name": "IJIS",
+    "type": "journal",
+    "issn": "0884-8173",
+    "issns": ["1098-111X"],
+    "aliases": ["Int. J. Intell. Syst."],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/13413.html", "verified_at": "2026-10-21"}
+    ]
+  },
+  {
+    "id": "venue-journal-of-imaging",
+    "name": "Journal of Imaging",
+    "short_name": "",
+    "type": "journal",
+    "issn": "2313-433X",
+    "aliases": ["J. Imaging"],
+    "rankings": [
+      {"system": "CAS", "level": "3", "category": "计算机科学", "scope": "大类", "is_top": false, "version": "2025", "source_url": "https://www.iikx.com/sci/technology/31458.html", "verified_at": "2026-10-21"}
+    ]
   }
 ]
