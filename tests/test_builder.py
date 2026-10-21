@@ -39,8 +39,18 @@ def test_workshops_and_findings_do_not_inherit_main_venue_rank():
 def test_journals_receive_only_journal_rankings():
     venue = apply_venue_ranking("IEEE Transactions on Pattern Analysis and Machine Intelligence", "journal")
     assert venue and {ranking.system for ranking in venue.rankings} == {"CAS", "JCR"}
-    mismatched = apply_venue_ranking("AAAI Conference on Artificial Intelligence", "journal")
-    assert mismatched and not mismatched.rankings
+    # Names decide the venue type when a source mislabels it.
+    mislabelled = apply_venue_ranking("IEEE Transactions on Pattern Analysis and Machine Intelligence", "conference")
+    assert mislabelled and mislabelled.type == "journal"
+    assert {ranking.system for ranking in mislabelled.rankings} == {"CAS", "JCR"}
+
+
+def test_proceedings_filed_as_journals_are_conferences():
+    venue = apply_venue_ranking("Proceedings of the AAAI Conference on Artificial Intelligence", "journal")
+    assert venue and venue.type == "conference"
+    assert [(ranking.system, ranking.level) for ranking in venue.rankings] == [("CCF", "A")]
+    assert apply_venue_ranking("arXiv (Cornell University)", "unknown").type == "preprint"
+    assert apply_venue_ranking("Proceedings of the IEEE", "journal").type == "journal"
 
 
 def test_common_journal_names_receive_searchable_short_names():

@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from atlas.identity import apply_author_identities, resolve_author_identities
+from atlas.identity import IdentityResolution, apply_author_identities, resolve_author_identities
 from atlas.taxonomy import TASK_LABELS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -209,6 +209,13 @@ def build_author_index(details: list[dict]) -> list[dict]:
 
 def unify_authors(catalog: list[dict], details: list[dict], public_dir: Path = PUBLIC_DIR) -> dict:
     """Merge duplicate author ids in place and write authors.json and author_aliases.json."""
+    alias_path = public_dir / "author_aliases.json"
+    previous = read_json(alias_path) if alias_path.exists() else {"aliases": {}, "evidence": []}
+    # Ids merged by an earlier release stay merged when a source re-delivers them.
+    history = IdentityResolution(aliases=previous["aliases"], names={}, merges=[])
+    apply_author_identities(details, history, rename=False)
+    apply_author_identities(catalog, history, rename=False)
+
     # Merged identities pool their coauthors and institutions, which can
     # expose further evidence; iterate until no merge is added.
     merged: dict[str, str] = {}
@@ -224,8 +231,6 @@ def unify_authors(catalog: list[dict], details: list[dict], public_dir: Path = P
         edges += [list(edge) for edge in resolution.merges]
     apply_author_identities(catalog, resolution, rename=True)
 
-    alias_path = public_dir / "author_aliases.json"
-    previous = read_json(alias_path) if alias_path.exists() else {"aliases": {}, "evidence": []}
     aliases = {alias: merged.get(target, target) for alias, target in previous["aliases"].items()}
     aliases.update(merged)
     evidence = previous["evidence"] + edges

@@ -56,8 +56,11 @@ def collect_crossref_venues_command(max_per_query: int = typer.Option(300, min=1
 
 
 @app.command("publish")
-def publish() -> None:
-    typer.echo(json.dumps(build_public().model_dump(mode="json"), ensure_ascii=False, indent=2))
+def publish(
+    fresh: bool = typer.Option(False, help="只用本地采集缓存重建，不以现有公开数据为基线"),
+) -> None:
+    """合并现有公开数据与新采集候选，重新分类、去重、赋级并发布。"""
+    typer.echo(json.dumps(build_public(include_release=not fresh).model_dump(mode="json"), ensure_ascii=False, indent=2))
 
 
 @app.command("refresh-rankings")

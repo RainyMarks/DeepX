@@ -32,7 +32,7 @@ from atlas.release import (
     write_json,
 )
 from atlas.sources.openalex import inverted_abstract
-from atlas.taxonomy import classify_tasks, contribution_type, is_in_scope
+from atlas.taxonomy import TASK_LABELS, classify, classify_tasks, contribution_type, is_in_scope
 
 AUTHORIZED_DIR = ROOT / "data" / "authorized"
 CURATED_DIR = ROOT / "data" / "curated"
@@ -71,6 +71,45 @@ def _slug(value: str, prefix: str) -> str:
     return f"{prefix}-{digest}"
 
 
+PREPRINT_VENUE = re.compile(
+    r"\b(?:arxiv|corr|ssrn|research square|researchsquare|techrxiv|preprints?|zenodo|biorxiv|medrxiv|authorea|osf)\b"
+)
+PREPRINT_DOI_PREFIXES = ("10.48550/", "10.2139/", "10.21203/", "10.36227/", "10.20944/", "10.5281/", "10.31219/", "10.1101/", "10.22541/")
+CONFERENCE_VENUE = re.compile(
+    r"\b(?:conference|symposium|workshop|workshops|congress|summit|colloquium|annual meeting|spie|lecture notes"
+    r"|communications in computer and information science|advances in intelligent systems and computing"
+    r"|smart innovation systems and technologies|ifip advances)\b"
+)
+JOURNAL_VENUE = re.compile(r"\b(?:journal|transactions|letters|magazine|reviews?|annals|bulletin|quarterly|archives|acta|access|reports)\b")
+VENUE_TYPES = {"conference", "journal", "preprint", "book"}
+
+
+def infer_venue_type(name: str, given: str = "unknown") -> str:
+    """Venue type from its name, correcting sources that file proceedings as journals."""
+    normalized = normalized_title(name)
+    if not normalized:
+        return given if given in VENUE_TYPES else "unknown"
+    if PREPRINT_VENUE.search(normalized):
+        return "preprint"
+    journal_name = re.search(r"\b(?:journal|transactions|letters|magazine)\b", normalized)
+    if CONFERENCE_VENUE.search(normalized) and not journal_name:
+        return "conference"
+    if journal_name:
+        return "journal"
+    if given in VENUE_TYPES:
+        return given
+    return "journal" if JOURNAL_VENUE.search(normalized) else "unknown"
+
+
+def is_preprint(paper: Paper) -> bool:
+    venue_type = paper.venue.type if paper.venue else ""
+    return venue_type == "preprint" or canonical_doi(paper.doi).startswith(PREPRINT_DOI_PREFIXES)
+
+
+def is_formal(paper: Paper) -> bool:
+    return bool(paper.venue) and paper.venue.type in {"journal", "conference", "book"} and not is_preprint(paper)
+
+
 def _year_from_date(value: str) -> int | None:
     match = re.search(r"(?:19|20)\d{2}", value or "")
     return int(match.group(0)) if match else None
@@ -99,20 +138,18 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
     if not name:
         return None
     normalized = normalized_title(name)
+    venue_type = infer_venue_type(name, venue_type)
+    venue_id = _slug(normalized, "venue")
     known_short_name = VENUE_SHORT_NAMES.get(normalized, "")
     if any(marker in normalized.split() for marker in ("workshop", "workshops", "findings", "companion")):
-        return Venue(
-            id=_slug(name, "venue"),
-            name=name,
-            type=venue_type if venue_type in {"conference", "journal", "preprint", "book"} else "unknown",
-            issn=issn,
-        )
+        return Venue(id=venue_id, name=name, type=venue_type, issn=issn)
     for item in load_rankings():
         item_type = item.get("type", venue_type)
         if venue_type in {"conference", "journal"} and item_type in {"conference", "journal"} and item_type != venue_type:
             continue
         aliases = [item["name"], item.get("short_name", ""), *item.get("aliases", [])]
-        if issn and item.get("issn") and issn.lower() == item["issn"].lower():
+        item_issns = {value.lower() for value in [item.get("issn", ""), *item.get("issns", [])] if value}
+        if issn and issn.lower() in item_issns:
             matched = True
         else:
             matched = False
@@ -140,7 +177,7 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                     continue
                 rankings.append(VenueRanking(**rank))
             return Venue(id=item["id"], name=name, short_name=item.get("short_name", "") or known_short_name, type=item_type, issn=issn, rankings=rankings)
-    return Venue(id=_slug(name, "venue"), name=name, short_name=known_short_name, type=venue_type if venue_type in {"conference", "journal", "preprint", "book"} else "unknown", issn=issn)
+    return Venue(id=venue_id, name=name, short_name=known_short_name, type=venue_type, issn=issn)
 
 
 def authorized_institutions() -> tuple[dict[str, Institution], dict[str, set[str]]]:
@@ -373,6 +410,7 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
                 setattr(current, field, getattr(paper, field))
         if not current.authors and paper.authors:
             current.authors = paper.authors
+        _prefer_formal_version(current, paper)
         current.institution_ids = sorted(set(current.institution_ids + paper.institution_ids))
         current.task_tags = sorted(set(current.task_tags + paper.task_tags))
         current.citation_count = max(current.citation_count, paper.citation_count)
@@ -386,6 +424,174 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
     if len(result) < len(paper_list) and _depth < 4:
         return _merge_exact(result, _depth + 1)
     return result
+
+
+def _prefer_formal_version(current: Paper, other: Paper) -> None:
+    """Take the formal venue, year and DOI when ``other`` is the published version."""
+    if is_formal(other) and not is_formal(current):
+        current.venue = other.venue
+        current.year = other.year or current.year
+        current.publication_date = other.publication_date or current.publication_date
+        if other.doi and (not current.doi or is_preprint(current)):
+            current.doi = other.doi
+            current.primary_url = other.primary_url or current.primary_url
+    elif current.venue is None and other.venue is not None:
+        current.venue = other.venue
+    if current.year is None:
+        current.year = other.year
+
+
+def _version_key(paper: Paper) -> str:
+    title = normalized_title(paper.title)
+    return title if len(title) >= 25 and len(title.split()) >= 4 else ""
+
+
+def _same_venue(left: Paper, right: Paper) -> bool:
+    return bool(left.venue and right.venue) and normalized_title(left.venue.name) == normalized_title(right.venue.name)
+
+
+def _merge_versions(papers: list[Paper]) -> list[Paper]:
+    """Merge preprint/published (or online-first/final) versions with an identical title.
+
+    Two different formal venues with the same title stay separate: a workshop
+    paper and its journal extension are distinct publications.
+    """
+    groups: dict[str, list[Paper]] = defaultdict(list)
+    output: list[Paper] = []
+    for paper in papers:
+        key = _version_key(paper)
+        if key:
+            groups[key].append(paper)
+        else:
+            output.append(paper)
+    for group in groups.values():
+        # Formal, ranked, better-cited versions first.
+        group.sort(key=lambda item: (not is_formal(item), not (item.venue and item.venue.rankings), -item.citation_count, item.id))
+        kept: list[Paper] = []
+        for paper in group:
+            target = next(
+                (
+                    item for item in kept
+                    if (item.year is None or paper.year is None or abs(item.year - paper.year) <= 2)
+                    and (is_preprint(paper) or paper.venue is None or _same_venue(item, paper) or not is_formal(item))
+                ),
+                None,
+            )
+            if target is None:
+                kept.append(paper)
+                continue
+            _prefer_formal_version(target, paper)
+            for field in ("abstract", "doi", "arxiv_id", "openalex_id", "semantic_scholar_id", "primary_url", "publication_date"):
+                if not getattr(target, field) and getattr(paper, field):
+                    setattr(target, field, getattr(paper, field))
+            if not target.authors:
+                target.authors = paper.authors
+            if paper.review_status == "verified":
+                target.review_status = "verified"
+            target.institution_ids = sorted(set(target.institution_ids + paper.institution_ids))
+            target.citation_count = max(target.citation_count, paper.citation_count)
+            target.provenance.extend(item for item in paper.provenance if item not in target.provenance)
+        output.extend(kept)
+    return output
+
+
+def released_papers() -> list[Paper]:
+    """The current public release, used as the baseline of every build."""
+    if not (PUBLIC_DIR / "catalog.json").exists():
+        return []
+    output = []
+    for record in read_details():
+        try:
+            output.append(Paper(**record))
+        except ValueError:
+            continue
+    return output
+
+
+def released_institutions() -> dict[str, Institution]:
+    path = PUBLIC_DIR / "institutions.json"
+    if not path.exists():
+        return {}
+    output = {}
+    for record in json.loads(path.read_text(encoding="utf-8")):
+        try:
+            output[record["id"]] = Institution(**record)
+        except ValueError:
+            continue
+    return output
+
+
+def _previous_quality() -> dict:
+    path = PUBLIC_DIR / "quality.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def _authorized_curation() -> dict[str, dict]:
+    """Curated task/entry-type facts from the authorized seed, keyed like _merge_exact."""
+    path = AUTHORIZED_DIR / "reference_papers.json"
+    if not path.exists():
+        return {}
+    output: dict[str, dict] = {}
+    for row in json.loads(path.read_text(encoding="utf-8")).get("records", []):
+        facts = {}
+        if row.get("task") == "source_attribution":
+            facts["task"] = "source_attribution"
+        if row.get("entry_type") in {"method", "dataset", "benchmark", "survey", "analysis"}:
+            facts["entry_type"] = row["entry_type"]
+        if not facts:
+            continue
+        for key in (
+            "doi:" + canonical_doi(row.get("doi", "")) if row.get("doi") else "",
+            "arxiv:" + canonical_arxiv(row.get("arxiv_id", "")) if row.get("arxiv_id") else "",
+            f"title:{normalized_title(row.get('title', ''))}",
+        ):
+            if key:
+                output[key] = facts
+    return output
+
+
+def _curation_for(paper: Paper, curation: dict[str, dict]) -> dict:
+    for key in (
+        "doi:" + canonical_doi(paper.doi) if paper.doi else "",
+        "arxiv:" + canonical_arxiv(paper.arxiv_id) if paper.arxiv_id else "",
+        f"title:{normalized_title(paper.title)}",
+    ):
+        if key and key in curation:
+            return curation[key]
+    return {}
+
+
+def _human_verified(decisions: dict[str, dict]) -> set[str]:
+    """Individually reviewed papers; the bulk pass is automated and gets no exemption."""
+    return {
+        paper_id
+        for paper_id, decision in decisions.items()
+        if decision.get("status") == "verified" and not decision.get("note", "").startswith("快速批量核验")
+    }
+
+
+def _classify_papers(papers: list[Paper], decisions: dict[str, dict]) -> tuple[list[Paper], Counter[str]]:
+    """Re-derive scope, research directions and contribution type for every paper."""
+    curation = _authorized_curation()
+    protected = _human_verified(decisions)
+    kept: list[Paper] = []
+    dropped: Counter[str] = Counter()
+    for paper in papers:
+        result = classify(paper.title, paper.abstract)
+        facts = _curation_for(paper, curation)
+        if not result.in_scope and paper.id not in protected:
+            dropped[result.reason] += 1
+            continue
+        tasks = set(result.tasks or paper.task_tags)
+        if facts.get("task"):
+            tasks.add(facts["task"])
+        paper.task_tags = [task for task in TASK_LABELS if task in tasks]
+        if not paper.task_tags:
+            dropped["no task"] += 1
+            continue
+        paper.contribution_type = facts.get("entry_type") or contribution_type(paper.title, paper.abstract)
+        kept.append(paper)
+    return kept, dropped
 
 
 def _load_decisions() -> dict[str, dict]:
@@ -491,19 +697,30 @@ def refresh_public_rankings() -> dict[str, int]:
     }
 
 
-def build_public() -> DatasetManifest:
+def build_public(include_release: bool = True) -> DatasetManifest:
+    """Merge the public release with newly collected candidates and rewrite it.
+
+    The current release is the baseline, so a checkout without the local
+    candidate cache (``data/raw``) never shrinks the corpus; ``include_release``
+    = False rebuilds from the raw candidates alone.
+    """
     PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
-    papers = _apply_decisions(_merge_exact([*authorized_papers(), *openalex_papers(), *secondary_papers()]))
-    # Collectors deliberately favor recall, but the public release favors
-    # precision: explicit image-forensics evidence is required here.
-    papers = [
-        paper
-        for paper in papers
-        if paper.task_tags and paper.primary_url and is_in_scope(paper.title, paper.abstract)
-    ]
+    baseline = released_papers() if include_release else []
+    previous_quality = _previous_quality() if include_release else {}
+    decisions = _load_decisions()
+    merged = _merge_versions(_merge_exact([*baseline, *authorized_papers(), *openalex_papers(), *secondary_papers()]))
+    for paper in merged:
+        # Re-resolve venues so ranking files and venue-type rules apply to old records too.
+        if paper.venue:
+            paper.venue = apply_venue_ranking(paper.venue.name, paper.venue.type, paper.venue.issn)
+    papers, dropped = _classify_papers(_apply_decisions(merged), decisions)
+    # Collectors favor recall; the public release requires a stated task and a link.
+    papers = [paper for paper in papers if paper.primary_url]
     papers.sort(key=lambda item: (-(item.year or 0), item.title.lower()))
 
-    institutions, _ = authorized_institutions()
+    institutions = released_institutions() if include_release else {}
+    seeded, _ = authorized_institutions()
+    institutions.update(seeded)
     institutions.update(openalex_institutions())
     for institution in institutions.values():
         institution.paper_ids = []
@@ -536,14 +753,16 @@ def build_public() -> DatasetManifest:
     mapped = [item for item in institution_records if item["latitude"] is not None and item["longitude"] is not None]
     quality = {
         "dataset_version": str(datetime.now(UTC).date()),
-        "candidate_count": raw_candidate_count() or len(papers),
+        # The candidate pool only grows; a build without the local cache keeps the last known size.
+        "candidate_count": max(raw_candidate_count(), int(previous_quality.get("candidate_count") or 0), len(papers)),
         "public_paper_count": len(papers),
         "verified_paper_count": sum(paper.review_status == "verified" for paper in papers),
         "auto_review_count": sum(paper.review_status == "auto" for paper in papers),
         "source_counts": dict(sorted(source_counts.items())),
         "venue_ranking_badge_count": ranking_count,
         "mapped_institution_count": len(mapped),
-        "strong_identifier_duplicate_policy": "DOI → arXiv → OpenAlex → 标题+年份；模糊匹配不自动合并",
+        "strong_identifier_duplicate_policy": "DOI → arXiv → OpenAlex → 标题+年份；同名的预印本/正式版合并，不同正式渠道不合并；模糊匹配不自动合并",
+        "excluded_by_scope_rules": dict(sorted(dropped.items())),
         "scope_policy": "仅公开具有明确图像取证任务证据的记录；宽召回噪声保留在本地候选池",
     }
     quality["quality_targets"] = {
@@ -553,8 +772,9 @@ def build_public() -> DatasetManifest:
     }
     quality["warnings"] = [] if quality["quality_targets"]["human_verified_300"] else ["人工核验核心集尚未达到 300；自动记录不会冒充人工核验"]
 
-    # A fresh build starts from raw source ids, so earlier alias records no longer apply.
-    (PUBLIC_DIR / "author_aliases.json").unlink(missing_ok=True)
+    if not include_release:
+        # A rebuild from raw source ids starts a new alias history.
+        (PUBLIC_DIR / "author_aliases.json").unlink(missing_ok=True)
     authors = unify_authors(catalog, details)
     quality["merged_author_id_count"] = authors["total_aliases"]
     shard_names = write_catalog_and_details(catalog, details)

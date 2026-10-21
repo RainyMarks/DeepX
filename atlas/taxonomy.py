@@ -86,9 +86,14 @@ VISUAL_CONTEXT = re.compile(
 FORENSIC_CORE = (
     r"detect\w*|detector\w*|forensic\w*|identif\w*|recogni\w*|discriminat\w*|distinguish\w*|differentiat\w*|classif\w*"
     r"|spot\w*|expos\w*|uncover\w*|unmask\w*|reveal\w*|authentic\w*|verif\w*|locali[sz]\w*|benchmark\w*"
-    r"|datasets?|database|survey|review|challenge|competition|fight\w*|combat\w*|counter\w*|defen[cs]\w*|mitigat\w*"
+    r"|datasets?|database|survey|review|challenge|competition|fight\w*|combat\w*|counter\w*|defen\w*|mitigat\w*"
     r"|explain\w*|interpret\w*|evaluat\w*|analy[sz]\w*|assess\w*|real or fake|fake or real|real vs|vs real|tell\w*|catch\w*"
     r"|investigat\w*"
+)
+# Verbs that make even a loosely phrased title about generated content a detection task.
+DETECTION_VERBS = (
+    r"detect\w*|detector\w*|forensic\w*|identif\w*|recogni\w*|discriminat\w*|distinguish\w*|differentiat\w*|classif\w*"
+    r"|spot\w*|expos\w*|uncover\w*|unmask\w*|reveal\w*|authentic\w*|locali[sz]\w*|catch\w*|tell\w*"
 )
 FORENSIC = (
     r"detect\w*|detector\w*|forensic\w*|identif\w*|recogni\w*|discriminat\w*|distinguish\w*|differentiat\w*"
@@ -203,6 +208,7 @@ MISINFORMATION_RESCUE = _rx(
 
 SYNTHETIC_TITLE = _rx(
     _near(GENERATED, FORENSIC_CORE, 4),
+    _near(GENERATED, DETECTION_VERBS, 6),
     r"\b(?:real|natural|authentic|camera captured|photographic)\s+(?:images?\s+)?(?:and|or|vs|versus|from)\s+(?:ai|fake|synthetic|generated|computer generated|cg|gan|diffusion)\b",
     r"\b(?:computer graphics|cg)\s+(?:images?\s+)?(?:and|vs|versus|from)\s+(?:natural|photographic|real)",
     r"\b(?:aigc|aigi|ai generated image|synthetic image|fake image|generated image)\s+(?:detection|detectors?|forensics|identification|recognition)\b",
@@ -242,7 +248,7 @@ IMAGE_FORGERY_SPECIFIC = _rx(
     r"\bforensic detection of (?:\S+\s+){0,3}(?:images?|jpeg|photos?)\b|\bforensic detection for image\b",
     _near(r"(?:manipulated|altered|edited)\s+(?:images?|photos?|pictures?|regions?)", FORENSIC_CORE, 3),
     r"\b(?:image|digital image)s?\s+(?:\S+\s+)?forensic\w*|\b(?:photo|picture|visual|multimedia|passive|blind|digital photo|jpeg)s?\s+forensic\w*",
-    r"\bforensic detection\b(?=.*\b(?:images?|jpeg|photos?)\b)",
+    r"\bforensic detection\b(?=.*\b(?:images?|jpeg|photos?)\b)|\b(?:coder|codec|compression|encoder)\s+forensic\w*",
     _near(r"median filter\w*|bilateral filter\w*|gaussian blur\w*|sharpen\w*|gamma correction|histogram equali[sz]\w*", r"detect\w*|forensic\w*", 3),
     r"\bdouble (?:jpeg|jpg|compression|compressed|quantization)\b|\b(?:jpeg|jpg)\s+(?:re)?compression\s+(?:detection|forensic\w*|history|identification)",
     r"\b(?:non )?aligned double\b|\bprimary quantization\b",
@@ -296,7 +302,7 @@ WATERMARK_TITLE = _rx(
     r"\bwatermark\w*|\bzero watermark\w*|\bwater marking\b",
     r"\bself (?:embedding|recovery|recover\w*)\b.{0,60}\b(?:tamper\w*|images?|authenticat\w*)",
     r"\bcopyright (?:protection|marking|authentication|verification)\b",
-    r"\b(?:image|photo)s?\s+authentication\b.{0,60}\b(?:hash\w*|signatures?|crypto\w*|fragile|self embedding)",
+    r"\b(?:image|photo)s?\s+authentication\b.{0,60}\b(?:hash\w*|signatures?|crypto\w*|fragile|self embedding|embedding|recovery)",
     r"\b(?:hash\w*|signatures?|fragile|self embedding)\b.{0,60}\b(?:image|photo)s?\s+authentication\b",
     r"\b(?:perceptual|robust|image)\s+hash\w*\b.{0,60}\b(?:authenticat\w*|tamper\w*|forensic\w*|integrity)",
     r"\b(?:fragile|semi fragile)\s+(?:schemes?|techniques?|methods?|marking|authentication)\b",

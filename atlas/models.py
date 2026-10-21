@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import re
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -73,7 +75,10 @@ class Paper(BaseModel):
     @field_validator("title")
     @classmethod
     def title_must_exist(cls, value: str) -> str:
-        value = " ".join(value.split())
+        # Sources sometimes deliver HTML: "&lt;title&gt;...", "<i>vs</i>".
+        value = html.unescape(html.unescape(value or ""))
+        value = re.sub(r"</?(?:sup|sub|i|b|em|strong|scp|span)\b[^>]*>", "", value)
+        value = " ".join(re.sub(r"</?[a-zA-Z][\w:.-]*[^>]*>", " ", value).split())
         if not value:
             raise ValueError("paper title is required")
         return value

@@ -7,7 +7,8 @@ from atlas.validation import validate_public
 def test_public_preview_exceeds_reference_scale_without_faking_review():
     result = validate_public(strict=False)
     assert result["paper_count"] >= 1000
-    assert result["verified_paper_count"] == result["paper_count"]
+    # New candidates are published as "auto" until reviewed; nothing is verified by default.
+    assert 300 <= result["verified_paper_count"] <= result["paper_count"]
 
 
 def test_every_public_ranking_has_provenance():
