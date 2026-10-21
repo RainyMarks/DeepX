@@ -55,7 +55,8 @@ python -m atlas.cli validate-public --strict
 `publish` 以当前 `web/public/data/v1` 为基线，与本地候选池 `data/raw` 中的新候选和授权种子合并后重写整个发布：
 
 - 每次发布都对全部论文（包括基线里的旧记录）重新执行范围与研究方向分类、贡献类型判断、渠道类型推断和等级匹配，因此修改分类规则或等级表后直接 `publish` 即可生效。逐条人工核验的论文不会被范围规则移除；被新规则排除的论文按原因计入 `quality.json` 的 `excluded_by_scope_rules`。
-- 去重依次使用 DOI、arXiv ID、OpenAlex ID、标题+年份；同名的预印本与正式版合并，保留正式渠道、年份与 DOI；不同正式渠道（如 workshop 论文与期刊扩展版）不合并；同一作品的多条正式记录取较早年份。模糊标题不自动合并。
+- 去重依次使用 DOI、arXiv ID、OpenAlex ID、标题+年份；同名的预印本与正式版合并，保留正式渠道、年份与 DOI；不同正式渠道（如 workshop 论文与期刊扩展版）不合并。模糊标题不自动合并。
+- 带 DOI 的论文年份以其 Crossref 记录为准：取 `published-online`、`published-print`、`issued` 中最早的日期，若仍晚于 DOI 注册年份（`created`）则取注册年份，避免把未来刊期的文章算作下一年。Semantic Scholar 对有预印本的论文常给出 arXiv 年份，不用来改动年份。采集时，候选池中年份晚于当前年份、又缺少这些日期字段的 Crossref 记录会按 DOI 重新查询。
 - 候选池缺失时（新克隆的仓库、只改了规则）论文库不会缩小：基线记录全部保留并按新规则重算，候选池规模沿用 `quality.json` 中上次的记录。
 
 `publish --fresh` 不读取现有公开数据，只用 `data/raw` 和授权种子重建，并重新开始作者别名历史（删除 `author_aliases.json`，旧的 `?author=` 合并跳转随之失效）。只在本地候选池完整时使用，否则论文库会缩小到候选池覆盖的范围。

@@ -212,10 +212,19 @@ def _record(year, *, source="crossref", doi="10.1016/j.ipm.2026.104992", venue="
     )
 
 
-def test_formal_records_of_one_work_keep_the_earlier_year_in_any_order():
-    for first, second in ((2027, 2026), (2026, 2027)):
-        [merged] = _merge_exact([_record(first), _record(second, source="openalex")])
+def test_a_formal_crossref_record_decides_the_year_of_its_doi():
+    # A release built from issue dates (2027) is corrected by the fresh Crossref record.
+    released = _record(2027)
+    released.provenance.append(Provenance(source="dblp", source_id="conf/x", retrieved_at="2026-08-01T00:00:00Z"))
+    [merged] = _merge_exact([released, _record(2026)])
+    assert merged.year == 2026
+    # Semantic Scholar reports the arXiv year of papers with a preprint; the Crossref year stands in either order.
+    for records in ([_record(2025, source="semantic_scholar"), _record(2026)], [_record(2026), _record(2025, source="semantic_scholar")]):
+        [merged] = _merge_exact(records)
         assert merged.year == 2026
+    # Without a Crossref record the first year is kept.
+    [merged] = _merge_exact([_record(2026, source="openalex"), _record(2025, source="semantic_scholar")])
+    assert merged.year == 2026
     # A preprint never moves the formal year back.
     formal, preprint = _record(2024), _record(2023, source="arxiv", doi="", venue="arXiv")
     formal.arxiv_id = preprint.arxiv_id = "2601.00001"

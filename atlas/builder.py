@@ -472,7 +472,7 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
         if not current.authors and paper.authors:
             current.authors = paper.authors
         _prefer_formal_version(current, paper)
-        _prefer_earlier_year(current, paper)
+        _crossref_dates(current, paper)
         current.institution_ids = sorted(set(current.institution_ids + paper.institution_ids))
         current.task_tags = sorted(set(current.task_tags + paper.task_tags))
         current.citation_count = max(current.citation_count, paper.citation_count)
@@ -503,16 +503,24 @@ def _prefer_formal_version(current: Paper, other: Paper) -> None:
         current.year = other.year
 
 
-def _prefer_earlier_year(current: Paper, other: Paper) -> None:
-    """Two formal records of one work (same DOI/OpenAlex id) keep the earlier year.
+def _crossref_dates(current: Paper, other: Paper) -> None:
+    """A formal Crossref record decides the year of its DOI.
 
-    Sources disagree when an article appeared online before its issue: a
-    release built from issue dates (2027) is corrected by a source that
-    reports the online year, and the result does not depend on merge order.
+    Crossref registers the DOI, and crossref_year gives the first formal
+    appearance of the article. Other sources are less reliable for this:
+    Semantic Scholar reports the arXiv year of papers that also have a
+    preprint, and releases built before the Crossref date rule carry issue
+    years such as 2027. Whichever order the records merge in, the Crossref
+    year is kept (a Crossref record merged first is never overridden).
     """
-    if current.year and other.year and other.year < current.year and is_formal(current) and is_formal(other):
-        current.year = other.year
-        current.publication_date = other.publication_date
+    from_crossref = len(other.provenance) == 1 and other.provenance[0].source == "crossref"
+    if not (from_crossref and other.year and is_formal(other)):
+        return
+    if canonical_doi(other.doi) != canonical_doi(current.doi) or not is_formal(current) or current.year == other.year:
+        return
+    current.year = other.year
+    if not current.publication_date.startswith(str(other.year)):
+        current.publication_date = ""
 
 
 def _version_key(paper: Paper) -> str:
