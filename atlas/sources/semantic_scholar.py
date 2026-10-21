@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import httpx
 
+from atlas.sources.base import get_with_retry
+
 
 class SemanticScholarSource:
     name = "semantic_scholar"
@@ -14,6 +16,5 @@ class SemanticScholarSource:
 
     def search(self, query: str, limit: int = 100) -> list[dict]:
         fields = "paperId,title,abstract,year,authors,venue,publicationTypes,externalIds,url,citationCount"
-        response = self.client.get("https://api.semanticscholar.org/graph/v1/paper/search/bulk", params={"query": query, "fields": fields})
-        response.raise_for_status()
+        response = get_with_retry(self.client, "https://api.semanticscholar.org/graph/v1/paper/search/bulk", {"query": query, "fields": fields}, attempts=3)
         return response.json().get("data", [])[:limit]

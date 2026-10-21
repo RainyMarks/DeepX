@@ -11,10 +11,10 @@ import typer
 import uvicorn
 
 from atlas.admin import create_app
-from atlas.builder import AUTHORIZED_DIR, build_public, refresh_public_rankings
+from atlas.builder import AUTHORIZED_DIR, RAW_DIR, build_public, refresh_public_rankings
 from atlas.bulk_review import bulk_review
 from atlas.collector import collect_crossref_venues, collect_openalex, collect_secondary
-from atlas.release import repack_public
+from atlas.release import PUBLIC_DIR, repack_public
 from atlas.validation import ValidationError, validate_public
 
 app = typer.Typer(no_args_is_help=True, help="生成图像取证研究图谱数据与审核工具")
@@ -73,6 +73,35 @@ def refresh_rankings() -> None:
 def repack_public_command() -> None:
     """把现有公开数据重写为当前发布格式（venue 去重、细粒度详情分片），不重新采集。"""
     typer.echo(json.dumps(repack_public(), ensure_ascii=False, indent=2))
+
+
+@app.command("collection-summary")
+def collection_summary(before: int = typer.Option(0, help="发布前的论文数")) -> None:
+    """输出一次采集与发布的 Markdown 摘要（供 GitHub Actions 使用）。"""
+    manifest = json.loads((PUBLIC_DIR / "manifest.json").read_text(encoding="utf-8"))
+    quality = json.loads((PUBLIC_DIR / "quality.json").read_text(encoding="utf-8"))
+    lines = [
+        "## 论文采集结果",
+        "",
+        f"- 公开论文：{before} → {manifest['paper_count']}（{manifest['paper_count'] - before:+d}）",
+        f"- 已核验：{manifest['verified_paper_count']}；待复核：{quality.get('auto_review_count', 0)}",
+        f"- 候选池：{quality.get('candidate_count', 0)}；学者：{manifest['author_count']}；机构：{manifest['institution_count']}",
+        f"- 按范围规则排除：{sum(quality.get('excluded_by_scope_rules', {}).values())}",
+        "",
+        "| 采集报告 | 新增候选 | 错误 | 提前结束 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for name in ("openalex_report.json", "secondary_report.json", "crossref_venue_report.json"):
+        path = RAW_DIR / name
+        if not path.exists():
+            lines.append(f"| {name} | 未运行 | | |")
+            continue
+        report = json.loads(path.read_text(encoding="utf-8"))
+        stopped = report.get("stopped_early") or ""
+        if isinstance(stopped, dict):
+            stopped = ", ".join(f"{key}: {value}" for key, value in stopped.items())
+        lines.append(f"| {name} | {report.get('new_records', 0)} | {len(report.get('errors', []))} | {stopped or '否'} |")
+    typer.echo("\n".join(lines))
 
 
 @app.command("bulk-review")

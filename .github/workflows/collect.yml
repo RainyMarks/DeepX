@@ -1,0 +1,125 @@
+name: Collect papers
+
+# Runs the scholarly-source collectors on GitHub's runners, merges new
+# candidates into the public release (python -m atlas.cli publish), and pushes
+# the refreshed data only when validation and tests pass. The candidate pool
+# (data/raw) is kept in the Actions cache between runs and is never committed.
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch to push refreshed data to (empty = the branch this run uses; a new name creates a branch)"
+        required: false
+        default: ""
+      openalex_records:
+        description: "OpenAlex query budget (records)"
+        required: false
+        default: "12000"
+      secondary_per_query:
+        description: "Results per query for Crossref / arXiv / Semantic Scholar / DBLP"
+        required: false
+        default: "40"
+      secondary_sources:
+        description: "Secondary sources"
+        required: false
+        default: "crossref,arxiv,semantic_scholar,dblp"
+      venue_rows:
+        description: "Rows per Crossref venue-scoped query"
+        required: false
+        default: "200"
+      time_budget_minutes:
+        description: "Collection time budget; collectors save and stop when it runs out"
+        required: false
+        default: "100"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect-papers
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    env:
+      # Optional repository secrets: higher rate limits / polite pools.
+      CROSSREF_MAILTO: ${{ secrets.CROSSREF_MAILTO }}
+      OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+      SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
+      TARGET_BRANCH: ${{ inputs.target_branch || github.ref_name }}
+      OPENALEX_RECORDS: ${{ inputs.openalex_records }}
+      SECONDARY_PER_QUERY: ${{ inputs.secondary_per_query }}
+      SECONDARY_SOURCES: ${{ inputs.secondary_sources }}
+      VENUE_ROWS: ${{ inputs.venue_rows }}
+      TIME_BUDGET_MINUTES: ${{ inputs.time_budget_minutes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+
+      - name: Restore candidate pool
+        uses: actions/cache/restore@v4
+        with:
+          path: data/raw
+          key: paper-candidates-${{ github.run_id }}
+          restore-keys: paper-candidates-
+
+      - name: Set collection deadline
+        run: |
+          echo "ATLAS_COLLECT_DEADLINE=$(( $(date +%s) + TIME_BUDGET_MINUTES * 60 ))" >> "$GITHUB_ENV"
+          python -c "import json; print(json.load(open('web/public/data/v1/manifest.json'))['paper_count'])" > "$RUNNER_TEMP/papers_before"
+
+      - name: OpenAlex
+        continue-on-error: true
+        run: python -m atlas.cli collect-openalex --max-records "$OPENALEX_RECORDS"
+
+      - name: Crossref, arXiv, Semantic Scholar, DBLP
+        continue-on-error: true
+        run: python -m atlas.cli collect-secondary --max-per-query "$SECONDARY_PER_QUERY" --sources "$SECONDARY_SOURCES"
+
+      - name: Crossref venue sweep
+        continue-on-error: true
+        run: python -m atlas.cli collect-crossref-venues --max-per-query "$VENUE_ROWS"
+
+      - name: Save candidate pool
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw
+          key: paper-candidates-${{ github.run_id }}
+
+      - name: Publish
+        run: python -m atlas.cli publish
+
+      - name: Validate
+        run: |
+          python -m atlas.cli validate-public
+          ruff check atlas tests
+          pytest
+
+      - name: Summary
+        if: always()
+        run: python -m atlas.cli collection-summary --before "$(cat "$RUNNER_TEMP/papers_before")" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload collection reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collection-reports
+          path: data/raw/*_report.json
+          if-no-files-found: ignore
+
+      - name: Commit refreshed release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public/data/v1
+          if git diff --cached --quiet; then
+            echo "The release did not change."
+            exit 0
+          fi
+          git commit -m "Refresh paper corpus from scholarly sources" -m "Collected by the Collect papers workflow (run ${{ github.run_id }})."
+          git push origin "HEAD:refs/heads/${TARGET_BRANCH}"

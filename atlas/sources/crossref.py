@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import httpx
 
+from atlas.sources.base import get_with_retry
+
 
 class CrossrefSource:
     name = "crossref"
@@ -11,11 +13,10 @@ class CrossrefSource:
         self.client = httpx.Client(timeout=timeout, headers={"User-Agent": f"SyntheticImageForensicsAtlas/2.0 (mailto:{mailto or 'n/a'})"})
 
     def search(self, query: str, limit: int = 100) -> list[dict]:
-        params = {"query.bibliographic": query, "rows": min(limit, 1000), "select": "DOI,title,author,published,container-title,type,URL,is-referenced-by-count,ISSN"}
+        params = {"query.bibliographic": query, "rows": min(limit, 1000), "select": "DOI,title,author,published,container-title,type,URL,is-referenced-by-count,ISSN,abstract"}
         if self.mailto:
             params["mailto"] = self.mailto
-        response = self.client.get("https://api.crossref.org/works", params=params)
-        response.raise_for_status()
+        response = get_with_retry(self.client, "https://api.crossref.org/works", params)
         return response.json().get("message", {}).get("items", [])
 
     def search_in_venue(self, query: str, venue: str, limit: int = 100) -> list[dict]:
@@ -25,10 +26,9 @@ class CrossrefSource:
             "query.title": query,
             "query.container-title": venue,
             "rows": min(limit, 1000),
-            "select": "DOI,title,author,published,container-title,type,URL,is-referenced-by-count,ISSN",
+            "select": "DOI,title,author,published,container-title,type,URL,is-referenced-by-count,ISSN,abstract",
         }
         if self.mailto:
             params["mailto"] = self.mailto
-        response = self.client.get("https://api.crossref.org/works", params=params)
-        response.raise_for_status()
+        response = get_with_retry(self.client, "https://api.crossref.org/works", params)
         return response.json().get("message", {}).get("items", [])

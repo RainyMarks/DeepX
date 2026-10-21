@@ -63,6 +63,15 @@ SECONDARY_QUERIES = [
 SECONDARY_QUERIES = list(dict.fromkeys([*SECONDARY_QUERIES, *DEFAULT_QUERIES, *PRIORITY_VENUE_QUERIES]))
 
 
+MAX_CONSECUTIVE_ERRORS = 5
+
+
+def _out_of_time() -> bool:
+    """True once ATLAS_COLLECT_DEADLINE (Unix seconds) has passed; collectors then save and stop."""
+    deadline = float(os.getenv("ATLAS_COLLECT_DEADLINE", "0") or 0)
+    return bool(deadline) and time.time() >= deadline
+
+
 def _existing_openalex_records() -> dict[str, dict]:
     """Keep existing candidates when the query vocabulary is expanded."""
 
@@ -121,7 +130,15 @@ def collect_openalex(max_records: int = 3200) -> dict:
     errors: list[dict] = []
     partial_path = RAW_DIR / "openalex_candidates.partial.jsonl"
     retrieved_at = utc_now()
+    consecutive_errors = 0
+    stopped = ""
     for query in COLLECTION_QUERIES:
+        if _out_of_time():
+            stopped = "deadline"
+            break
+        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            stopped = "repeated errors"
+            break
         count = 0
         newly_found: list[dict] = []
         try:
@@ -132,8 +149,10 @@ def collect_openalex(max_records: int = 3200) -> dict:
                     records[source_id] = envelope
                     newly_found.append(envelope)
                 count += 1
+            consecutive_errors = 0
         except Exception as exc:  # noqa: BLE001 - a failed query must not abort the collection batch
             errors.append({"query": query, "error": str(exc)[:500]})
+            consecutive_errors += 1
         if newly_found:
             with partial_path.open("a", encoding="utf-8") as handle:
                 handle.write("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in newly_found))
@@ -181,6 +200,7 @@ def collect_openalex(max_records: int = 3200) -> dict:
         "query_count": len(COLLECTION_QUERIES),
         "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
+        "stopped_early": stopped,
         "retrieved_at": retrieved_at,
     }
     (RAW_DIR / "openalex_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -200,15 +220,26 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
     records = _existing_secondary_records()
     existing_count = len(records)
     errors: list[dict] = []
+    stopped: dict[str, str] = {}
     for source in sources:
         queries = DEFAULT_QUERIES if source.name == "arxiv" else SECONDARY_QUERIES
+        consecutive_errors = 0
         for query in queries:
+            if _out_of_time():
+                stopped[source.name] = "deadline"
+                break
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                # A rate-limited or unavailable source must not stall the others.
+                stopped[source.name] = "repeated errors"
+                break
             try:
                 for row in source.search(query, max_per_query):
                     envelope = {"source": source.name, "query": query, "retrieved_at": utc_now(), "record": row}
                     records.setdefault(_secondary_record_key(envelope), envelope)
+                consecutive_errors = 0
             except Exception as exc:  # noqa: BLE001 - adapters are optional and independently recoverable
                 errors.append({"source": source.name, "query": query, "error": str(exc)[:300]})
+                consecutive_errors += 1
             time.sleep(3.1 if source.name == "arxiv" else 0.35)
     output = list(records.values())
     temp = RAW_DIR / "secondary_candidates.jsonl.tmp"
@@ -226,6 +257,7 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
         "query_count": len(SECONDARY_QUERIES),
         "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
+        "stopped_early": stopped,
         "retrieved_at": utc_now(),
     }
     (RAW_DIR / "secondary_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -241,11 +273,16 @@ def collect_crossref_venues(max_per_query: int = 300) -> dict:
     existing_count = len(records)
     errors: list[dict] = []
     query_hits: dict[str, int] = {}
+    consecutive_errors = 0
+    stopped = ""
     for venue, tasks in PRIORITY_VENUE_TASKS.items():
         # The acronym is useful in free-text search but less useful in the
         # dedicated container-title field.
         container = venue.removesuffix(" TIFS")
         for query in tasks:
+            if _out_of_time() or consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                stopped = "deadline" if _out_of_time() else "repeated errors"
+                break
             label = f"{query} @ {container}"
             try:
                 rows = source.search_in_venue(query, container, max_per_query)
@@ -259,9 +296,13 @@ def collect_crossref_venues(max_per_query: int = 300) -> dict:
                         "record": row,
                     }
                     records.setdefault(_secondary_record_key(envelope), envelope)
+                consecutive_errors = 0
             except Exception as exc:  # noqa: BLE001 - one venue query must not abort the sweep
                 errors.append({"source": source.name, "query": label, "error": str(exc)[:300]})
+                consecutive_errors += 1
             time.sleep(0.35)
+        if stopped:
+            break
 
     output = list(records.values())
     temp = RAW_DIR / "secondary_candidates.jsonl.tmp"
@@ -276,6 +317,7 @@ def collect_crossref_venues(max_per_query: int = 300) -> dict:
         "query_count": len(query_hits),
         "query_hits": query_hits,
         "errors": errors,
+        "stopped_early": stopped,
         "retrieved_at": utc_now(),
     }
     (RAW_DIR / "crossref_venue_report.json").write_text(

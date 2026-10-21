@@ -5,6 +5,8 @@ from typing import ClassVar
 
 import httpx
 
+from atlas.sources.base import get_with_retry
+
 
 class ArxivSource:
     name = "arxiv"
@@ -14,8 +16,8 @@ class ArxivSource:
         self.client = httpx.Client(timeout=timeout, headers={"User-Agent": "SyntheticImageForensicsAtlas/2.0"})
 
     def search(self, query: str, limit: int = 100) -> list[dict]:
-        response = self.client.get("https://export.arxiv.org/api/query", params={"search_query": f'all:"{query}"', "start": 0, "max_results": min(limit, 300), "sortBy": "relevance"})
-        response.raise_for_status()
+        params = {"search_query": f'all:"{query}"', "start": 0, "max_results": min(limit, 300), "sortBy": "relevance"}
+        response = get_with_retry(self.client, "https://export.arxiv.org/api/query", params)
         root = ET.fromstring(response.text)
         output = []
         for entry in root.findall("a:entry", self.ns):
