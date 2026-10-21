@@ -98,3 +98,71 @@ def test_long_tail_forensics_are_retained_and_classified():
     assert "digital_watermarking" in classify_tasks(
         "Robust Reversible Data Hiding for Image Authentication and Tamper Detection"
     )
+
+
+def test_word_boundaries_keep_steganalysis_papers_as_methods():
+    assert contribution_type("Rich Models for Steganalysis of Digital Images") == "method"
+    assert contribution_type("An Empirical Study of JPEG Steganalysis Under Cover-Source Mismatch") == "analysis"
+
+
+def test_contribution_type_reads_title_structure():
+    assert contribution_type("Forged Character Detection Datasets: Passports, Driving Licences and Visa Stickers") == "dataset"
+    assert contribution_type("Celeb-DF: A Large-Scale Challenging Dataset for DeepFake Forensics") == "dataset"
+    assert contribution_type("DeepFake Detection on Publicly Available Datasets using Modified AlexNet") == "method"
+    assert contribution_type("Can We Get Rid of Handcrafted Feature Extractors? SparseViT: Image Manipulation Localization") == "method"
+    assert contribution_type("Is Artificial Intelligence Generated Image Detection a Solved Problem?") == "analysis"
+    assert contribution_type("FakeBench: Probing Explainable Fake Image Detection via Large Multimodal Models") == "benchmark"
+    assert contribution_type("Automatic detection of image manipulations in the biomedical literature") == "method"
+
+
+def test_records_that_are_not_papers_are_rejected():
+    for title in (
+        "Figure 5: (A) Cover image of boat, (B) histogram of boat cover image",
+        "Table 1: Survey on deepfake detection methods.",
+        "Retraction Note: A survey on copy-move image forgery detection based on deep-learning techniques",
+        "Session details: Steganography and steganalysis",
+        "Dual-Branch Noise-Guided Network for Image Splicing Forgery Detection_supp1-3589929.pdf",
+        'Review of: "Omni-IML: Towards Unified Image Manipulation Localization"',
+    ):
+        assert not is_in_scope(title), title
+
+
+def test_look_alike_topics_are_rejected():
+    for title in (
+        "Change Detection in Synthetic Aperture Radar Images based on Image Fusion and Fuzzy Clustering",
+        "Scene Text Localization Using Lightweight Convolutional Networks",
+        "Fingerprint image enhancement algorithm based on AM-FM model",
+        "Deepfake Text Detection: Limitations and Opportunities",
+        "Seeing the Poem: Image-Semantic Detection of AI-Generated Modern Chinese Poetry with MLLMs",
+        "Attribution-Driven Explanation of the Deep Neural Network Model via Conditional Microstructure Image Synthesis",
+        "Memory Image Based Detection Framework for Fileless CryptoJacking Malware Using Visual Memory Forensics",
+        "Fragile Watermarking Scheme for Tamper Detection of Relational Database",
+        "Research on the Attribution of Rights to AI-Generated Content from an Intellectual Property Law Perspective",
+        "Text-Guided Image Manipulation for Desired Region Using Referring Image Segmentation",
+    ):
+        assert not is_in_scope(title), title
+
+
+def test_forensic_tasks_are_recognised_from_specific_wording():
+    cases = {
+        "TextShield-R1: Reinforced Reasoning for Tampered Text Detection": "scene_text_forgery",
+        "Detecting AutoEncoder is Enough to Catch LDM Generated Images": "synthetic_detection",
+        "MLLM-IGDD: Instance-Guided Deepfake Detection via Multimodal Large Language Models": "deepfake_detection",
+        "LSB steganography detection in monochromatic still images using artificial neural networks": "image_steganalysis",
+        "SMARTMed: semi-fragile dual watermarking with deep tamper detection for secure medical image transmission": "digital_watermarking",
+        "Source Generator Attribution via Inversion": "source_attribution",
+        "Gaussian Shading: Provable Performance-Lossless Image Watermarking for Diffusion Models": "content_provenance",
+        "Forensic Detection of Processing Operator Chains: Recovering the History of Filtered JPEG Images": "image_forgery",
+        "Exposing image resampling forgery by using linear parametric model": "image_forgery",
+    }
+    for title, task in cases.items():
+        assert task in classify_tasks(title), title
+
+
+def test_halftone_error_diffusion_is_not_generative_provenance():
+    tags = classify_tasks("Watermarking for Halftoned Images using Error Diffusion with Nonlinear Thresholding")
+    assert tags == ["digital_watermarking"]
+
+
+def test_no_catch_all_direction_for_unstated_tasks():
+    assert classify_tasks("A Comprehensive Survey on Image Inpainting Techniques") == []

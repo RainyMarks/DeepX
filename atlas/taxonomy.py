@@ -44,6 +44,8 @@ def normalize_text(value: str) -> str:
     # "Synthetic aperture radar/sonar" imagery is never synthetic-image forensics.
     text = re.sub(r"\bsynthetic aperture (?:radar|sonar|laser|imaging)\b", "sar", text)
     text = re.sub(r"\bartificial intelligence\b", "ai", text)
+    # Halftoning, MRI and PDE "diffusion" are not diffusion models.
+    text = re.sub(r"\b(?:error|dot|anisotropic|heat|nonlinear|thermal) diffusion\b|\bdiffusion (?:weighted|tensor|mri|filter\w*|equations?|process(?:es)?|coefficients?|kurtosis)\b", "pdediffusion", text)
     # Diffusion *language* models generate text, not images.
     text = re.sub(r"\bdiffusion (?:large )?language models?\b", "language model", text)
     return re.sub(r"\s+", " ", text).strip()
@@ -77,12 +79,13 @@ IMAGE_STRICT = (
 # Verbs/nouns that make a phrase about generated or manipulated content forensic.
 # Context that makes a language-model or model-watermarking title visual.
 VISUAL_CONTEXT = re.compile(
-    rf"\b(?:{IMAGE_STRICT}|vision|multimodal|multi modal|mllms?|lvlms?|vlms?|vision language|deep ?fakes?|diffusion|gans?"
+    rf"\b(?:{IMAGE_STRICT}|vision|multimodal|multi modal|multimedia|mllms?|lvlms?|vlms?|vision language|deep ?fakes?|diffusion|gans?"
+    r"|content provenance|content credentials?|c2pa"
     r"|text to image|t2i|generative (?:image )?models?|media forensic\w*|stable diffusion)\b"
 )
 FORENSIC_CORE = (
     r"detect\w*|detector\w*|forensic\w*|identif\w*|recogni\w*|discriminat\w*|distinguish\w*|differentiat\w*|classif\w*"
-    r"|spot\w*|expos\w*|uncover\w*|unmask\w*|reveal\w*|authentic\w*|verif\w*|locali[sz]\w*|segment\w*|benchmark\w*"
+    r"|spot\w*|expos\w*|uncover\w*|unmask\w*|reveal\w*|authentic\w*|verif\w*|locali[sz]\w*|benchmark\w*"
     r"|datasets?|database|survey|review|challenge|competition|fight\w*|combat\w*|counter\w*|defen[cs]\w*|mitigat\w*"
     r"|explain\w*|interpret\w*|evaluat\w*|analy[sz]\w*|assess\w*|real or fake|fake or real|real vs|vs real|tell\w*|catch\w*"
     r"|investigat\w*"
@@ -105,7 +108,7 @@ GENERATED = (
     r"|fake\s+(?:\S+\s+)?(?:images?|imagery|photos?|pictures?|faces?|media|visuals?|art\w*|portraits?)"
     r"|generated\s+(?:\S+\s+)?(?:images?|imagery|photos?|pictures?|faces?|media|content|visuals?|art\w*|portraits?)"
     r"|(?:gan|gans|diffusion|generative model|generator)\s+(?:images?|imagery|faces?|artifacts?|traces?)"
-    r"|(?:images?|photos?|pictures?|faces?|content)\s+(?:generated|synthesi[sz]ed|created)\s+by"
+    r"|(?:images?|photos?|pictures?|faces?|content)\s+(?:generated|synthesi[sz]ed|created)\s+by\s+(?:\S+\s+){0,2}(?:ai|gans?|diffusion|generative|models?|text to image|t2i|stable diffusion|midjourney|dall e)\b"
 )
 
 # --- 1. records and modalities that are never in scope --------------------------
@@ -114,6 +117,9 @@ JUNK = _rx(
     r"^(?:fig|figure|table|supplementary(?: material| figure| table)?|appendix|graphical abstract|scheme|chart)\s*[a-z]?\d",
     r"^(?:erratum|corrigendum|correction|retraction|retracted|editorial|preface|front matter|back matter|index to)\b",
     r"^(?:licensed under|creative commons)\b",
+    r"^(?:proceedings of|session details|title page|table of contents|keynote\b|author response|reviewer report|decision letter)",
+    r"^review of\s*(?:[:\"“]|for\b)|^\(\s*\w+\s*'?\d{2}\s*\)",
+    r"_supp\d*\b|\bsupplementary (?:material|file|data)\b|\.pdf$",
 )
 OTHER_MODALITY = _rx(
     r"\b(?:audio|audios|speech|voice|voices|speaker|speakers|music|song|songs|acoustic|sound)\b",
@@ -124,13 +130,14 @@ OTHER_MODALITY = _rx(
     r"\b(?:code|codes)\s+(?:watermark\w*|provenance|stylometry)\b|\bcode provenance\b|\b(?:iot|smart grid|power grid|sensor data|telemetry)\b(?=.*\b(?:watermark|provenance|steganograph)\w*)",
     r"\b(?:linguistic|lexical|textual|generative text|coverless text|network|protocol|tcp|ip|voip|packet)\s+steganograph\w*",
     r"\b(?:llms?|large language models?|language models?|chatbots?|nlp)\b",
-    r"\b(?:3d (?:meshes|mesh|models?|point clouds?)|meshes|point clouds?|vector maps?|vector data|relational|databases?|tabular|time series|graphs?|software|source code|programs?|blockchain transactions?|dna sequences?|genomic)\b(?=.*\b(?:watermark|steganograph|steganaly|fingerprint|tamper|provenance)\w*)",
+    r"(?=.*\b(?:watermark|steganograph|steganaly|fingerprint|tamper|provenance)\w*).*\b(?:3d (?:meshes|mesh|models?|point clouds?)|meshes|point clouds?|vector maps?|vector data|relational(?: databases?)?|outsourced databases?|database (?:watermark\w*|tamper\w*|quer\w*|records?|tuples?)|tabular|time series|graphs?|software|source code|programs?|blockchain transactions?|dna sequences?|genomic"
+    r"|hardware|integrated circuits?|ics?|fpgas?|radio frequency|rf|rfid|garments?|textiles?|cloud (?:computing|data|storage)|5g|power systems?|sensor networks?|network traffic|protocols?)\b",
     r"\b(?:dnn|deep neural networks?|neural networks?|federated|model|models|classifiers?|datasets?)\s+(?:watermark\w*|fingerprint\w*|ownership|ip protection)\b",
     r"\bwatermark\w*\s+(?:deep neural networks?|neural networks?|dnns?|classifiers?|llms?|language models?)\b",
 )
 # Generated text, code or music is never an image topic, whatever else the title says.
 GENERATED_NON_IMAGE = re.compile(
-    r"\b(?:ai|machine|llm|model|neural)?\s*(?:generated|written)\s+(?:\S+\s+){0,2}(?:poems?|poetry|lyrics|stories|essays?|news|codes?|music|songs?|reviews?|comments?|tweets?|texts?|answers?|abstracts?|papers?)\b(?!\s+images?)"
+    r"\b(?:ai|machine|llms?|model|neural|chatgpt|gpt\w*|language model)\s+(?:generated|written)\s+(?:\S+\s+){0,2}(?:poems?|poetry|lyrics|stories|essays?|news|codes?|music|songs?|reviews?|comments?|tweets?|texts?|answers?|abstracts?|papers?)\b(?!\s+images?)"
 )
 AUDIO = re.compile(r"\b(?:audio|audios|speech|voice|voices|speaker|speakers|music|song|songs|acoustic|sound)\b")
 VIDEO = re.compile(r"\b(?:videos?|video based|talking heads?|lip sync\w*)\b")
@@ -160,6 +167,11 @@ OFF_TOPIC = {
     ),
     "misinformation": _rx(r"\b(?:fake news|misinformation|disinformation|rumou?rs?|fact check\w*|propaganda|hoax\w*|out of context)\b"),
     "encryption": _rx(r"\b(?:image )?encryption\b|\bcryptosystems?\b|\bchaotic (?:maps?|systems?)\b|\bsecret (?:image )?sharing\b|\bvisual cryptography\b"),
+    "humanities": _rx(
+        r"\b(?:effort|blame|causal|credit|responsibility|fundamental|social|authorship) attributions?\b|\battributions? (?:errors?|bias|theory)\b",
+        r"\b(?:copyright (?:attribution|ownership|law|infringement liability)|intellectual property law|legal|laws|ownership and|liability|jurisprudence|regulations?|regulatory|governance|labell?ing mandate)\b",
+        r"\b(?:consumers?|aesthetic\w*|psycholog\w*|public opinion|political discourse|newsrooms?)\b",
+    ),
     "xai": _rx(
         r"\b(?:feature|pixel|saliency|gradient|causal|visual|attention|token|input)\s+attributions?\b|\battributions?\s+(?:maps?|methods?|scores?|driven|based explanations?)\b",
         r"\bexplain\w*\b.{0,50}\battributions?\b|\battributions?\b.{0,50}\bexplain\w*",
@@ -176,6 +188,10 @@ FORENSIC_RESCUE = re.compile(
     r"\b(?:fakes?|forg\w*|tamper\w*|manipulat\w*|deep ?fakes?|forensic\w*|authentic\w*|provenance|watermark\w*|stegan\w*|attribution|spoof\w*)\b"
     r"|\breal (?:or|vs|versus|and) (?:fake|synthetic|generated|ai)\b"
     r"|\b(?:ai generated|synthetic|generated|aigc|aigi) (?:images? )?(?:detection|detectors?|forensics|identification)\b"
+)
+TECHNICAL_RESCUE = re.compile(
+    r"\b(?:detect\w*|detector\w*|forensic\w*|locali[sz]\w*|defen[cs]\w*|proactive|watermark\w*|c2pa|benchmark\w*|datasets?"
+    r"|provenance (?:tracking|tracing|verification|state\w*)|algorithms?|networks?|framework)\b"
 )
 MISINFORMATION_RESCUE = _rx(
     r"\b(?:image|photo|picture)s?\s+(?:forger\w*|tamper\w*|manipulat\w*|splic\w*|doctor\w*)\b",
@@ -198,10 +214,16 @@ DEEPFAKE_CUE = (
     r"|cheapfakes?|shallowfakes?|face edit\w*|facial attribute manipulation|(?:face|facial) images? (?:manipulat\w*|forger\w*|tamper\w*)"
 )
 DEEPFAKE_FORENSIC = rf"{FORENSIC_CORE}|investigat\w*|prevent\w*|protect\w*|disrupt\w*|immuni[sz]\w*|proactive|anti deepfake"
-DEEPFAKE_TITLE = _rx(_near(DEEPFAKE_CUE, DEEPFAKE_FORENSIC, 8), r"\b(?:morph\w* attack detection|face forensics|face forgery|deepfake detection|deepfake forensics)\b")
+DEEPFAKE_TITLE = _rx(
+    _near(DEEPFAKE_CUE, DEEPFAKE_FORENSIC, 8),
+    r"\bagainst\s+(?:\S+\s+){0,2}(?:deep ?fakes?|deepfak\w*|face ?swap\w*|face forger\w*|facial manipulat\w*|face manipulat\w*)", r"\b(?:morph\w* attack detection|face forensics|face forgery|deepfake detection|deepfake forensics)\b")
 ATTRIBUTION_TITLE = _rx(
     _near(r"(?:model|source|generator|origin|architecture|gan|diffusion|provenance)\s+(?:attribution|identification|tracing|traceability|linking|parsing|inference)", r"gans?|diffusion|generat\w*|synthe\w*|ai|aigc|deep ?fakes?|fake|text to image|t2i", 6),
-    _near(r"attribution\w*|attributing", r"(?:ai|gan|gans|diffusion|deep ?fakes?|fake|synthetic|generated|aigc|text to image|t2i|generative)", 4),
+    _near(
+        r"attribution\w*|attributing",
+        r"ai|gans?|diffusion|deep ?fakes?|aigc|text to image|t2i|generative models?|(?:fake|synthetic|generated|ai generated)\s+(?:\S+\s+)?(?:images?|media|content|faces?)",
+        4,
+    ),
     r"\b(?:gan|gans|diffusion|generative model|generator|text to image model)s?\s+fingerprint\w*",
     r"\b(?:generator|gan|diffusion|generative model)s?\s+(?:attribution|identification|tracing|traceability)\b",
     _near(r"traceab\w*|tracing|trace|traces|tracking", GENERATED, 4),
@@ -214,17 +236,17 @@ IMAGE_FORGERY_SPECIFIC = _rx(
     r"\bcopy ?move\b|\bcopy paste forger\w*|\bregion duplication\b|\bcloning (?:detection|forger\w*)",
     r"\b(?:image|photo|picture)s?\s+splic\w*|\bsplic\w*\s+(?:detection|forger\w*|locali[sz]\w*|forensic\w*|images?|attacks?|regions?)|\bspliced\b|\bphotomontage\b",
     r"\b(?:image|photo|picture|digital image|jpeg)s?\s+(?:content\s+)?(?:forger\w*|tamper\w*|falsif\w*|doctor\w*)",
-    _near(r"(?:image|photo|picture)s?\s+(?:manipulat\w*|alteration\w*|edit\w*)", FORENSIC_CORE, 3),
+    _near(r"(?:image|photo|picture)s?\s+(?:manipulat\w*|alteration\w*|edit\w*)", FORENSIC_CORE, 6),
     r"\b(?:forged|tampered|doctored)\s+(?:images?|photos?|pictures?|regions?|areas?|objects?)",
     r"\bforg(?:ery|eries|ed)\s+(?:images?|photos?|pictures?)\s+(?:detection|identification|locali[sz]\w*|forensic\w*|recognition)",
     r"\bforensic detection of (?:\S+\s+){0,3}(?:images?|jpeg|photos?)\b|\bforensic detection for image\b",
     _near(r"(?:manipulated|altered|edited)\s+(?:images?|photos?|pictures?|regions?)", FORENSIC_CORE, 3),
-    r"\b(?:image|photo|picture|visual|multimedia|digital image|passive|blind|digital photo|jpeg)s?\s+(?:\S+\s+)?forensic\w*",
+    r"\b(?:image|digital image)s?\s+(?:\S+\s+)?forensic\w*|\b(?:photo|picture|visual|multimedia|passive|blind|digital photo|jpeg)s?\s+forensic\w*",
     r"\bforensic detection\b(?=.*\b(?:images?|jpeg|photos?)\b)",
     _near(r"median filter\w*|bilateral filter\w*|gaussian blur\w*|sharpen\w*|gamma correction|histogram equali[sz]\w*", r"detect\w*|forensic\w*", 3),
     r"\bdouble (?:jpeg|jpg|compression|compressed|quantization)\b|\b(?:jpeg|jpg)\s+(?:re)?compression\s+(?:detection|forensic\w*|history|identification)",
     r"\b(?:non )?aligned double\b|\bprimary quantization\b",
-    r"\bresampl\w*\s+(?:detection|forensic\w*|estimation|traces?)|\bmedian filter\w*\s+(?:detection|forensic\w*)",
+    r"\bresampl\w*\s+(?:detection|forensic\w*|estimation|traces?|forger\w*)|\bmedian filter\w*\s+(?:detection|forensic\w*)",
     _near(r"contrast enhancement", FORENSIC_CORE, 3),
     _near(r"seam carv\w*", FORENSIC_CORE, 4),
     _near(r"inpaint\w*", r"detect\w*|forensic\w*|locali[sz]\w*|forger\w*|tamper\w*|segment\w*", 3),
@@ -234,7 +256,7 @@ IMAGE_FORGERY_SPECIFIC = _rx(
 )
 IMAGE_FORGERY_GENERIC = _rx(
     r"\b(?:forger\w*|tamper\w*|manipulation)\s+(?:detection|locali[sz]\w*|segmentation|identification|analysis|forensics)\b",
-    r"\b(?:detect\w*|locali[sz]\w*)\s+(?:\S+\s+){0,2}(?:forger\w*|tamper\w*|manipulation)",
+    r"\b(?:detect\w*|locali[sz]\w*|expos\w*|reveal\w*|identif\w*)\s+(?:\S+\s+){0,2}(?:forger\w*|tamper\w*|manipulation)",
     r"\b(?:image|photo|picture)s?\s+authenticity\b",
 )
 SCENE_TEXT_OBJECT = (
@@ -250,14 +272,22 @@ FORENSIC_CORE_RX = re.compile(rf"\b(?:{FORENSIC_CORE})\b")
 PROVENANCE_TITLE = _rx(
     r"\bc2pa\b|\bcontent credentials?\b|\bcontent authenticity\b|\bcontent provenance\b|\bmedia provenance\b|\bimage provenance\b",
     r"\bvisual provenance\b|\bimage phylogen\w*|\bphylogeny\b|\bprovenance (?:analysis|graphs?|filtering|verification|tracking|tracing|chains?|protection)\b",
-    _near(r"watermark\w*", r"generated|generative|diffusion|gans?|aigc|text to image|t2i|stable diffusion|synthetic|deep ?fakes?|provenance|traceab\w*|proactive", 6),
+    _near(
+        r"watermark\w*",
+        r"generated|generative (?:ai|content|models?)|diffusion models?|latent diffusion|stable diffusion|aigc|ai generated|text to image|t2i"
+        r"|synthetic (?:images?|media|content)|deep ?fakes?|provenance|traceab\w*|proactive|generators?",
+        6,
+    ),
+    r"\bgenerative (?:image )?watermark\w*|\bdiffusion watermark\w*|\bwatermark\w* (?:for|of|in) (?:\S+\s+){0,2}(?:generated|generative|diffusion|aigc)\b",
+    _near(r"watermark\w*", r"diffusion (?:art|editing|mimicry|appropriation|models?)|ai art|style mimicry", 6),
     _near(r"blockchain", r"images?|media|photos?|visual|content", 6),
     r"\b(?:secure|trusted|trustworthy|verifiable|authenticated)\s+(?:cameras?|capture|imaging)\b",
     r"\bproactive (?:defen[cs]e|detection|forensic\w*|protection)\b",
+    _near(r"provenance", r"synthetic media|ai generated|aigc|generated (?:images?|content|media)|deep ?fakes?|photos?|images?|media|visual content", 6),
 )
 STEGO_TITLE = _rx(
     r"\bsteganaly\w*|\bsteganograph\w*|\bstegan\w*|\bstego\w*",
-    r"\bcover (?:images?|selection|source mismatch)\b|\bembedding (?:costs?|distortion)\b|\b(?:s|j) uniward\b|\bbatch steganograph\w*|\bpooled steganaly\w*",
+    r"\bcover (?:and |vs |& )?stego\b|\bcover (?:selection|source mismatch)\b|\bembedding (?:costs?|distortion)\b|\b(?:s|j) uniward\b|\bbatch steganograph\w*|\bpooled steganaly\w*",
     r"\b(?:lsb|least significant bits?)\b.{0,40}\b(?:embedding|hiding|hidden|secret|messages?|matching|replacement|detection)\b",
     r"\b(?:hiding|hide|hidden)\s+(?:\S+\s+){0,3}(?:images?|messages?|secrets?|data|information)\s+(?:in|within|into|inside)\s+(?:\S+\s+){0,2}images?",
     r"\b(?:image|invisible)\s+(?:data|information)\s+hiding\b",
@@ -345,8 +375,8 @@ def _title_tasks(title: str) -> dict[str, str]:
     return found
 
 
-def _excluded(title: str, title_tasks: dict[str, str]) -> str:
-    if JUNK.search(title):
+def _excluded(title: str, title_tasks: dict[str, str], raw_title: str = "") -> str:
+    if JUNK.search(title) or (raw_title and JUNK.search(raw_title)):
         return "not a paper record"
     if GENERATED_NON_IMAGE.search(title):
         return "other modality"
@@ -367,6 +397,9 @@ def _excluded(title: str, title_tasks: dict[str, str]) -> str:
                 return topic
         elif topic == "xai":
             continue
+        elif topic == "humanities":
+            if not (title_tasks and TECHNICAL_RESCUE.search(title)):
+                return topic
         elif topic == "ocr":
             if not {"scene_text_forgery", "image_forgery", "image_steganalysis", "digital_watermarking"} & title_tasks.keys():
                 return topic
@@ -383,7 +416,7 @@ def classify(title: str, abstract: str = "") -> Classification:
     # Explanation "attributions" and biometric fingerprints are not generator attribution.
     if OFF_TOPIC["xai"].search(title_text) or OFF_TOPIC["biometrics"].search(title_text):
         tasks.pop("source_attribution", None)
-    reason = _excluded(title_text, tasks)
+    reason = _excluded(title_text, tasks, " ".join((title or "").lower().split()))
     if reason:
         return Classification(False, reason=reason)
 
@@ -413,13 +446,14 @@ def classify_tasks(title: str, abstract: str = "") -> list[str]:
 # --- contribution type -------------------------------------------------------------
 
 SURVEY = _rx(
-    r"\b(?:survey|surveys|review|reviews|overview|taxonomy|tutorial|primer|roadmap|meta survey|state of the field|literature)\b",
-    r"\b(?:past|present)\s+(?:and|present and)\s+future\b|\bchallenges and (?:opportunities|future|prospects|directions)\b",
+    r"\b(?:survey|surveys|review|reviews|overview|taxonomy|tutorial|primer|roadmap|meta survey|state of the field|sok)\b",
+    r"\b(?:literature (?:review|survey)|systematic literature|systematization of knowledge)\b",
+    r"\bpast,? present,? and future\b|\bpresent and future (?:challenges|directions|trends|perspectives)\b",
+    r"\b(?:trends|challenges|perspectives|opportunities|open problems|future directions|state of the art|research gaps)\b",
     r"\bresearch (?:trends|directions|landscape|progress|advances)\b|\b(?:recent )?advances in\b|\ba decade of\b",
 )
 SURVEY_ABSTRACT = _rx(
     r"\b(?:this|our|the present)\s+(?:paper|article|work|chapter|study)\s+(?:\S+\s+){0,2}(?:presents|provides|offers|gives|conducts)\s+(?:a|an)\s+(?:\S+\s+){0,3}(?:survey|review|overview)\b",
-    r"\b(?:we|this paper|this article)\s+(?:comprehensively\s+|systematically\s+|briefly\s+)?(?:survey|review)\s+(?:the|recent|existing|state)",
     r"\bin this (?:survey|review)\b",
 )
 DATASET = _rx(
@@ -427,6 +461,7 @@ DATASET = _rx(
     r"\b(?:an?|the|new|novel|large|large scale|million scale|comprehensive|first|diverse|realistic|real world|challenging|high quality|high fidelity|open|public|annotated|controlled|unified|extended|multi dimensional|in the wild)\s+(?:\S+\s+){0,5}?(?:datasets?|database|corpus)\s*(?:$|for|of|and|to|with|towards?|in)\b",
     r"\b(?:datasets?|database|corpus)\s+(?:and|&)\s+(?:a\s+)?(?:benchmarks?|baselines?|methods?|solutions?|models?|algorithms?|detectors?)\b",
     r"\b(?:datasets?|database|corpus)\s*$",
+    r"^(?:\S+\s+){0,6}(?:datasets?|database|corpus)\s*:",
 )
 NOT_DATASET = _rx(
     r"\bcross (?:datasets?|database)\b|\b(?:datasets?|database) (?:mismatch|bias|shift|diversity|generali[sz]\w*|distillation|usage)\b",
@@ -434,14 +469,14 @@ NOT_DATASET = _rx(
     r"\b(?:publicly available|diverse|multiple|several|different|various|benchmark|standard|small)\s+(?:datasets|databases)\b",
 )
 BENCHMARK = _rx(
-    r"\bbenchmark\w*\b|\bchallenge\b|\bcompetition\b|\bleaderboard\b|\barena\b|\bevaluation (?:framework|protocol|suite|platform)\b"
+    r"\bbenchmark\w*\b|\bchallenge\b|\bcompetition\b|\bleaderboard\b|\barena\b|\bevaluation (?:framework|protocol|suite|platform)\b",
+    r"\b[a-z0-9]+bench\b|\b(?:assessing|evaluating)\s+(?:\S+\s+){0,4}(?:methods|detectors|algorithms|tools)\b"
 )
 ANALYSIS = _rx(
     r"\b(?:empirical|comparative|systematic|experimental|large scale|critical|quantitative|qualitative|exploratory|user|human|perceptual|psychophysical|statistical|performance|security|robustness|vulnerability|sensitivity|ablation)\s+(?:study|studies|analysis|evaluation|investigation|assessment|comparison)\b",
     r"\b(?:an?|the)\s+(?:study|analysis|investigation|evaluation|assessment|comparison|examination)\s+(?:of|on|into|for)\b",
-    r"^(?:on|towards understanding|understanding|rethinking|revisiting|investigating|evaluating|analy[sz]ing|exploring|assessing|measuring|quantifying|characteri[sz]ing|demystifying|examining|comparing|probing|can|do|does|are|is|how|what|why|when|which|where|should)\b",
+    r"^(?:on|towards understanding|understanding|rethinking|revisiting|investigating|evaluating|analy[sz]ing|assessing|measuring|quantifying|characteri[sz]ing|demystifying|examining|comparing|probing)\b",
     r"\b(?:rethinking|revisiting|lessons|pitfalls|limitations|limits|vulnerabilit\w*|reliability of|effectiveness of|evaluation of|comparison of|study of|analysis of|investigation of|assessment of|impact of|influence of|role of|effect of|effects of)\b",
-    r"\?",
 )
 
 
@@ -456,6 +491,10 @@ def contribution_type(title: str, abstract: str = "") -> str:
         return "dataset"
     if BENCHMARK.search(text):
         return "benchmark"
-    if ANALYSIS.search(text) or "?" in raw:
+    proposes_method = re.search(
+        r"\b(?:novel|new|proposed|improved|efficient|robust|lightweight|enhanced)\s+(?:\S+\s+){0,2}(?:approach|method|framework|network|model|scheme|algorithm|technique|architecture)\b", text
+    )
+    whole_question = raw.rstrip().endswith("?") and ":" not in raw
+    if (ANALYSIS.search(text) or whole_question) and not proposes_method:
         return "analysis"
     return "method"
