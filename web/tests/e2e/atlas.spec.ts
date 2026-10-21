@@ -7,6 +7,17 @@ async function ready(page: Page, url: string) {
 
 const resultCount = (page: Page) => page.getByTestId("result-count");
 
+/** The element painted at the centre of `selector` must belong to it (nothing drawn on top). */
+async function expectOnTop(page: Page, selector: string) {
+  const box = await page.locator(selector).boundingBox();
+  expect(box).not.toBeNull();
+  const points = [[0.5, 0.5], [0.5, 0.15], [0.2, 0.8]].map(([fx, fy]) => [box!.x + box!.width * fx, box!.y + box!.height * fy]);
+  for (const [x, y] of points) {
+    const onTop = await page.evaluate(([px, py, sel]) => Boolean(document.elementFromPoint(px as number, py as number)?.closest(sel as string)), [x, y, selector]);
+    expect(onTop, `${selector} is covered at ${Math.round(x)},${Math.round(y)}`).toBe(true);
+  }
+}
+
 test("overview links into a filtered paper library", async ({ page }) => {
   await ready(page, "/");
   await expect(page.getByRole("heading", { level: 1, name: "生成图像取证研究图谱" })).toBeVisible();
@@ -106,7 +117,8 @@ test("map clusters open a regional panel and paper records", async ({ page }, te
   const panel = page.getByRole("complementary", { name: "区域论文" });
   await expect(panel).toBeVisible();
   await panel.locator(".map-papers button").first().click();
-  await expect(page.getByRole("complementary", { name: "论文详情" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "论文详情" }).locator(".record-title")).toBeVisible();
+  await expectOnTop(page, ".drawer");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("complementary", { name: "论文详情" })).toHaveCount(0);
   await expect(panel).toBeVisible();

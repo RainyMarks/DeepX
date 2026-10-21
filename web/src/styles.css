@@ -599,7 +599,7 @@ a.rank-badge:hover { border-color: var(--accent); text-decoration: none; }
 .view-map .results-head { margin-bottom: 10px; }
 .view-map .results-head h1 { font-size: 20px; }
 .view-map .active-filters { margin-bottom: 10px; }
-.map-explorer { position: relative; flex: 1; min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface-2); }
+.map-explorer { position: relative; isolation: isolate; flex: 1; min-height: 420px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface-2); }
 .atlas-map { position: absolute; inset: 0; background: var(--surface-2); font: inherit; }
 .leaflet-container { font-family: var(--sans); }
 .leaflet-control-attribution { font-size: 10.5px; }
