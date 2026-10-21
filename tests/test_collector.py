@@ -14,6 +14,12 @@ def no_sleep(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
 
+@pytest.fixture(autouse=True)
+def no_release(tmp_path, monkeypatch):
+    # Collector tests must not look up the papers of the real public release.
+    monkeypatch.setattr(collector, "PUBLIC_DIR", tmp_path / "no-release")
+
+
 @respx.mock
 def test_get_with_retry_backs_off_on_rate_limits():
     route = respx.get("https://api.example.org/works").mock(
@@ -188,3 +194,28 @@ def test_unresolvable_dois_are_marked_and_not_looked_up_again():
     assert records["a"]["date_lookup"] == "not found"
     collector.refresh_undated_crossref_records(records, stub)
     assert stub.looked_up == ["10.1000/gone"]
+
+
+def test_released_papers_dated_this_year_or_later_are_looked_up_when_the_pool_lacks_them(tmp_path, monkeypatch):
+    public = tmp_path / "public"
+    (public / "details").mkdir(parents=True)
+    (public / "catalog.json").write_text("[]", encoding="utf-8")
+    next_year = datetime.now(UTC).year + 1
+
+    def released(doi, year, source="crossref"):
+        return {"id": f"paper-{doi[-2:]}", "title": doi, "doi": doi, "year": year, "provenance": [{"source": source}]}
+
+    (public / "details" / "00.json").write_text(json.dumps([
+        released("10.1504/ijesdf.x.01", next_year),
+        released("10.1000/pooled.02", next_year),
+        released("10.1000/old.03", 2019),
+        released("10.48550/arxiv.04", next_year, source="arxiv"),
+    ]), encoding="utf-8")
+    monkeypatch.setattr(collector, "PUBLIC_DIR", public)
+    records = {"crossref:10.1000/pooled.02": {"source": "crossref", "record": {"DOI": "10.1000/POOLED.02"}}}
+    stub = _RefreshingCrossref()
+    result = collector.lookup_released_crossref_dates(records, stub)
+    assert stub.looked_up == ["10.1504/ijesdf.x.01"] and result["added"] == 1
+    added = records["crossref:10.1504/ijesdf.x.01"]
+    from atlas.sources.crossref import crossref_year
+    assert added["query"] == "released paper date check" and crossref_year(added["record"]) == 2025

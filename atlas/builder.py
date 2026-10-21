@@ -476,7 +476,16 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
         if paper.openalex_id:
             strong_keys.append("openalex:" + paper.openalex_id.lower())
         strong_keys.append(f"title:{normalized_title(paper.title)}:{paper.year or ''}")
-        existing_id = next((keys[key] for key in strong_keys if key in keys), "")
+        # A shared title and year is weaker than identifiers: two formal records
+        # with different DOIs ("Digital Image Forgery Detection", a book and an
+        # unrelated article) stay apart.
+        existing_id = next(
+            (
+                keys[key] for key in strong_keys
+                if key in keys and not (key.startswith("title:") and _different_works(merged[keys[key]], paper))
+            ),
+            "",
+        )
         if not existing_id:
             merged[paper.id] = paper
             for key in strong_keys:
@@ -504,6 +513,14 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
     if len(result) < len(paper_list) and _depth < 4:
         return _merge_exact(result, _depth + 1)
     return result
+
+
+def _different_works(left: Paper, right: Paper) -> bool:
+    """True when both records carry different DOIs, neither of them a preprint DOI."""
+    left_doi, right_doi = canonical_doi(left.doi), canonical_doi(right.doi)
+    return bool(left_doi and right_doi and left_doi != right_doi) and not (
+        left_doi.startswith(PREPRINT_DOI_PREFIXES) or right_doi.startswith(PREPRINT_DOI_PREFIXES)
+    )
 
 
 def _prefer_formal_version(current: Paper, other: Paper) -> None:
@@ -825,12 +842,17 @@ def build_public(include_release: bool = True) -> DatasetManifest:
     baseline = released_papers() if include_release else []
     previous_quality = _previous_quality() if include_release else {}
     decisions = _load_decisions()
-    merged = _merge_versions(_merge_exact([*baseline, *authorized_papers(), *openalex_papers(), *secondary_papers()]))
-    apply_crossref_years(merged, crossref_years())
-    for paper in merged:
-        # Re-resolve venues so ranking files and venue-type rules apply to old records too.
+    # Old records get the current venue rules (ranking files, venue types) and
+    # the Crossref year before merging, so merge decisions do not depend on
+    # which build first published a record and publishing twice changes nothing.
+    for paper in baseline:
         if paper.venue:
             paper.venue = apply_venue_ranking(paper.venue.name, paper.venue.type, paper.venue.issn)
+    years = crossref_years()
+    candidates = [*baseline, *authorized_papers(), *openalex_papers(), *secondary_papers()]
+    apply_crossref_years(candidates, years)
+    merged = _merge_versions(_merge_exact(candidates))
+    apply_crossref_years(merged, years)
     papers, dropped = _classify_papers(_apply_decisions(merged), decisions)
     # Collectors favor recall; the public release requires a stated task and a link.
     papers = [paper for paper in papers if paper.primary_url]
@@ -869,6 +891,13 @@ def build_public(include_release: bool = True) -> DatasetManifest:
     source_counts = Counter(source for paper in papers for source in {item.source for item in paper.provenance})
     ranking_count = sum(len(paper.venue.rankings) for paper in papers if paper.venue)
     mapped = [item for item in institution_records if item["latitude"] is not None and item["longitude"] is not None]
+    excluded = Counter(dropped)
+    if not (RAW_DIR / "openalex_candidates.jsonl").exists():
+        # Without the collected pool (e.g. a local publish after the workflow)
+        # only released and seed records are re-checked; like candidate_count,
+        # keep the breakdown of the last build that saw the pool.
+        for reason, count in (previous_quality.get("excluded_by_scope_rules") or {}).items():
+            excluded[reason] = max(excluded[reason], int(count))
     quality = {
         "dataset_version": str(datetime.now(UTC).date()),
         # The candidate pool only grows; a build without the local cache keeps the last known size.
@@ -879,8 +908,8 @@ def build_public(include_release: bool = True) -> DatasetManifest:
         "source_counts": dict(sorted(source_counts.items())),
         "venue_ranking_badge_count": ranking_count,
         "mapped_institution_count": len(mapped),
-        "strong_identifier_duplicate_policy": "DOI → arXiv → OpenAlex → 标题+年份；同名的预印本/正式版合并，不同正式渠道不合并；模糊匹配不自动合并",
-        "excluded_by_scope_rules": dict(sorted(dropped.items())),
+        "strong_identifier_duplicate_policy": "DOI → arXiv → OpenAlex → 标题+年份（DOI 不同的正式记录不按标题合并）；同名的预印本/正式版合并，不同正式渠道不合并；模糊匹配不自动合并",
+        "excluded_by_scope_rules": dict(sorted(excluded.items())),
         "scope_policy": "仅公开具有明确图像取证任务证据的记录；宽召回噪声保留在本地候选池",
     }
     quality["quality_targets"] = {

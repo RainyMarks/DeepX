@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
+from atlas.dedupe import canonical_doi
 from atlas.jsonl import iter_jsonl
 from atlas.models import utc_now
+from atlas.release import PUBLIC_DIR, read_details
 from atlas.sources import ArxivSource, CrossrefSource, DblpSource, OpenAlexSource, SemanticScholarSource
 from atlas.sources.crossref import crossref_year
 from atlas.sources.openalex import (
@@ -165,6 +168,74 @@ def refresh_undated_crossref_records(
     return {"undated": len(undated), "refreshed": refreshed, "errors": errors}
 
 
+def lookup_released_crossref_dates(
+    records: dict[str, dict], source: CrossrefSource, limit: int = DATE_LOOKUP_LIMIT
+) -> dict:
+    """Add the Crossref record of released papers dated this year or later that the pool lacks.
+
+    The workflow rebuilds the candidate pool from the current queries, so a
+    released paper that no query returns any more keeps the year of the build
+    that published it, such as a 2027 issue year. Only DOIs the release took
+    from Crossref are asked, latest year first.
+    """
+    if not (PUBLIC_DIR / "catalog.json").exists():
+        return {"missing": 0, "added": 0, "errors": []}
+    pooled = {canonical_doi((envelope.get("record") or {}).get("DOI", "")) for envelope in records.values() if envelope.get("source") == "crossref"}
+    this_year = datetime.now(UTC).year
+    missing = sorted(
+        (
+            paper for paper in read_details(PUBLIC_DIR)
+            if paper.get("doi") and (paper.get("year") or 0) >= this_year
+            and canonical_doi(paper["doi"]) not in pooled
+            and any(item.get("source") == "crossref" for item in paper.get("provenance", []))
+        ),
+        key=lambda paper: -paper["year"],
+    )
+    added = 0
+    errors: list[dict] = []
+    for paper in missing[:limit]:
+        if _out_of_time() or len(errors) >= MAX_CONSECUTIVE_ERRORS:
+            break
+        try:
+            row = source.work(paper["doi"])
+        except Exception as exc:  # noqa: BLE001 - the released year stays until the next run
+            errors.append({"source": source.name, "doi": paper["doi"], "error": str(exc)[:300]})
+            continue
+        if row.get("DOI"):
+            _store_secondary(records, {"source": source.name, "query": "released paper date check", "retrieved_at": utc_now(), "record": row})
+            added += 1
+        time.sleep(0.35)
+    return {"missing": len(missing), "added": added, "errors": errors}
+
+
+def _check_crossref_dates(records: dict[str, dict], source: CrossrefSource, limit: int = DATE_LOOKUP_LIMIT) -> dict:
+    undated = refresh_undated_crossref_records(records, source, limit)
+    released = lookup_released_crossref_dates(records, source, limit)
+    return {
+        "refreshed_crossref_dates": undated["refreshed"],
+        "undated_crossref_records": undated["undated"] - undated["refreshed"],
+        "released_papers_dated": released["added"],
+        "errors": undated["errors"] + released["errors"],
+    }
+
+
+def _write_secondary(records: dict[str, dict]) -> list[dict]:
+    output = list(records.values())
+    temp = RAW_DIR / "secondary_candidates.jsonl.tmp"
+    temp.write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in output), encoding="utf-8")
+    temp.replace(RAW_DIR / "secondary_candidates.jsonl")
+    return output
+
+
+def refresh_crossref_dates(limit: int = DATE_LOOKUP_LIMIT) -> dict:
+    """Run only the Crossref date lookups, without searching; see the two functions above."""
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    records = _existing_secondary_records()
+    report = _check_crossref_dates(records, CrossrefSource(mailto=os.getenv("CROSSREF_MAILTO", "")), limit)
+    _write_secondary(records)
+    return {**report, "records": len(records), "retrieved_at": utc_now()}
+
+
 def _existing_secondary_records() -> dict[str, dict]:
     path = RAW_DIR / "secondary_candidates.jsonl"
     records: dict[str, dict] = {}
@@ -281,8 +352,8 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
     errors: list[dict] = []
     stopped: dict[str, str] = {}
     crossref = next((source for source in sources if source.name == "crossref"), None)
-    dates = refresh_undated_crossref_records(records, crossref) if crossref else {"undated": 0, "refreshed": 0, "errors": []}
-    errors.extend(dates["errors"])
+    dates = _check_crossref_dates(records, crossref) if crossref else {}
+    errors.extend(dates.pop("errors", []))
     for source in sources:
         queries = DEFAULT_QUERIES if source.name == "arxiv" else SECONDARY_QUERIES
         consecutive_errors = 0
@@ -302,10 +373,7 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
                 errors.append({"source": source.name, "query": query, "error": str(exc)[:300]})
                 consecutive_errors += 1
             time.sleep(3.1 if source.name == "arxiv" else 0.35)
-    output = list(records.values())
-    temp = RAW_DIR / "secondary_candidates.jsonl.tmp"
-    temp.write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in output), encoding="utf-8")
-    temp.replace(RAW_DIR / "secondary_candidates.jsonl")
+    output = _write_secondary(records)
     source_counts: dict[str, int] = {}
     for envelope in output:
         name = envelope.get("source", "unknown")
@@ -315,8 +383,7 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
         "records": len(output),
         "new_records": max(0, len(output) - existing_count),
         "source_counts": source_counts,
-        "refreshed_crossref_dates": dates["refreshed"],
-        "undated_crossref_records": dates["undated"] - dates["refreshed"],
+        **dates,
         "query_count": len(SECONDARY_QUERIES),
         "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
@@ -367,10 +434,7 @@ def collect_crossref_venues(max_per_query: int = 300) -> dict:
         if stopped:
             break
 
-    output = list(records.values())
-    temp = RAW_DIR / "secondary_candidates.jsonl.tmp"
-    temp.write_text("".join(json.dumps(item, ensure_ascii=False) + "\n" for item in output), encoding="utf-8")
-    temp.replace(RAW_DIR / "secondary_candidates.jsonl")
+    output = _write_secondary(records)
     report = {
         "source": "crossref",
         "mode": "venue_scoped",

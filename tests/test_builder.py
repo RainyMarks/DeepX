@@ -280,3 +280,12 @@ def test_future_issue_crossref_articles_use_their_registration_year(tmp_path, mo
     (tmp_path / "secondary_candidates.jsonl").write_text(json.dumps(envelope) + "\n", encoding="utf-8")
     [paper] = builder.secondary_papers()
     assert paper.year == 2026
+
+
+def test_same_title_and_year_with_different_dois_stay_apart():
+    book = _record(2025, doi="10.1007/978-981-95-3004-5", venue="SpringerBriefs in Computer Science")
+    article = _record(2025, doi="10.38124/ijisrt/25apr1698", venue="International Journal of Innovative Science and Research Technology")
+    assert len(_merge_exact([book, article])) == 2
+    # A preprint DOI is another version of the same work, not a different work.
+    preprint = _record(2025, doi="10.48550/arxiv.2601.00001", venue="arXiv")
+    assert len(_merge_exact([article, preprint])) == 1
