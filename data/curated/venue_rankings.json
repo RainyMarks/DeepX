@@ -4,7 +4,7 @@
     "name": "IEEE/CVF Conference on Computer Vision and Pattern Recognition",
     "short_name": "CVPR",
     "type": "conference",
-    "aliases": ["IEEE Conference on Computer Vision and Pattern Recognition", "Conference on Computer Vision and Pattern Recognition", "CVPR"],
+    "aliases": ["IEEE Conference on Computer Vision and Pattern Recognition", "IEEE Computer Society Conference on Computer Vision and Pattern Recognition", "Conference on Computer Vision and Pattern Recognition", "CVPR"],
     "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
   },
   {
@@ -36,7 +36,7 @@
     "name": "Conference on Neural Information Processing Systems",
     "short_name": "NeurIPS",
     "type": "conference",
-    "aliases": ["Advances in Neural Information Processing Systems", "Neural Information Processing Systems", "NeurIPS", "NIPS"],
+    "aliases": ["Advances in Neural Information Processing Systems", "International Conference on Neural Information Processing Systems", "Neural Information Processing Systems", "NeurIPS", "NIPS"],
     "rankings": [{"system": "CCF", "level": "A", "category": "人工智能", "version": "第七版（2026）", "source_url": "https://www.ccf.org.cn/Academic_Evaluation/By_category/", "verified_at": "2026-07-16"}]
   },
   {

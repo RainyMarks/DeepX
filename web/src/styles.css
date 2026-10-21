@@ -536,7 +536,7 @@ a.rank-badge:hover { border-color: var(--accent); text-decoration: none; }
 .segmented button:disabled { opacity: 0.4; }
 
 /* Desktop: the whole filter sidebar can be folded away. */
-@media (min-width: 961px) {
+@media (width > 960px) {
   .workspace.filters-collapsed { grid-template-columns: minmax(0, 1fr); }
   .workspace.filters-collapsed .filter-panel { display: none; }
   .workspace.filters-collapsed .filter-expand { display: inline-flex; }

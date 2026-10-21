@@ -1,7 +1,14 @@
 import json
 
 from atlas import builder
-from atlas.builder import _merge_exact, apply_venue_ranking, authorized_papers, load_rankings
+from atlas.builder import (
+    _merge_exact,
+    apply_crossref_years,
+    apply_venue_ranking,
+    authorized_papers,
+    crossref_years,
+    load_rankings,
+)
 from atlas.dedupe import stable_id
 from atlas.models import Paper, Provenance
 
@@ -212,24 +219,49 @@ def _record(year, *, source="crossref", doi="10.1016/j.ipm.2026.104992", venue="
     )
 
 
-def test_a_formal_crossref_record_decides_the_year_of_its_doi():
-    # A release built from issue dates (2027) is corrected by the fresh Crossref record.
-    released = _record(2027)
-    released.provenance.append(Provenance(source="dblp", source_id="conf/x", retrieved_at="2026-08-01T00:00:00Z"))
-    [merged] = _merge_exact([released, _record(2026)])
-    assert merged.year == 2026
-    # Semantic Scholar reports the arXiv year of papers with a preprint; the Crossref year stands in either order.
-    for records in ([_record(2025, source="semantic_scholar"), _record(2026)], [_record(2026), _record(2025, source="semantic_scholar")]):
-        [merged] = _merge_exact(records)
-        assert merged.year == 2026
-    # Without a Crossref record the first year is kept.
-    [merged] = _merge_exact([_record(2026, source="openalex"), _record(2025, source="semantic_scholar")])
-    assert merged.year == 2026
-    # A preprint never moves the formal year back.
+def test_dated_crossref_records_decide_the_year_after_merging(tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "RAW_DIR", tmp_path)
+    dated = {"DOI": "10.1016/J.IPM.2026.104992", "published-print": {"date-parts": [[2027, 1]]}, "created": {"date-parts": [[2026, 6, 24]]}}
+    # Collected before the date fields were requested: the issue date alone must not decide.
+    undated = {"DOI": "10.1000/undated", "published": {"date-parts": [[2027]]}}
+    lines = [{"source": "crossref", "record": row} for row in (dated, undated)]
+    lines.append({"source": "semantic_scholar", "record": {"paperId": "s2", "externalIds": {"DOI": "10.1000/undated"}, "year": 2020}})
+    (tmp_path / "secondary_candidates.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+    years = crossref_years()
+    assert years == {"10.1016/j.ipm.2026.104992": 2026}
+
+    # The release built from issue dates and Semantic Scholar's preprint year are both corrected,
+    # and a record merged in any order ends with the Crossref year.
+    released, preprint_year = _record(2027), _record(2025, source="semantic_scholar")
+    released.publication_date = "2027-01-01"
+    for paper in _merge_exact([released, preprint_year]), _merge_exact([preprint_year, released]):
+        assert apply_crossref_years(paper, years) in (0, 1)
+        assert [item.year for item in paper] == [2026]
+    assert released.publication_date == ""
+    untouched = _record(2024, doi="10.1000/undated")
+    assert apply_crossref_years([untouched], years) == 0 and untouched.year == 2024
+
+
+def test_merging_keeps_the_formal_year_over_a_preprint():
     formal, preprint = _record(2024), _record(2023, source="arxiv", doi="", venue="arXiv")
     formal.arxiv_id = preprint.arxiv_id = "2601.00001"
     [merged] = _merge_exact([formal, preprint])
     assert merged.year == 2024
+
+
+def test_older_proceedings_names_still_match_their_conference():
+    expected = {
+        "2005 IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR'05)": "CVPR",
+        "2006 IEEE Computer Society Conference on Computer Vision and Pattern Recognition - Volume 2 (CVPR'06)": "CVPR",
+        "Tenth IEEE International Conference on Computer Vision (ICCV'05) Volume 1": "ICCV",
+        "Proceedings of the 13th annual ACM international conference on Multimedia - MULTIMEDIA '05": "ACM MM",
+        "NIPS'17: Proceedings of the 31st International Conference on Neural Information Processing Systems": "NeurIPS",
+        "Multimedia and Expo, 2007 IEEE International Conference on": "ICME",
+        "Image Processing, 2007. ICIP 2007. IEEE International Conference on": "ICIP",
+    }
+    for name, short_name in expected.items():
+        venue = apply_venue_ranking(name, "conference")
+        assert venue and venue.short_name == short_name and venue.rankings, name
 
 
 def test_future_issue_crossref_articles_use_their_registration_year(tmp_path, monkeypatch):

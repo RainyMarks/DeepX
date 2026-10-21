@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -135,7 +136,8 @@ def test_refetched_candidates_refresh_fields_but_keep_their_provenance(tmp_path,
     monkeypatch.setattr(collector, "RAW_DIR", tmp_path)
     monkeypatch.setattr(collector, "SECONDARY_QUERIES", ["image forgery"])
     _pool(tmp_path, {"source": "crossref", "query": "first query", "retrieved_at": "2026-07-01T00:00:00Z",
-                     "record": {"DOI": "10.1000/known", "title": ["Known"], "abstract": "kept", "is-referenced-by-count": 1}})
+                     "record": {"DOI": "10.1000/known", "title": ["Known"], "abstract": "kept", "is-referenced-by-count": 1,
+                                "created": {"date-parts": [[2025, 1, 1]]}}})
     stub = _RefreshingCrossref()
     monkeypatch.setattr(collector, "CrossrefSource", lambda **_: stub)
     report = collector.collect_secondary(5, {"crossref"})
@@ -145,20 +147,44 @@ def test_refetched_candidates_refresh_fields_but_keep_their_provenance(tmp_path,
     assert report["new_records"] == 0 and stub.looked_up == []
 
 
-def test_future_dated_crossref_candidates_are_looked_up_again(tmp_path, monkeypatch):
+def test_undated_crossref_candidates_are_looked_up_latest_first(tmp_path, monkeypatch):
     monkeypatch.setattr(collector, "RAW_DIR", tmp_path)
     monkeypatch.setattr(collector, "SECONDARY_QUERIES", [])
-    issue_dated = {"DOI": "10.1504/ijesdf.2027.1", "title": ["Forgery"], "published": {"date-parts": [[2027]]}}
-    current = {"DOI": "10.1000/current", "title": ["Current"], "published": {"date-parts": [[2025, 4]]}}
+    next_year = datetime.now(UTC).year + 1
+    issue_dated = {"DOI": "10.1504/ijesdf.next.1", "title": ["Forgery"], "published": {"date-parts": [[next_year]]}}
+    older = {"DOI": "10.1000/older", "title": ["Older"], "published": {"date-parts": [[2019, 4]]}}
+    dated = {"DOI": "10.1000/dated", "title": ["Dated"], "published": {"date-parts": [[2024]]}, "created": {"date-parts": [[2024, 2, 1]]}}
     _pool(tmp_path, *({"source": "crossref", "query": "q", "retrieved_at": "2026-07-01T00:00:00Z", "record": row}
-                      for row in (issue_dated, current)))
+                      for row in (older, issue_dated, dated)))
     stub = _RefreshingCrossref()
     monkeypatch.setattr(collector, "CrossrefSource", lambda **_: stub)
     report = collector.collect_secondary(5, {"crossref"})
-    assert stub.looked_up == ["10.1504/ijesdf.2027.1"]
-    assert report["refreshed_future_dates"] == 1
+    # Undated records only, the latest issue year first; dated records are not asked again.
+    assert stub.looked_up == ["10.1504/ijesdf.next.1", "10.1000/older"]
+    assert report["refreshed_crossref_dates"] == 2 and report["undated_crossref_records"] == 0
     stored = {json.loads(line)["record"]["DOI"]: json.loads(line)["record"]
               for line in (tmp_path / "secondary_candidates.jsonl").read_text(encoding="utf-8").splitlines()}
     from atlas.sources.crossref import crossref_year
-    assert crossref_year(stored["10.1504/ijesdf.2027.1"]) == 2025
-    assert stored["10.1504/ijesdf.2027.1"]["title"] == ["Forgery"]
+    assert crossref_year(stored["10.1504/ijesdf.next.1"]) == 2025
+    assert stored["10.1504/ijesdf.next.1"]["title"] == ["Forgery"]
+
+    records = {"a": {"source": "crossref", "record": dict(older)}, "b": {"source": "crossref", "record": dict(issue_dated)}}
+    assert collector.refresh_undated_crossref_records(records, _RefreshingCrossref(), limit=1)["refreshed"] == 1
+    assert "created" in records["b"]["record"] and "created" not in records["a"]["record"]
+
+
+class _MissingDoiCrossref(_RefreshingCrossref):
+    def work(self, doi):
+        self.looked_up.append(doi)
+        request = httpx.Request("GET", f"https://api.crossref.org/works/{doi}")
+        raise httpx.HTTPStatusError("404 Not Found", request=request, response=httpx.Response(404, request=request))
+
+
+def test_unresolvable_dois_are_marked_and_not_looked_up_again():
+    records = {"a": {"source": "crossref", "record": {"DOI": "10.1000/gone", "published": {"date-parts": [[2024]]}}}}
+    stub = _MissingDoiCrossref()
+    result = collector.refresh_undated_crossref_records(records, stub)
+    assert result["refreshed"] == 0 and result["errors"] == []
+    assert records["a"]["date_lookup"] == "not found"
+    collector.refresh_undated_crossref_records(records, stub)
+    assert stub.looked_up == ["10.1000/gone"]

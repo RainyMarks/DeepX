@@ -149,12 +149,26 @@ SATELLITE_MARKERS = frozenset({"workshop", "workshops", "findings", "companion"}
 # Words that proceedings titles put around a conference's own name:
 # "Proceedings of the Thirty-Seventh AAAI ...", "2004 IEEE ... (IEEE Cat. No.04TH8763)".
 WRAPPER_WORDS = frozenset({
-    "proceedings", "proceeding", "proc", "of", "the", "ieee", "acm", "cvf", "cat", "no",
+    "proceedings", "proceeding", "proc", "of", "the", "ieee", "acm", "cvf", "cat", "no", "annual", "volume", "vol",
     "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
     "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
     "eighteenth", "nineteenth", "twentieth", "thirtieth", "fortieth", "fiftieth",
     "twenty", "thirty", "forty", "fifty", "sixty",
 })
+
+
+# Older IEEE Xplore proceedings put the topic first:
+# "Multimedia and Expo, 2007 IEEE International Conference on".
+INVERTED_NAME = re.compile(
+    r"^(?P<topic>[^,]+),(?P<rest>.*?)\b(?P<head>(?:IEEE\s+)?International\s+(?:Conference|Symposium|Workshop)\s+on)\W*$",
+    re.IGNORECASE,
+)
+
+
+def _uninverted(name: str) -> str:
+    """Reorder "Topic, 2007 IEEE International Conference on" as "2007 IEEE International Conference on Topic"."""
+    match = INVERTED_NAME.match(name)
+    return f"{match['rest']} {match['head']} {match['topic']}" if match else name
 
 
 def _acronym_tokens(item: dict) -> set[str]:
@@ -196,6 +210,9 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
     normalized = normalized_title(name)
     tokens = normalized.split()
     variants = _name_variants(name)
+    uninverted = _uninverted(name)
+    forms = [tokens] if uninverted == name else [tokens, normalized_title(uninverted).split()]
+    variants |= {" ".join(form) for form in forms}
     venue_type = infer_venue_type(name, venue_type)
     venue_id = _slug(normalized, "venue")
     known_short_name = VENUE_SHORT_NAMES.get(normalized, "")
@@ -226,7 +243,9 @@ def apply_venue_ranking(name: str, venue_type: str = "unknown", issn: str = "") 
                 # Image Processing" is not IJCV. Short acronyms and partial
                 # titles must match exactly to avoid assigning CVPR to
                 # Pattern Recognition or NeurIPS to Information.
-                if item_type == "conference" and len(alias_tokens) >= 4 and _embeds_name(tokens, alias_tokens, acronyms):
+                if item_type == "conference" and len(alias_tokens) >= 4 and any(
+                    _embeds_name(form, alias_tokens, acronyms) for form in forms
+                ):
                     matched = True
                     break
         if matched:
@@ -472,7 +491,6 @@ def _merge_exact(papers: Iterable[Paper], _depth: int = 0) -> list[Paper]:
         if not current.authors and paper.authors:
             current.authors = paper.authors
         _prefer_formal_version(current, paper)
-        _crossref_dates(current, paper)
         current.institution_ids = sorted(set(current.institution_ids + paper.institution_ids))
         current.task_tags = sorted(set(current.task_tags + paper.task_tags))
         current.citation_count = max(current.citation_count, paper.citation_count)
@@ -503,24 +521,41 @@ def _prefer_formal_version(current: Paper, other: Paper) -> None:
         current.year = other.year
 
 
-def _crossref_dates(current: Paper, other: Paper) -> None:
-    """A formal Crossref record decides the year of its DOI.
+def crossref_years() -> dict[str, int]:
+    """First formal appearance per DOI, from Crossref candidates that carry
+    their registration date (``created``). Candidates collected before the
+    date fields were requested only have the issue date and do not count."""
+    path = RAW_DIR / "secondary_candidates.jsonl"
+    years: dict[str, int] = {}
+    if not path.exists():
+        return years
+    for envelope in iter_jsonl(path):
+        row = envelope.get("record") or {}
+        if envelope.get("source") != "crossref" or "created" not in row:
+            continue
+        doi, year = canonical_doi(row.get("DOI", "")), crossref_year(row)
+        if doi and year:
+            years[doi] = year
+    return years
 
-    Crossref registers the DOI, and crossref_year gives the first formal
-    appearance of the article. Other sources are less reliable for this:
-    Semantic Scholar reports the arXiv year of papers that also have a
-    preprint, and releases built before the Crossref date rule carry issue
-    years such as 2027. Whichever order the records merge in, the Crossref
-    year is kept (a Crossref record merged first is never overridden).
+
+def apply_crossref_years(papers: list[Paper], years: dict[str, int]) -> int:
+    """The Crossref year decides the year of the paper with that DOI.
+
+    Other sources are less reliable here: Semantic Scholar reports the arXiv
+    year of papers that also have a preprint, and releases built before the
+    Crossref date rule carry issue years such as 2027. Applied once after
+    merging, so the result does not depend on the order records merge in.
     """
-    from_crossref = len(other.provenance) == 1 and other.provenance[0].source == "crossref"
-    if not (from_crossref and other.year and is_formal(other)):
-        return
-    if canonical_doi(other.doi) != canonical_doi(current.doi) or not is_formal(current) or current.year == other.year:
-        return
-    current.year = other.year
-    if not current.publication_date.startswith(str(other.year)):
-        current.publication_date = ""
+    changed = 0
+    for paper in papers:
+        year = years.get(canonical_doi(paper.doi)) if paper.doi else None
+        if year and year != paper.year:
+            paper.year = year
+            if not paper.publication_date.startswith(str(year)):
+                paper.publication_date = ""
+            changed += 1
+    return changed
 
 
 def _version_key(paper: Paper) -> str:
@@ -791,6 +826,7 @@ def build_public(include_release: bool = True) -> DatasetManifest:
     previous_quality = _previous_quality() if include_release else {}
     decisions = _load_decisions()
     merged = _merge_versions(_merge_exact([*baseline, *authorized_papers(), *openalex_papers(), *secondary_papers()]))
+    apply_crossref_years(merged, crossref_years())
     for paper in merged:
         # Re-resolve venues so ranking files and venue-type rules apply to old records too.
         if paper.venue:

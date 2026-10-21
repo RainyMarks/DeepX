@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import UTC, datetime
 from pathlib import Path
+
+import httpx
 
 from atlas.jsonl import iter_jsonl
 from atlas.models import utc_now
@@ -122,39 +123,46 @@ def _store_secondary(records: dict[str, dict], envelope: dict) -> None:
         previous["record"] = {**(previous.get("record") or {}), **(envelope.get("record") or {})}
 
 
-FUTURE_DATE_REFRESH_LIMIT = 200
+DATE_LOOKUP_LIMIT = 200
 
 
-def refresh_future_crossref_records(
-    records: dict[str, dict], source: CrossrefSource, limit: int = FUTURE_DATE_REFRESH_LIMIT
+def refresh_undated_crossref_records(
+    records: dict[str, dict], source: CrossrefSource, limit: int = DATE_LOOKUP_LIMIT
 ) -> dict:
-    """Re-fetch Crossref candidates dated after the current year.
+    """Look up by DOI the Crossref candidates collected before the date fields were requested.
 
-    Candidates collected before the date fields were requested only carry the
-    issue date (``published``), so articles in future issues look like next
-    year's papers; the full record adds ``published-online`` and ``created``.
+    Their only date is ``published``, the issue date, so an article in a
+    future issue looks like a paper of next year; the full record adds
+    ``published-online``, ``issued`` and ``created`` (see crossref_year).
+    At most ``limit`` per run, latest year first; a DOI that Crossref no
+    longer resolves is marked and not asked again.
     """
-    this_year = datetime.now(UTC).year
-    stale = [
+    undated = [
         envelope for envelope in records.values()
         if envelope.get("source") == "crossref"
         and (envelope.get("record") or {}).get("DOI")
         and "created" not in envelope["record"]
-        and (crossref_year(envelope["record"]) or 0) > this_year
-    ][:limit]
+        and not envelope.get("date_lookup")
+    ]
+    undated.sort(key=lambda envelope: -(crossref_year(envelope["record"]) or 0))
     refreshed = 0
     errors: list[dict] = []
-    for envelope in stale:
+    for envelope in undated[:limit]:
         if _out_of_time() or len(errors) >= MAX_CONSECUTIVE_ERRORS:
             break
         doi = envelope["record"]["DOI"]
         try:
             envelope["record"] = {**envelope["record"], **source.work(doi)}
             refreshed += 1
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                envelope["date_lookup"] = "not found"
+            else:
+                errors.append({"source": source.name, "doi": doi, "error": str(exc)[:300]})
         except Exception as exc:  # noqa: BLE001 - a failed lookup keeps the stored record
             errors.append({"source": source.name, "doi": doi, "error": str(exc)[:300]})
         time.sleep(0.35)
-    return {"stale": len(stale), "refreshed": refreshed, "errors": errors}
+    return {"undated": len(undated), "refreshed": refreshed, "errors": errors}
 
 
 def _existing_secondary_records() -> dict[str, dict]:
@@ -273,8 +281,8 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
     errors: list[dict] = []
     stopped: dict[str, str] = {}
     crossref = next((source for source in sources if source.name == "crossref"), None)
-    future_dates = refresh_future_crossref_records(records, crossref) if crossref else {"stale": 0, "refreshed": 0, "errors": []}
-    errors.extend(future_dates["errors"])
+    dates = refresh_undated_crossref_records(records, crossref) if crossref else {"undated": 0, "refreshed": 0, "errors": []}
+    errors.extend(dates["errors"])
     for source in sources:
         queries = DEFAULT_QUERIES if source.name == "arxiv" else SECONDARY_QUERIES
         consecutive_errors = 0
@@ -307,7 +315,8 @@ def collect_secondary(max_per_query: int = 40, source_names: set[str] | None = N
         "records": len(output),
         "new_records": max(0, len(output) - existing_count),
         "source_counts": source_counts,
-        "refreshed_future_dates": future_dates["refreshed"],
+        "refreshed_crossref_dates": dates["refreshed"],
+        "undated_crossref_records": dates["undated"] - dates["refreshed"],
         "query_count": len(SECONDARY_QUERIES),
         "priority_query_count": len(PRIORITY_VENUE_QUERIES),
         "errors": errors,
