@@ -146,20 +146,26 @@ def write_catalog_and_details(
 
 
 def normalize_institution_countries(institutions: list[dict]) -> None:
-    """Replace bare ISO codes used as country names with the common full name.
+    """Replace bare ISO codes used as country names with the common full name,
+    and fill in missing codes for names that other records pair with one.
 
     Some sources report ``country = "US"`` while others report
     ``"United States"`` for the same code, which split country statistics.
     """
     names: dict[str, Counter[str]] = defaultdict(Counter)
+    codes: dict[str, Counter[str]] = defaultdict(Counter)
     for item in institutions:
         code, country = item.get("country_code") or "", item.get("country") or ""
         if code and country and country.upper() != code.upper():
             names[code.upper()][country] += 1
+            codes[country.casefold()][code.upper()] += 1
     for item in institutions:
         code, country = (item.get("country_code") or "").upper(), item.get("country") or ""
         if code and (not country or country.upper() == code) and names.get(code):
             item["country"] = names[code].most_common(1)[0][0]
+        elif not code and country and codes.get(country.casefold()):
+            # "China" without a code would otherwise be counted apart from "CN".
+            item["country_code"] = codes[country.casefold()].most_common(1)[0][0]
 
 
 def build_stats(catalog: list[dict], institutions: list[dict]) -> dict:

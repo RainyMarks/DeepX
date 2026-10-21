@@ -47,6 +47,17 @@ def test_country_codes_used_as_names_are_normalized():
     ]
     normalize_institution_countries(institutions)
     assert [item["country"] for item in institutions] == ["United States"] * 3 + ["Atlantis"]
+    assert institutions[-1]["country_code"] == ""
+
+
+def test_country_names_without_codes_borrow_the_known_code():
+    institutions = [
+        {"country": "China", "country_code": "CN"},
+        {"country": "China", "country_code": ""},
+        {"country": "china", "country_code": ""},
+    ]
+    normalize_institution_countries(institutions)
+    assert [item["country_code"] for item in institutions] == ["CN", "CN", "CN"]
 
 
 def test_public_release_uses_fine_grained_detail_shards():
