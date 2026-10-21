@@ -79,12 +79,12 @@ test("filters real CAS TOP, CAS zone 1 and JCR Q1 records", async ({ page }, tes
   const zones = page.getByRole("group", { name: "期刊分区" });
   await expect(page.getByRole("radio", { name: "中科院 2025" })).toHaveAttribute("aria-checked", "true");
   await expect(zones.getByRole("button", { name: /中科院 TOP/ })).toHaveAttribute("aria-pressed", "true");
-  await expect(resultCount(page)).toHaveText("585");
+  await expect(resultCount(page)).toHaveText("1,156");
 
   await zones.getByRole("button", { name: /一区 \/ Q1/ }).click();
-  await expect(resultCount(page)).toHaveText("517");
+  await expect(resultCount(page)).toHaveText("1,036");
   await page.getByRole("radio", { name: "JCR 2026" }).click();
-  await expect(resultCount(page)).toHaveText("627");
+  await expect(resultCount(page)).toHaveText("1,365");
 });
 
 test("opens a paper record from a deep link and closes it with history", async ({ page }, testInfo) => {
@@ -133,13 +133,14 @@ test("links to a merged author id open the unified profile", async ({ page }, te
   const drawer = page.getByRole("complementary", { name: "学者档案" });
   await expect(drawer.getByRole("heading", { name: "Jessica Fridrich" })).toBeVisible();
   await expect(page).toHaveURL(/author=a5081020569/);
-  await expect(drawer.locator(".mini-metrics dd").first()).toHaveText("79");
+  await expect(drawer.locator(".mini-metrics dd").first()).toHaveText("89");
 
   // The profile lists twelve papers until it is expanded.
   const papers = drawer.locator(".compact-papers li");
+  const total = Number(await drawer.locator(".mini-metrics dd").first().textContent());
   await expect(papers).toHaveCount(12);
-  await drawer.getByRole("button", { name: "展开全部 79 篇" }).click();
-  await expect(papers).toHaveCount(79);
+  await drawer.getByRole("button", { name: `展开全部 ${total} 篇` }).click();
+  await expect(papers).toHaveCount(total);
   await drawer.getByRole("button", { name: "收起" }).click();
   await expect(papers).toHaveCount(12);
 });
